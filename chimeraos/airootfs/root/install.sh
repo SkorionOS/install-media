@@ -15,6 +15,13 @@ clean_progress() {
   done
 }
 
+enable_all_gamepads() {
+        # by default, only handheld gamepads are enabled, this enables all other supported gamepads
+        busctl set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager \
+            org.shadowblip.InputManager \
+            ManageAllDevices b 1
+}
+
 poll_gamepad() {
         modprobe xpad > /dev/null
         systemctl start inputplumber > /dev/null
@@ -26,6 +33,7 @@ poll_gamepad() {
                         org.shadowblip.Input.CompositeDevice \
                         LoadProfilePath "s" /root/gamepad_profile.yaml &> /dev/null
                 if [ $? == 0 ]; then
+                        enable_all_gamepads
                         break
                 fi
         done
