@@ -19,7 +19,15 @@ enable_all_gamepads() {
         # by default, only handheld gamepads are enabled, this enables all other supported gamepads
         busctl set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager \
             org.shadowblip.InputManager \
-            ManageAllDevices b 1
+            ManageAllDevices b 1 &> /dev/null
+}
+
+load_gamepad_profile() {
+        # load a gamepad profile that emulates a keyboard for interaction with the keyboard based UI
+        busctl call org.shadowblip.InputPlumber \
+                /org/shadowblip/InputPlumber/CompositeDevice0 \
+                org.shadowblip.Input.CompositeDevice \
+                LoadProfilePath "s" /root/gamepad_profile.yaml &> /dev/null
 }
 
 poll_gamepad() {
@@ -28,12 +36,9 @@ poll_gamepad() {
 
         while true; do
                 sleep 1
-                busctl call org.shadowblip.InputPlumber \
-                        /org/shadowblip/InputPlumber/CompositeDevice0 \
-                        org.shadowblip.Input.CompositeDevice \
-                        LoadProfilePath "s" /root/gamepad_profile.yaml &> /dev/null
+                enable_all_gamepads
+                load_gamepad_profile
                 if [ $? == 0 ]; then
-                        enable_all_gamepads
                         break
                 fi
         done
