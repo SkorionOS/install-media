@@ -31,7 +31,7 @@ Architecture = auto
 
 # Misc options
 #UseSyslog
-#Color
+Color
 #TotalDownload
 # We cannot check disk space from within a chroot environment
 #CheckSpace
@@ -77,12 +77,6 @@ LocalFileSigLevel = Optional
 Include = /etc/pacman.d/mirrorlist
 
 [extra]
-Include = /etc/pacman.d/mirrorlist
-
-#[community-testing]
-#Include = /etc/pacman.d/mirrorlist
-
-[community]
 Include = /etc/pacman.d/mirrorlist
 
 # If you want to run 32 bit applications on your x86_64 system,
