@@ -534,31 +534,39 @@ view_log_button() {
   fi
 }
 
+# 创建临时FIFO用于日志
+LOG_FIFO=$(mktemp -u)
+mkfifo $LOG_FIFO
+
+# 将FIFO内容同时写入日志文件(后台运行)
+tee < $LOG_FIFO /tmp/frzr.log &
+TEE_PID=$!
+
+# 显示实时滚动日志
+dialog --colors --title "${TITLE_COLOR}安装进行中 - 实时日志\Zn" --tailboxbg $LOG_FIFO $MENU_HEIGHT $MENU_WIDTH &
+DIALOG_PID=$!
+
+# 运行安装程序并将输出发送到FIFO
 if [ "${CHOICE}" == "local" ]; then
   export local_install=true
-  
-  # 显示安装中提示
-  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
-  DIALOG_PID=$!
-  
-  # 在前台运行安装并记录日志
-  frzr-deploy | tee /tmp/frzr.log
+  echo -e "\n>>> 开始安装本地版本...\n" > $LOG_FIFO
+  frzr-deploy > $LOG_FIFO 2>&1
+  echo -e "\n>>> 安装过程完成\n" > $LOG_FIFO
   RESULT=$?
-  
-  # 关闭提示框
-  kill $DIALOG_PID 2>/dev/null
 else
-  # 显示安装中提示
-  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
-  DIALOG_PID=$!
-  
-  # 在前台运行安装并记录日志
-  frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log
+  echo -e "\n>>> 开始安装 ${TARGET} 版本...\n" > $LOG_FIFO
+  frzr-deploy "3003n/chimeraos:${TARGET}" > $LOG_FIFO 2>&1
+  echo -e "\n>>> 安装过程完成\n" > $LOG_FIFO
   RESULT=$?
-  
-  # 关闭提示框
-  kill $DIALOG_PID 2>/dev/null
 fi
+
+# 等待用户按键关闭日志窗口(5秒超时)
+sleep 5
+
+# 关闭对话框和清理资源
+kill $DIALOG_PID 2>/dev/null
+kill $TEE_PID 2>/dev/null
+rm $LOG_FIFO
 
 MSG="安装失败."
 if [ "${RESULT}" == "0" ]; then
