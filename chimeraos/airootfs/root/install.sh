@@ -2,6 +2,25 @@
 
 set -o pipefail
 
+# 对话框类型分组尺寸
+MENU_WIDTH=75
+MENU_HEIGHT=25
+
+MSGBOX_WIDTH=60
+MSGBOX_HEIGHT=10
+
+GAUGE_WIDTH=70
+GAUGE_HEIGHT=8
+
+# 统一颜色样式
+TITLE_COLOR="\Z1"
+TEXT_COLOR="\Z0"
+HIGHLIGHT_COLOR="\Z2"
+WARNING_COLOR="\Z3"
+
+# 捕获中断信号
+trap 'exit_gpm; echo "安装被中断"; exit 1' SIGINT SIGTERM
+
 clean_progress() {
   local scale=$1
   local postfix=$2
@@ -72,6 +91,38 @@ check_selected_color = (WHITE,BLUE,ON)
 uarrow_color = (GREEN,WHITE,ON)
 darrow_color = (GREEN,WHITE,ON)
 EOF
+}
+
+# 显示帮助信息
+show_help() {
+  dialog --colors --title "${TITLE_COLOR}帮助\Zn" --msgbox "\
+${TEXT_COLOR}键盘导航:\Zn
+- TAB: 在选项间切换
+- 空格: 选择/取消选择项目
+- 方向键: 移动选择
+- Enter: 确认选择
+- ESC: 取消/返回
+
+${TEXT_COLOR}鼠标操作:\Zn
+- 点击按钮: 执行按钮操作
+- 点击菜单项: 选择项目
+- 点击复选框: 切换选择状态
+
+${TEXT_COLOR}常见问题:\Zn
+- 如果找不到磁盘，检查磁盘连接
+- 如果网络连接失败，请检查网络设置
+- 安装出错可以查看日志文件" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+}
+
+# 错误处理函数
+handle_error() {
+  local error_msg="$1"
+  local error_code="$2"
+  
+  dialog --colors --title "${TITLE_COLOR}错误\Zn" --msgbox "${WARNING_COLOR}$error_msg\Zn\n错误代码: $error_code" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  
+  # 记录错误到日志
+  echo "[ERROR] $error_msg (code: $error_code)" >> /tmp/install_error.log
 }
 
 enable_all_gamepads() {
@@ -176,10 +227,12 @@ get_disk_human_description() {
 }
 
 cancel_install() {
-    if (dialog --colors --title "\Z1$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?" 10 70); then
+    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+        exit_gpm
         poweroff
     fi
 
+    exit_gpm
     exit 1
 }
 
@@ -212,22 +265,22 @@ select_disk() {
             TEMP_FILE=$(mktemp)
             # NOTE: each disk entry consists of 2 elements in the array (disk name & disk description)
             if [ "${#device_list[@]}" -gt 2 ]; then
-                    dialog --colors --title "\Z1$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" 20 70 5 "${device_list[@]}" 2> $TEMP_FILE
+                    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" $MENU_HEIGHT $MENU_WIDTH 10 "${device_list[@]}" 2> $TEMP_FILE
                     export DISK=$(cat $TEMP_FILE)
                     rm $TEMP_FILE
             elif [ "${#device_list[@]}" -eq 2 ]; then
                     # skip selection menu if only a single disk is available to choose from
                     export DISK=${device_list[0]}
             else
-                    dialog --colors --title "\Z1$OS_NAME 安装\Zn" --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." 12 70
+                    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH
                     cancel_install
             fi
 
             export DISK_DESC=$(get_disk_human_description $DISK)
 
             if is_disk_smaller_than $DISK $MIN_DISK_SIZE; then
-                    if (dialog --colors --title "\Z1警告\Zn" --yes-button "选择其他磁盘" --no-button "取消安装" \
-                            --yesno "错误: 所选磁盘 $DISK - $DISK_DESC 太小. $OS_NAME 需要至少 $MIN_DISK_SIZE GB \n\n请选择其他磁盘." 12 75); then
+                    if (dialog --colors --title "${WARNING_COLOR}警告\Zn" --yes-button "选择其他磁盘" --no-button "取消安装" \
+                            --yesno "错误: 所选磁盘 $DISK - $DISK_DESC 太小. $OS_NAME 需要至少 $MIN_DISK_SIZE GB \n\n请选择其他磁盘." $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
                             continue
                     else
                             cancel_install
@@ -235,8 +288,8 @@ select_disk() {
             fi
 
             if is_disk_external $DISK; then
-                    if (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "继续安装" --no-button "选择其他磁盘" \
-                            --yesno "警告: $DISK - $DISK_DESC 似乎是外部磁盘. 在外部磁盘上安装 $OS_NAME 不受官方支持, 可能导致性能不佳和对磁盘造成永久损坏. \n\n您是否仍要继续安装?" 12 80); then
+                    if (dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续安装" --no-button "选择其他磁盘" \
+                            --yesno "警告: $DISK - $DISK_DESC 似乎是外部磁盘. 在外部磁盘上安装 $OS_NAME 不受官方支持, 可能导致性能不佳和对磁盘造成永久损坏. \n\n您是否仍要继续安装?" $MSGBOX_HEIGHT $MENU_WIDTH); then
                             break
                     else
                             # Unlikely that we would ever have ONLY an external disk, so this should be good enough
@@ -284,13 +337,14 @@ sleep 2
 
 # TARGET="stable"
 while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
-  dialog --colors --title "\Z1$OS_NAME 安装\Zn" \
+  dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
     --yes-button "网络配置" \
     --no-button "退出安装" \
     --yesno "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <退出> 以退出工具并继续安装。" \
-    12 50
+    $MSGBOX_HEIGHT $MSGBOX_WIDTH
 
   if [ $? -ne 0 ]; then
+    exit_gpm
     exit 1
   fi
 
@@ -311,16 +365,25 @@ MOUNT_PATH=/tmp/frzr_root
 #         cancel_install
 # fi
 
-if ! (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
-警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-        $DISK - $DISK_DESC\n\n\
-您是否要继续?" 15 70); then
-        cancel_install
-fi
+# 修复continue不在循环内的问题
+while true; do
+  if ! (dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
+  警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+          $DISK - $DISK_DESC\n\n\
+  您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH); then
+          if [ $? -eq 2 ]; then
+              show_help
+              continue
+          else
+              cancel_install
+          fi
+  fi
+  break
+done
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer /dev/${DISK}; then
-  dialog --colors --title "\Z1错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" 10 50
+  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
 
@@ -330,7 +393,7 @@ SYS_CONN_DIR="/etc/NetworkManager/system-connections"
 if [ -d ${SYS_CONN_DIR} ] && [ -n "$(ls -A ${SYS_CONN_DIR})" ]; then
   mkdir -p -m=700 ${MOUNT_PATH}${SYS_CONN_DIR}
   cp ${SYS_CONN_DIR}/* \
-    ${MOUNT_PATH}${SYS_CONN_DIR}/.
+    ${MOUNT_PATH}${SYS_CONN_DIR}/. || handle_error "复制网络配置失败" $?
 fi
 
 # Grab the steam bootstrap for first boot
@@ -348,12 +411,12 @@ fi
 #   stdbuf -oL tr '\r' '\n' | grep --line-buffered -oP '[0-9]*+(?=.[0-9])' | clean_progress 100 |
 #   dialog --gauge "正在下载 Steam ..." 10 50 0
 
-tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE"
-mv "$TMP_FILE" "$DESTINATION"
+tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" || handle_error "解压 Steam 引导失败" $?
+mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" $?
 # rm "$TMP_PKG"
 
 TEMP_FILE=$(mktemp)
-dialog --colors --title "\Z1$OS_NAME 版本选择\Zn" --menu "选择系统版本" 25 75 10 \
+dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
   "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
   "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
   "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
@@ -371,7 +434,7 @@ TARGET=$(cat $TEMP_FILE)
 rm $TEMP_FILE
 
 TEMP_FILE=$(mktemp)
-dialog --colors --title "\Z1$OS_NAME 安装选项\Zn" --menu "安装程序选项" 25 75 10 \
+dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装程序选项" $MENU_HEIGHT $MENU_WIDTH 10 \
   "Standard:" "使用默认选项安装 ChimeraOS" \
   "Advanced:" "使用高级选项安装 ChimeraOS" \
   2> $TEMP_FILE
@@ -388,7 +451,7 @@ debug_opt="Debug 模式"
 
 if [ "$MENU_SELECT" = "Advanced:" ]; then
   TEMP_FILE=$(mktemp)
-  dialog --colors --title "\Z1高级选项\Zn" --separate-output --checklist "使用空格键切换选中, 回车直接完成" 25 55 10 \
+  dialog --colors --title "${TITLE_COLOR}高级选项\Zn" --separate-output --checklist "使用空格键切换选中, 回车直接完成" $MENU_HEIGHT $MENU_WIDTH 10 \
     "$firmware_overrides_opt" "DSDT/EDID" OFF \
     "$cdn_opt" "" OFF \
     "$fallback_opt" "" ON \
@@ -447,7 +510,7 @@ export SHOW_UI="${_SHOW_UI}"
 
 if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
-  dialog --colors --title "\Z1安装方式\Zn" --menu "你想如何安装ChimeraOS ?" 18 50 10 \
+  dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
     "online" "在线获取最新系统镜像." \
     2> $TEMP_FILE
@@ -461,12 +524,21 @@ export NOT_UMOUNT=true
 FIFO=$(mktemp -u)
 mkfifo $FIFO
 
+# 创建日志查看按钮
+view_log_button() {
+  if [ -f "/tmp/frzr.log" ]; then
+    dialog --colors --title "${TITLE_COLOR}安装日志\Zn" --textbox "/tmp/frzr.log" $MENU_HEIGHT $MENU_WIDTH
+  else
+    dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "找不到日志文件" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  fi
+}
+
 if [ "${CHOICE}" == "local" ]; then
   export local_install=true
   # 在后台运行frzr-deploy并将输出发送到FIFO
   (frzr-deploy | tee /tmp/frzr.log) &> $FIFO &
   # 显示进度条
-  dialog --colors --title "\Z1安装进度\Zn" --gauge "正在安装本地版本..." 10 70 0 < $FIFO
+  dialog --colors --title "${TITLE_COLOR}安装进度\Zn" --gauge "正在安装本地版本..." $GAUGE_HEIGHT $GAUGE_WIDTH 0 < $FIFO
   # 获取命令的返回值
   wait $!
   RESULT=$?
@@ -474,7 +546,7 @@ else
   # 在后台运行frzr-deploy并将输出发送到FIFO
   (frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log) &> $FIFO &
   # 显示进度条
-  dialog --colors --title "\Z1安装进度\Zn" --gauge "正在安装 ${TARGET} 版本..." 10 70 0 < $FIFO
+  dialog --colors --title "${TITLE_COLOR}安装进度\Zn" --gauge "正在安装 ${TARGET} 版本..." $GAUGE_HEIGHT $GAUGE_WIDTH 0 < $FIFO
   # 获取命令的返回值
   wait $!
   RESULT=$?
@@ -509,12 +581,17 @@ fi
 echo -e "${MSG} RESULT:${RESULT}\n\n"
 
 if [ "$SHOW_UI" == "1" ]; then
-  if (dialog --colors --title "\Z1安装完成\Zn" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" 10 50); then
+  if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yes-button "重启" --no-button "取消" --help-button --help-label "查看日志" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
     # 在退出前清理GPM
-    if [ -n "$GPM_PID" ]; then
-      kill $GPM_PID 2>/dev/null
-    fi
+    exit_gpm
     reboot
+  elif [ $? -eq 2 ]; then
+    view_log_button
+    # 再次询问是否重启
+    if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+      exit_gpm
+      reboot
+    fi
   fi
 else
   # 命令行显示错误信息，提示用户查看日志。检测用户输入，y重启，n退出，r执行 ~/install.sh 重新安装
