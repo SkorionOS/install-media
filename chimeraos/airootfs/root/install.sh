@@ -357,29 +357,34 @@ MOUNT_PATH=/tmp/frzr_root
 # sets DISK and DISK_DESC
 # select_disk
 
-# warn before erasing disk
-# if ! (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "擦除磁盘并安装" --no-button "取消安装" "\
-# 警告: $OS_NAME 将被安装，以下磁盘上的所有数据将丢失: \n\n\
-#         $DISK - $DISK_DESC\n\n\
-# 您是否要继续?" 15 70); then
-#         cancel_install
-# fi
+# 使用更清晰的方式处理帮助按钮
+dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
+警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+        $DISK - $DISK_DESC\n\n\
+您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
 
-# 修复continue不在循环内的问题
-while true; do
-  if ! (dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
-  警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-          $DISK - $DISK_DESC\n\n\
-  您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH); then
-          if [ $? -eq 2 ]; then
-              show_help
-              continue
-          else
-              cancel_install
-          fi
-  fi
-  break
-done
+DIALOG_RET=$?
+
+case $DIALOG_RET in
+  0) # 用户选择"安装"
+    # 继续执行下面的安装代码
+    ;;
+  2) # 用户选择"帮助"
+    show_help
+    # 再次询问
+    dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
+警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+        $DISK - $DISK_DESC\n\n\
+您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+    
+    if [ $? -ne 0 ]; then
+      cancel_install
+    fi
+    ;;
+  *) # 用户选择"取消安装"或按ESC
+    cancel_install
+    ;;
+esac
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer /dev/${DISK}; then
