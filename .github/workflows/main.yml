@@ -3,6 +3,7 @@ on:
   push:
     branches:
     - 'sk'
+    - 'dialog'
 jobs:
   build:
     name: Installer ISO build
