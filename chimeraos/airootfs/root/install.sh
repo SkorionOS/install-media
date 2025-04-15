@@ -525,10 +525,6 @@ fi
 
 export NOT_UMOUNT=true
 
-# 创建一个进度条FIFO
-FIFO=$(mktemp -u)
-mkfifo $FIFO
-
 # 创建日志查看按钮
 view_log_button() {
   if [ -f "/tmp/frzr.log" ]; then
@@ -540,25 +536,29 @@ view_log_button() {
 
 if [ "${CHOICE}" == "local" ]; then
   export local_install=true
-  # 在后台运行frzr-deploy并将输出发送到FIFO
-  (frzr-deploy | tee /tmp/frzr.log) &> $FIFO &
-  # 显示进度条
-  dialog --colors --title "${TITLE_COLOR}安装进度\Zn" --gauge "正在安装本地版本..." $GAUGE_HEIGHT $GAUGE_WIDTH 0 < $FIFO
-  # 获取命令的返回值
-  wait $!
+  
+  # 显示安装中提示
+  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+  DIALOG_PID=$!
+  
+  # 在前台运行安装并记录日志
+  frzr-deploy | tee /tmp/frzr.log
   RESULT=$?
+  
+  # 关闭提示框
+  kill $DIALOG_PID 2>/dev/null
 else
-  # 在后台运行frzr-deploy并将输出发送到FIFO
-  (frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log) &> $FIFO &
-  # 显示进度条
-  dialog --colors --title "${TITLE_COLOR}安装进度\Zn" --gauge "正在安装 ${TARGET} 版本..." $GAUGE_HEIGHT $GAUGE_WIDTH 0 < $FIFO
-  # 获取命令的返回值
-  wait $!
+  # 显示安装中提示
+  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+  DIALOG_PID=$!
+  
+  # 在前台运行安装并记录日志
+  frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log
   RESULT=$?
+  
+  # 关闭提示框
+  kill $DIALOG_PID 2>/dev/null
 fi
-
-# 删除FIFO
-rm $FIFO
 
 MSG="安装失败."
 if [ "${RESULT}" == "0" ]; then
