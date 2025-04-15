@@ -10,6 +10,7 @@ broadcom-wl-dkms
 btrfs-progs
 cpio
 dhcpcd
+dialog
 diffutils
 dosfstools
 efibootmgr
