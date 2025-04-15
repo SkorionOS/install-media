@@ -15,6 +15,7 @@ dosfstools
 efibootmgr
 fpaste
 frzr
+gpm
 git
 intel-ucode
 jq

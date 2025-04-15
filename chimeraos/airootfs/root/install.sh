@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 set -o pipefail
 
@@ -13,6 +13,65 @@ clean_progress() {
       last_value=$value
     fi
   done
+}
+
+# 启动鼠标支持
+enable_mouse() {
+  # 检查gpm是否已安装
+  if ! command -v gpm &> /dev/null; then
+    return
+  fi
+  
+  # 启动鼠标服务
+  gpm -m /dev/input/mice -t imps2 &> /dev/null
+  export GPM_PID=$!
+}
+
+# 退出gpm
+exit_gpm() {
+  if [ -n "$GPM_PID" ]; then
+    kill $GPM_PID 2>/dev/null
+  fi
+}
+
+# 设置dialog样式
+setup_dialog() {
+  # 创建临时配置文件
+  export DIALOGRC="/tmp/dialogrc"
+  cat > $DIALOGRC << EOF
+# Dialog appearance
+use_colors = ON
+use_shadow = ON
+screen_color = (CYAN,BLUE,ON)
+shadow_color = (BLACK,BLACK,ON)
+dialog_color = (BLACK,WHITE,OFF)
+title_color = (BLUE,WHITE,ON)
+border_color = (WHITE,WHITE,ON)
+button_active_color = (WHITE,BLUE,ON)
+button_inactive_color = (BLACK,WHITE,OFF)
+button_key_active_color = (WHITE,BLUE,ON)
+button_key_inactive_color = (RED,WHITE,OFF)
+button_label_active_color = (WHITE,BLUE,ON)
+button_label_inactive_color = (BLACK,WHITE,ON)
+inputbox_color = (BLACK,WHITE,OFF)
+inputbox_border_color = (BLACK,WHITE,OFF)
+searchbox_color = (BLACK,WHITE,OFF)
+searchbox_title_color = (BLUE,WHITE,ON)
+searchbox_border_color = (WHITE,WHITE,ON)
+position_indicator_color = (BLUE,WHITE,ON)
+menubox_color = (BLACK,WHITE,OFF)
+menubox_border_color = (WHITE,WHITE,ON)
+item_color = (BLACK,WHITE,OFF)
+item_selected_color = (WHITE,BLUE,ON)
+tag_color = (BLUE,WHITE,ON)
+tag_selected_color = (YELLOW,BLUE,ON)
+tag_key_color = (RED,WHITE,OFF)
+tag_key_selected_color = (RED,BLUE,ON)
+check_color = (BLACK,WHITE,OFF)
+check_selected_color = (WHITE,BLUE,ON)
+uarrow_color = (GREEN,WHITE,ON)
+darrow_color = (GREEN,WHITE,ON)
+EOF
 }
 
 enable_all_gamepads() {
@@ -117,7 +176,7 @@ get_disk_human_description() {
 }
 
 cancel_install() {
-    if (whiptail --yesno --yes-button "关机" --no-button "打开命令行" "安装已取消, 您还需要要做什么?" 10 70); then
+    if (dialog --colors --title "\Z1$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?" 10 70); then
         poweroff
     fi
 
@@ -150,22 +209,25 @@ select_disk() {
                     device_list+=("$description")
             done <<< "$device_output"
 
+            TEMP_FILE=$(mktemp)
             # NOTE: each disk entry consists of 2 elements in the array (disk name & disk description)
             if [ "${#device_list[@]}" -gt 2 ]; then
-                    export DISK=$(whiptail --nocancel --menu "选择一个磁盘来安装 $OS_NAME:" 20 70 5 "${device_list[@]}" 3>&1 1>&2 2>&3)
+                    dialog --colors --title "\Z1$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" 20 70 5 "${device_list[@]}" 2> $TEMP_FILE
+                    export DISK=$(cat $TEMP_FILE)
+                    rm $TEMP_FILE
             elif [ "${#device_list[@]}" -eq 2 ]; then
                     # skip selection menu if only a single disk is available to choose from
                     export DISK=${device_list[0]}
             else
-                    whiptail --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." 12 70
+                    dialog --colors --title "\Z1$OS_NAME 安装\Zn" --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." 12 70
                     cancel_install
             fi
 
             export DISK_DESC=$(get_disk_human_description $DISK)
 
             if is_disk_smaller_than $DISK $MIN_DISK_SIZE; then
-                    if (whiptail --yesno --yes-button "Select a different disk" --no-button "Cancel install" \
-                            "错误: 所选磁盘 $DISK - $DISK_DESC 太小. $OS_NAME 需要至少 $MIN_DISK_SIZE GB \n\n请选择其他磁盘." 12 75); then
+                    if (dialog --colors --title "\Z1警告\Zn" --yes-button "选择其他磁盘" --no-button "取消安装" \
+                            --yesno "错误: 所选磁盘 $DISK - $DISK_DESC 太小. $OS_NAME 需要至少 $MIN_DISK_SIZE GB \n\n请选择其他磁盘." 12 75); then
                             continue
                     else
                             cancel_install
@@ -173,8 +235,8 @@ select_disk() {
             fi
 
             if is_disk_external $DISK; then
-                    if (whiptail --yesno --defaultno --yes-button "Install anyway" --no-button "Select a different disk" \
-                            "警告: $DISK - $DISK_DESC 似乎是外部磁盘. 在外部磁盘上安装 $OS_NAME 不受官方支持, 可能导致性能不佳和对磁盘造成永久损坏. \n\n您是否仍要继续安装?" 12 80); then
+                    if (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "继续安装" --no-button "选择其他磁盘" \
+                            --yesno "警告: $DISK - $DISK_DESC 似乎是外部磁盘. 在外部磁盘上安装 $OS_NAME 不受官方支持, 可能导致性能不佳和对磁盘造成永久损坏. \n\n您是否仍要继续安装?" 12 80); then
                             break
                     else
                             # Unlikely that we would ever have ONLY an external disk, so this should be good enough
@@ -202,15 +264,14 @@ DEVICE_VENDOR=$(cat /sys/devices/virtual/dmi/id/sys_vendor)
 DEVICE_PRODUCT=$(cat /sys/devices/virtual/dmi/id/product_name)
 DEVICE_CPU=$(lscpu | grep Vendor | cut -d':' -f2 | xargs echo -n)
 
-
+# 启动鼠标支持和设置dialog样式
+enable_mouse
+setup_dialog
 
 dmesg --console-level 1
 
-
-
 # start polling for a gamepad
 poll_gamepad &
-
 
 # try to set correct date & time -- required to be able to connect to github via https if your hardware clock is set too far into the past
 timedatectl set-ntp true
@@ -223,12 +284,11 @@ sleep 2
 
 # TARGET="stable"
 while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
-  whiptail \
-    "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <Quit> 以退出工具并继续安装。" \
-    12 50 \
-    --yesno \
+  dialog --colors --title "\Z1$OS_NAME 安装\Zn" \
     --yes-button "网络配置" \
-    --no-button "退出安装"
+    --no-button "退出安装" \
+    --yesno "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <退出> 以退出工具并继续安装。" \
+    12 50
 
   if [ $? -ne 0 ]; then
     exit 1
@@ -244,14 +304,14 @@ MOUNT_PATH=/tmp/frzr_root
 # select_disk
 
 # warn before erasing disk
-# if ! (whiptail --yesno --defaultno --yes-button "擦除磁盘并安装" --no-button "取消安装" "\
+# if ! (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "擦除磁盘并安装" --no-button "取消安装" "\
 # 警告: $OS_NAME 将被安装，以下磁盘上的所有数据将丢失: \n\n\
 #         $DISK - $DISK_DESC\n\n\
 # 您是否要继续?" 15 70); then
 #         cancel_install
 # fi
 
-if ! (whiptail --yesno --defaultno --yes-button "安装" --no-button "取消安装" "\
+if ! (dialog --colors --title "\Z1警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
         $DISK - $DISK_DESC\n\n\
 您是否要继续?" 15 70); then
@@ -260,7 +320,7 @@ fi
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer /dev/${DISK}; then
-  whiptail --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" 10 50
+  dialog --colors --title "\Z1错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" 10 50
   cancel_install
 fi
 
@@ -286,13 +346,14 @@ fi
 
 # curl --http1.1 -# -L -o "${TMP_PKG}" -C - "${URL}" 2>&1 |
 #   stdbuf -oL tr '\r' '\n' | grep --line-buffered -oP '[0-9]*+(?=.[0-9])' | clean_progress 100 |
-#   whiptail --gauge "正在下载 Steam ..." 10 50 0
+#   dialog --gauge "正在下载 Steam ..." 10 50 0
 
 tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE"
 mv "$TMP_FILE" "$DESTINATION"
 # rm "$TMP_PKG"
 
-TARGET=$(whiptail --menu "选择系统版本" 25 75 10 \
+TEMP_FILE=$(mktemp)
+dialog --colors --title "\Z1$OS_NAME 版本选择\Zn" --menu "选择系统版本" 25 75 10 \
   "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
   "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
   "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
@@ -305,12 +366,17 @@ TARGET=$(whiptail --menu "选择系统版本" 25 75 10 \
   "stable:kde-nv"        "stable:kde-nv     稳定版 (KDE NVIDIA)" \
   "testing:kde-nv"       "testing:kde-nv    测试版 (KDE NVIDIA)" \
   "unstable:kde-nv"      "unstable:kde-nv   不稳定版 (KDE NVIDIA)" \
-  3>&1 1>&2 2>&3)
+  2> $TEMP_FILE
+TARGET=$(cat $TEMP_FILE)
+rm $TEMP_FILE
 
-MENU_SELECT=$(whiptail --menu "安装程序选项" 25 75 10 \
+TEMP_FILE=$(mktemp)
+dialog --colors --title "\Z1$OS_NAME 安装选项\Zn" --menu "安装程序选项" 25 75 10 \
   "Standard:" "使用默认选项安装 ChimeraOS" \
   "Advanced:" "使用高级选项安装 ChimeraOS" \
-  3>&1 1>&2 2>&3)
+  2> $TEMP_FILE
+MENU_SELECT=$(cat $TEMP_FILE)
+rm $TEMP_FILE
 
 _SHOW_UI=1
 
@@ -321,13 +387,16 @@ shou_ui_opt="显示安装界面"
 debug_opt="Debug 模式"
 
 if [ "$MENU_SELECT" = "Advanced:" ]; then
-  OPTIONS=$(whiptail --title "高级选项" --separate-output --checklist "使用空格键切换选中, 回车直接完成" 25 55 10 \
+  TEMP_FILE=$(mktemp)
+  dialog --colors --title "\Z1高级选项\Zn" --separate-output --checklist "使用空格键切换选中, 回车直接完成" 25 55 10 \
     "$firmware_overrides_opt" "DSDT/EDID" OFF \
     "$cdn_opt" "" OFF \
     "$fallback_opt" "" ON \
     "$shou_ui_opt" "" ON \
     "$debug_opt" "" OFF \
-    3>&1 1>&2 2>&3)
+    2> $TEMP_FILE
+  OPTIONS=$(cat $TEMP_FILE)
+  rm $TEMP_FILE
 
   if echo "$OPTIONS" | grep -q "$firmware_overrides_opt"; then
     echo "启用固件覆盖..."
@@ -377,25 +446,42 @@ fi
 export SHOW_UI="${_SHOW_UI}"
 
 if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
-
-  CHOICE=$(whiptail --menu "你想如何安装ChimeraOS ?" 18 50 10 \
+  TEMP_FILE=$(mktemp)
+  dialog --colors --title "\Z1安装方式\Zn" --menu "你想如何安装ChimeraOS ?" 18 50 10 \
     "local" "使用本地媒介行安装." \
     "online" "在线获取最新系统镜像." \
-    3>&1 1>&2 2>&3)
+    2> $TEMP_FILE
+  CHOICE=$(cat $TEMP_FILE)
+  rm $TEMP_FILE
 fi
 
 export NOT_UMOUNT=true
 
+# 创建一个进度条FIFO
+FIFO=$(mktemp -u)
+mkfifo $FIFO
+
 if [ "${CHOICE}" == "local" ]; then
   export local_install=true
-  frzr-deploy | tee /tmp/frzr.log
-  # bash 管道执行命令后，获取命令的返回值 ，从 PIPESTATUS[0] 开始
-  # zsh 则是从 pipestatus[1] 开始
-  RESULT=${PIPESTATUS[0]}
+  # 在后台运行frzr-deploy并将输出发送到FIFO
+  (frzr-deploy | tee /tmp/frzr.log) &> $FIFO &
+  # 显示进度条
+  dialog --colors --title "\Z1安装进度\Zn" --gauge "正在安装本地版本..." 10 70 0 < $FIFO
+  # 获取命令的返回值
+  wait $!
+  RESULT=$?
 else
-  frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log
-  RESULT=${PIPESTATUS[0]}
+  # 在后台运行frzr-deploy并将输出发送到FIFO
+  (frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log) &> $FIFO &
+  # 显示进度条
+  dialog --colors --title "\Z1安装进度\Zn" --gauge "正在安装 ${TARGET} 版本..." 10 70 0 < $FIFO
+  # 获取命令的返回值
+  wait $!
+  RESULT=$?
 fi
+
+# 删除FIFO
+rm $FIFO
 
 MSG="安装失败."
 if [ "${RESULT}" == "0" ]; then
@@ -423,7 +509,11 @@ fi
 echo -e "${MSG} RESULT:${RESULT}\n\n"
 
 if [ "$SHOW_UI" == "1" ]; then
-  if (whiptail --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" 10 50); then
+  if (dialog --colors --title "\Z1安装完成\Zn" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" 10 50); then
+    # 在退出前清理GPM
+    if [ -n "$GPM_PID" ]; then
+      kill $GPM_PID 2>/dev/null
+    fi
     reboot
   fi
 else
@@ -433,12 +523,18 @@ else
   echo
   case $input in
   [yY])
+    # 在退出前清理GPM
+    exit_gpm
     reboot
     ;;
   [nN])
+    # 在退出前清理GPM
+    exit_gpm
     exit 1
     ;;
   [rR])
+    # 在退出前清理GPM
+    exit_gpm
     ~/install.sh
     ;;
   *)
@@ -446,5 +542,8 @@ else
     ;;
   esac
 fi
+
+# 在退出前清理GPM
+exit_gpm
 
 exit ${RESULT}
