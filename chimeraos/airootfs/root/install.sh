@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034,SC2086,SC2155
 
 set -o pipefail
 
@@ -166,7 +167,7 @@ get_boot_disk() {
 
         local part=$(blkid | grep $part_uuid | cut -d':' -f1 | head -1 | sed -e 's,/dev/,,')
         local part_path=$(readlink "/sys/class/block/$part")
-        basename `dirname $part_path`
+        basename "$(dirname "$part_path")"
 }
 
 is_disk_external() {
@@ -355,39 +356,39 @@ done
 MOUNT_PATH=/tmp/frzr_root
 
 # sets DISK and DISK_DESC
-# select_disk
+select_disk
 
 # 使用更清晰的方式处理帮助按钮
-dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
-警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-        $DISK - $DISK_DESC\n\n\
-您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+# dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
+# 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+#         $DISK - $DISK_DESC\n\n\
+# 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
 
-DIALOG_RET=$?
+# DIALOG_RET=$?
 
-case $DIALOG_RET in
-  0) # 用户选择"安装"
-    # 继续执行下面的安装代码
-    ;;
-  2) # 用户选择"帮助"
-    show_help
-    # 再次询问
-    dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
-警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-        $DISK - $DISK_DESC\n\n\
-您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+# case $DIALOG_RET in
+#   0) # 用户选择"安装"
+#     # 继续执行下面的安装代码
+#     ;;
+#   2) # 用户选择"帮助"
+#     show_help
+#     # 再次询问
+#     dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
+# 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+#         $DISK - $DISK_DESC\n\n\
+# 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
     
-    if [ $? -ne 0 ]; then
-      cancel_install
-    fi
-    ;;
-  *) # 用户选择"取消安装"或按ESC
-    cancel_install
-    ;;
-esac
+#     if [ $? -ne 0 ]; then
+#       cancel_install
+#     fi
+#     ;;
+#   *) # 用户选择"取消安装"或按ESC
+#     cancel_install
+#     ;;
+# esac
 
 # perform bootstrap of disk
-if ! frzr-bootstrap gamer /dev/${DISK}; then
+if ! frzr-bootstrap gamer "/dev/${DISK}"; then
   dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
@@ -396,7 +397,8 @@ fi
 # Copy over all network configuration from the live session to the system
 SYS_CONN_DIR="/etc/NetworkManager/system-connections"
 if [ -d ${SYS_CONN_DIR} ] && [ -n "$(ls -A ${SYS_CONN_DIR})" ]; then
-  mkdir -p -m=700 ${MOUNT_PATH}${SYS_CONN_DIR}
+  mkdir -p ${MOUNT_PATH}${SYS_CONN_DIR}
+  chmod 700 ${MOUNT_PATH}${SYS_CONN_DIR}
   cp ${SYS_CONN_DIR}/* \
     ${MOUNT_PATH}${SYS_CONN_DIR}/. || handle_error "复制网络配置失败" $?
 fi
