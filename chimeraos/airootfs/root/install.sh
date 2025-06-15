@@ -1,4 +1,5 @@
 #! /bin/bash
+# shellcheck disable=SC2086,SC2155
 
 set -o pipefail
 
@@ -56,7 +57,7 @@ get_boot_disk() {
 
         local part=$(blkid | grep $part_uuid | cut -d':' -f1 | head -1 | sed -e 's,/dev/,,')
         local part_path=$(readlink "/sys/class/block/$part")
-        basename `dirname $part_path`
+        basename "$(dirname "$part_path")"
 }
 
 is_disk_external() {
@@ -146,15 +147,17 @@ select_disk() {
                     if [ -z "$description" ]; then
                             continue
                     fi
-                    device_list+=($name)
+                    device_list+=("$name")
                     device_list+=("$description")
             done <<< "$device_output"
 
             # NOTE: each disk entry consists of 2 elements in the array (disk name & disk description)
+            # 如果磁盘列表大于2，显示选择菜单
             if [ "${#device_list[@]}" -gt 2 ]; then
                     export DISK=$(whiptail --nocancel --menu "选择一个磁盘来安装 $OS_NAME:" 20 70 5 "${device_list[@]}" 3>&1 1>&2 2>&3)
             elif [ "${#device_list[@]}" -eq 2 ]; then
                     # skip selection menu if only a single disk is available to choose from
+                    # 如果只有一个磁盘可供选择，跳过选择菜单
                     export DISK=${device_list[0]}
             else
                     whiptail --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." 12 70
@@ -241,7 +244,7 @@ done
 MOUNT_PATH=/tmp/frzr_root
 
 # sets DISK and DISK_DESC
-# select_disk
+select_disk
 
 # warn before erasing disk
 # if ! (whiptail --yesno --defaultno --yes-button "擦除磁盘并安装" --no-button "取消安装" "\
@@ -259,7 +262,7 @@ MOUNT_PATH=/tmp/frzr_root
 # fi
 
 # perform bootstrap of disk
-if ! frzr-bootstrap gamer /dev/${DISK}; then
+if ! frzr-bootstrap gamer "/dev/${DISK}"; then
   whiptail --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" 10 50
   cancel_install
 fi
@@ -268,9 +271,10 @@ fi
 # Copy over all network configuration from the live session to the system
 SYS_CONN_DIR="/etc/NetworkManager/system-connections"
 if [ -d ${SYS_CONN_DIR} ] && [ -n "$(ls -A ${SYS_CONN_DIR})" ]; then
-  mkdir -p -m=700 ${MOUNT_PATH}${SYS_CONN_DIR}
+  mkdir -p ${MOUNT_PATH}${SYS_CONN_DIR}
+  chmod 700 ${MOUNT_PATH}${SYS_CONN_DIR}
   cp ${SYS_CONN_DIR}/* \
-    ${MOUNT_PATH}${SYS_CONN_DIR}/.
+  ${MOUNT_PATH}${SYS_CONN_DIR}/.
 fi
 
 # Grab the steam bootstrap for first boot
