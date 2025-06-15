@@ -251,12 +251,12 @@ MOUNT_PATH=/tmp/frzr_root
 #         cancel_install
 # fi
 
-if ! (whiptail --yesno --defaultno --yes-button "安装" --no-button "取消安装" "\
-警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-        $DISK - $DISK_DESC\n\n\
-您是否要继续?" 15 70); then
-        cancel_install
-fi
+# if ! (whiptail --yesno --defaultno --yes-button "安装" --no-button "取消安装" "\
+# 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
+#         $DISK - $DISK_DESC\n\n\
+# 您是否要继续?" 15 70); then
+#         cancel_install
+# fi
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer /dev/${DISK}; then
