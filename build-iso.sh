@@ -24,6 +24,7 @@ mkdir -p "${temp_dir}"
 AUR_PACKAGES="\
     fpaste \
     frzr-sk \
+    inputplumber-bin \
     rtl88x2bu-dkms-git \
     rtw89-dkms-git \
     r8152-dkms \

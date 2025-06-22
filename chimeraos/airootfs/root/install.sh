@@ -228,7 +228,7 @@ get_disk_human_description() {
 }
 
 cancel_install() {
-    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?\n您可以在命令行中输入 ~/install.sh 来再次启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
         exit_gpm
         poweroff
     fi
@@ -359,38 +359,48 @@ MOUNT_PATH=/tmp/frzr_root
 select_disk
 
 # 使用更清晰的方式处理帮助按钮
-# dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
-# 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-#         $DISK - $DISK_DESC\n\n\
-# 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
+警告: $OS_NAME 将被安装到以下磁盘: \n\n\
+        $DISK - $DISK_DESC\n\n\
+您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
 
-# DIALOG_RET=$?
+DIALOG_RET=$?
 
-# case $DIALOG_RET in
-#   0) # 用户选择"安装"
-#     # 继续执行下面的安装代码
-#     ;;
-#   2) # 用户选择"帮助"
-#     show_help
-#     # 再次询问
-#     dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "安装" --no-button "取消安装" --yesno "\
-# 警告: $OS_NAME 将被安装，如果选择全新安装，以下磁盘上的所有数据将丢失: \n\n\
-#         $DISK - $DISK_DESC\n\n\
-# 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+case $DIALOG_RET in
+  0) # 用户选择"安装"
+    # 继续执行下面的安装代码
+    ;;
+  2) # 用户选择"帮助"
+    show_help
+    # 再次询问
+    dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --yesno "\
+警告: $OS_NAME 将被安装到以下磁盘: \n\n\
+        $DISK - $DISK_DESC\n\n\
+您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
     
-#     if [ $? -ne 0 ]; then
-#       cancel_install
-#     fi
-#     ;;
-#   *) # 用户选择"取消安装"或按ESC
-#     cancel_install
-#     ;;
-# esac
+    if [ $? -ne 0 ]; then
+      cancel_install
+    fi
+    ;;
+  *) # 用户选择"取消安装"或按ESC
+    cancel_install
+    ;;
+esac
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer "/dev/${DISK}"; then
   dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
+fi
+
+if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
+  TEMP_FILE=$(mktemp)
+  dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
+    "local" "使用本地媒介行安装." \
+    "online" "在线获取最新系统镜像." \
+    2> $TEMP_FILE
+  CHOICE=$(cat $TEMP_FILE)
+  rm $TEMP_FILE
 fi
 
 #### Post install steps for system configuration
@@ -422,23 +432,25 @@ tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >
 mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" $?
 # rm "$TMP_PKG"
 
-TEMP_FILE=$(mktemp)
-dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
-  "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
-  "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
-  "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
-  "stable:kde"           "stable:kde        稳定版 (KDE)" \
-  "testing:kde"          "testing:kde       测试版 (KDE)" \
-  "unstable:kde"         "unstable:kde      开发版 (KDE)" \
-  "stable:gnome-nv"      "stable:gnome-nv   稳定版 (GNOME NVIDIA)" \
-  "testing:gnome-nv"     "testing:gnome-nv  测试版 (GNOME NVIDIA)" \
-  "unstable:gnome-nv"    "unstable:gnome-nv 不稳定版 (GNOME NVIDIA)" \
-  "stable:kde-nv"        "stable:kde-nv     稳定版 (KDE NVIDIA)" \
-  "testing:kde-nv"       "testing:kde-nv    测试版 (KDE NVIDIA)" \
-  "unstable:kde-nv"      "unstable:kde-nv   不稳定版 (KDE NVIDIA)" \
-  2> $TEMP_FILE
-TARGET=$(cat $TEMP_FILE)
-rm $TEMP_FILE
+if [ "${CHOICE}" != "local" ]; then
+  TEMP_FILE=$(mktemp)
+  dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
+    "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
+    "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
+    "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
+    "stable:kde"           "stable:kde        稳定版 (KDE)" \
+    "testing:kde"          "testing:kde       测试版 (KDE)" \
+    "unstable:kde"         "unstable:kde      开发版 (KDE)" \
+    "stable:gnome-nv"      "stable:gnome-nv   稳定版 (GNOME NVIDIA)" \
+    "testing:gnome-nv"     "testing:gnome-nv  测试版 (GNOME NVIDIA)" \
+    "unstable:gnome-nv"    "unstable:gnome-nv 不稳定版 (GNOME NVIDIA)" \
+    "stable:kde-nv"        "stable:kde-nv     稳定版 (KDE NVIDIA)" \
+    "testing:kde-nv"       "testing:kde-nv    测试版 (KDE NVIDIA)" \
+    "unstable:kde-nv"      "unstable:kde-nv   不稳定版 (KDE NVIDIA)" \
+    2> $TEMP_FILE
+  TARGET=$(cat $TEMP_FILE)
+  rm $TEMP_FILE
+fi
 
 TEMP_FILE=$(mktemp)
 dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装程序选项" $MENU_HEIGHT $MENU_WIDTH 10 \
@@ -447,6 +459,7 @@ dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装�
   2> $TEMP_FILE
 MENU_SELECT=$(cat $TEMP_FILE)
 rm $TEMP_FILE
+
 
 _SHOW_UI=1
 
@@ -514,16 +527,6 @@ EOL
 fi
 
 export SHOW_UI="${_SHOW_UI}"
-
-if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
-  TEMP_FILE=$(mktemp)
-  dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
-    "local" "使用本地媒介行安装." \
-    "online" "在线获取最新系统镜像." \
-    2> $TEMP_FILE
-  CHOICE=$(cat $TEMP_FILE)
-  rm $TEMP_FILE
-fi
 
 export NOT_UMOUNT=true
 
@@ -595,7 +598,7 @@ if [ "$SHOW_UI" == "1" ]; then
   elif [ $? -eq 2 ]; then
     view_log_button
     # 再次询问是否重启
-    if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+    if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --defaultno --yes-button "重启" --no-button "取消" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
       exit_gpm
       reboot
     fi
