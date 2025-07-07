@@ -30,6 +30,7 @@ mkinitcpio
 mkinitcpio-archiso
 nano
 netctl
+ntfs-3g
 coreutils
 openssh
 parted
