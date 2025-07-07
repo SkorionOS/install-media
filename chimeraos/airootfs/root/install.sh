@@ -266,9 +266,12 @@ select_disk() {
             TEMP_FILE=$(mktemp)
             # NOTE: each disk entry consists of 2 elements in the array (disk name & disk description)
             if [ "${#device_list[@]}" -gt 2 ]; then
-                    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" $MENU_HEIGHT $MENU_WIDTH 10 "${device_list[@]}" 2> $TEMP_FILE
-                    export DISK=$(cat $TEMP_FILE)
-                    rm $TEMP_FILE
+                    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" $MENU_HEIGHT $MENU_WIDTH 10 "${device_list[@]}" 2> $TEMP_FILE); then
+                            export DISK=$(cat $TEMP_FILE)
+                            rm $TEMP_FILE
+                    else
+                            cancel_install
+                    fi
             elif [ "${#device_list[@]}" -eq 2 ]; then
                     # skip selection menu if only a single disk is available to choose from
                     export DISK=${device_list[0]}
@@ -316,7 +319,7 @@ MIN_DISK_SIZE=55 # GB
 
 DEVICE_VENDOR=$(cat /sys/devices/virtual/dmi/id/sys_vendor)
 DEVICE_PRODUCT=$(cat /sys/devices/virtual/dmi/id/product_name)
-DEVICE_CPU=$(lscpu | grep Vendor | cut -d':' -f2 | xargs echo -n)
+DEVICE_CPU=$(LANG=en_US.UTF-8 lscpu | grep Vendor | cut -d':' -f2 | xargs echo -n)
 
 # 启动鼠标支持和设置dialog样式
 enable_mouse
@@ -325,7 +328,7 @@ setup_dialog
 dmesg --console-level 1
 
 # start polling for a gamepad
-poll_gamepad &
+# poll_gamepad &
 
 # try to set correct date & time -- required to be able to connect to github via https if your hardware clock is set too far into the past
 timedatectl set-ntp true
@@ -358,6 +361,7 @@ MOUNT_PATH=/tmp/frzr_root
 # sets DISK and DISK_DESC
 select_disk
 
+set +e
 # 使用更清晰的方式处理帮助按钮
 dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
 警告: $OS_NAME 将被安装到以下磁盘: \n\n\
@@ -365,6 +369,7 @@ dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "�
 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
 
 DIALOG_RET=$?
+set -e
 
 case $DIALOG_RET in
   0) # 用户选择"安装"
