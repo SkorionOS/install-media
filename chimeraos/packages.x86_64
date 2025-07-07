@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 acpica
+aic8800d80-dkms
 amd-ucode
 aria2
 b43-fwcutter

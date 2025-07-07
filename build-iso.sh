@@ -22,6 +22,7 @@ mkdir -p "${temp_dir}"
 
 # add AUR packages to the build
 AUR_PACKAGES="\
+    aic8800d80-dkms \
     fpaste \
     frzr-sk \
     inputplumber-bin \
