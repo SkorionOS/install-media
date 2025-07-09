@@ -361,7 +361,6 @@ MOUNT_PATH=/tmp/frzr_root
 # sets DISK and DISK_DESC
 select_disk
 
-set +e
 # 使用更清晰的方式处理帮助按钮
 dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
 警告: $OS_NAME 将被安装到以下磁盘: \n\n\
@@ -369,7 +368,6 @@ dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "�
 您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
 
 DIALOG_RET=$?
-set -e
 
 case $DIALOG_RET in
   0) # 用户选择"安装"
@@ -559,7 +557,7 @@ if [ "${CHOICE}" == "local" ]; then
   kill $DIALOG_PID 2>/dev/null
 else
   # 显示安装中提示
-  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在使用在线方式下载安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
   DIALOG_PID=$!
   
   # 在前台运行安装并记录日志
