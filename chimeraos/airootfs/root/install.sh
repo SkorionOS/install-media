@@ -391,7 +391,7 @@ case $DIALOG_RET in
 esac
 
 # perform bootstrap of disk
-if ! frzr-bootstrap gamer "/dev/${DISK}"; then
+if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee /tmp/frzr.log; then
   dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
@@ -550,7 +550,7 @@ if [ "${CHOICE}" == "local" ]; then
   DIALOG_PID=$!
   
   # 在前台运行安装并记录日志
-  frzr-deploy | tee /tmp/frzr.log
+  frzr-deploy 2>&1 | tee /tmp/frzr.log
   RESULT=$?
   
   # 关闭提示框
