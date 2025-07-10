@@ -95,7 +95,7 @@ EOF
 }
 
 # 显示帮助信息
-show_help() {
+show_help_old() {
   dialog --colors --title "${TITLE_COLOR}帮助\Zn" --msgbox "\
 ${TEXT_COLOR}键盘导航:\Zn
 - TAB: 在选项间切换
@@ -113,6 +113,21 @@ ${TEXT_COLOR}常见问题:\Zn
 - 如果找不到磁盘，检查磁盘连接
 - 如果网络连接失败，请检查网络设置
 - 安装出错可以查看日志文件" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+}
+
+show_help() {
+  dialog --colors --title "${TITLE_COLOR}帮助\Zn" --msgbox "\
+${TEXT_COLOR}键盘导航:\Zn
+- TAB: 在选项间切换
+- 空格: 选择/取消选择项目
+- 方向键: 移动选择
+- Enter: 确认选择
+- ESC: 取消/返回
+
+${TEXT_COLOR}常见问题:\Zn
+- 如果找不到磁盘，检查磁盘连接
+- 如果网络连接失败，请检查网络设置
+- 安装出错可以查看日志文件" $((MSGBOX_HEIGHT * 2)) $MSGBOX_WIDTH
 }
 
 # 错误处理函数
@@ -219,10 +234,10 @@ get_disk_human_description() {
         local vendor=$(lsblk --list -n -o name,vendor | grep "$name " | cut -d' ' -f2- | xargs echo -n)
         local transport=$(lsblk --list -n -o name,tran | grep "$name " | cut -d' ' -f2- | \
                 sed -e 's/usb/USB/' | \
-                sed -e 's/nvme/Internal/' | \
-                sed -e 's/sata/Internal/' | \
-                sed -e 's/ata/Internal/' | \
-                sed -e 's/mmc/SD card/' | \
+                sed -e 's/nvme/内置/' | \
+                sed -e 's/sata/内置/' | \
+                sed -e 's/ata/内置/' | \
+                sed -e 's/mmc/SD卡/' | \
                 xargs echo -n)
         echo "[${transport}] ${vendor} ${model:=Unknown model} ($size)" | xargs echo -n
 }
@@ -466,7 +481,7 @@ timedatectl set-ntp true
 
 # Waiting a bit because some wifi chips are slow to scan 5GHZ networks
 echo "Starting installer..."
-sleep 2
+# sleep 2
 
 # TARGET="stable"
 while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
@@ -491,34 +506,32 @@ MOUNT_PATH=/tmp/frzr_root
 # sets DISK and DISK_DESC
 select_disk
 
-# 使用更清晰的方式处理帮助按钮
-dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
+# 递归确认安装函数
+confirm_installation() {
+    dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
 警告: $OS_NAME 将被安装到以下磁盘: \n\n\
         $DISK - $DISK_DESC\n\n\
-您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+您是否要继续?\n(在后续步骤可进行更详细的安装选项设置)" $MSGBOX_HEIGHT $MENU_WIDTH
 
-DIALOG_RET=$?
-
-case $DIALOG_RET in
-  0) # 用户选择"安装"
-    # 继续执行下面的安装代码
-    ;;
-  2) # 用户选择"帮助"
-    show_help
-    # 再次询问
-    dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --yesno "\
-警告: $OS_NAME 将被安装到以下磁盘: \n\n\
-        $DISK - $DISK_DESC\n\n\
-您是否要继续?" $MSGBOX_HEIGHT $MENU_WIDTH
+    local dialog_ret=$?
     
-    if [ $? -ne 0 ]; then
-      cancel_install
-    fi
-    ;;
-  *) # 用户选择"取消安装"或按ESC
-    cancel_install
-    ;;
-esac
+    case $dialog_ret in
+        0) # 用户选择"继续"
+            return 0
+            ;;
+        2) # 用户选择"帮助"
+            show_help
+            # 递归调用自身，继续确认
+            confirm_installation
+            ;;
+        *) # 用户选择"取消安装"或按ESC
+            cancel_install
+            ;;
+    esac
+}
+
+# 调用递归确认函数
+confirm_installation
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee /tmp/frzr.log; then
