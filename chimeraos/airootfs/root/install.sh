@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2034,SC2086,SC2155
 
-set -xo pipefail
+set -o pipefail
 
 # 对话框类型分组尺寸
 MENU_WIDTH=75
@@ -228,15 +228,34 @@ get_disk_human_description() {
 }
 
 cancel_install() {
-    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?\n您可以在命令行中输入 ~/install.sh 来再次启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
-        cleanup_frzr_mounts
-        exit_gpm
-        poweroff
-    fi
-
-    cleanup_frzr_mounts
-    exit_gpm
-    exit 1
+    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
+        --yes-label "关机" --no-label "打开命令行" \
+        --extra-button --extra-label "重新安装" \
+        --yesno "安装已取消, 您还需要要做什么?" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+    
+    local ret=$?
+    case $ret in
+        0)  # Yes - 关机
+            cleanup_frzr_mounts
+            exit_gpm
+            poweroff
+            ;;
+        1)  # No - 打开命令行
+            cleanup_frzr_mounts
+            exit_gpm
+            exit 1
+            ;;
+        3)  # Extra - 重新安装
+            cleanup_frzr_mounts
+            exit_gpm
+            exec ~/install.sh
+            ;;
+        *)  # ESC或其他
+            cleanup_frzr_mounts
+            exit_gpm
+            exit 1
+            ;;
+    esac
 }
 
 select_disk() {
@@ -438,7 +457,7 @@ setup_dialog
 dmesg --console-level 1
 
 # start polling for a gamepad
-#poll_gamepad &
+poll_gamepad &
 
 # try to set correct date & time -- required to be able to connect to github via https if your hardware clock is set too far into the past
 timedatectl set-ntp true
