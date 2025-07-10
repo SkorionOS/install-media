@@ -550,12 +550,16 @@ fi
 
 if [ -z "$SELECTED_FRZR_FILE" ] && (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
-  dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
+  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
     "online" "在线获取最新系统镜像." \
     2> $TEMP_FILE
-  CHOICE=$(cat $TEMP_FILE)
-  rm $TEMP_FILE
+  ); then
+    CHOICE=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    cancel_install
+  fi
 fi
 
 #### Post install steps for system configuration
@@ -589,7 +593,7 @@ mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" 
 
 if [ "${CHOICE}" != "local" ]; then
   TEMP_FILE=$(mktemp)
-  dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
+  if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
     "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
     "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
     "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
@@ -603,17 +607,25 @@ if [ "${CHOICE}" != "local" ]; then
     "testing:kde-nv"       "testing:kde-nv    测试版 (KDE NVIDIA)" \
     "unstable:kde-nv"      "unstable:kde-nv   不稳定版 (KDE NVIDIA)" \
     2> $TEMP_FILE
-  TARGET=$(cat $TEMP_FILE)
-  rm $TEMP_FILE
+  ); then
+    TARGET=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    cancel_install
+  fi
 fi
 
 TEMP_FILE=$(mktemp)
-dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装程序选项" $MENU_HEIGHT $MENU_WIDTH 10 \
+if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装程序选项" $MENU_HEIGHT $MENU_WIDTH 10 \
   "Standard:" "使用默认选项安装 ChimeraOS" \
   "Advanced:" "使用高级选项安装 ChimeraOS" \
   2> $TEMP_FILE
-MENU_SELECT=$(cat $TEMP_FILE)
-rm $TEMP_FILE
+  ); then
+    MENU_SELECT=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    cancel_install
+  fi
 
 
 _SHOW_UI=1
