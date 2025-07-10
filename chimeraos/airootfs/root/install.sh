@@ -548,7 +548,7 @@ else
     cancel_install
 fi
 
-if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
+if [ -z "$SELECTED_FRZR_FILE" ] && (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
   dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
