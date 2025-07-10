@@ -309,9 +309,11 @@ select_disk() {
 
 # 扫描FRZR_UPDATE文件的函数
 scan_frzr_update_files() {
-    local file_list=()
+    local menu_list=()
+    local file_paths=()
     local temp_mount_base="/tmp/frzr_scan"
     declare -a mounted_by_us=()  # 记录我们挂载的分区，用于后续清理
+    local file_index=1
     
     # 显示扫描进度
     dialog --colors --title "${TITLE_COLOR}扫描本地文件\Zn" --infobox "正在扫描分区中的FRZR更新文件..." $MSGBOX_HEIGHT $MSGBOX_WIDTH &
@@ -355,8 +357,14 @@ scan_frzr_update_files() {
                     local filesize=$(du -h "$file" 2>/dev/null | cut -f1)
                     local device_name=$(basename "$device_path")
                     local display_name="[$device_name] $filename ($filesize)"
-                    file_list+=("$file")  # 直接存储完整路径
-                    file_list+=("$display_name")
+                    
+                    # 使用序号作为菜单键
+                    menu_list+=("$file_index")
+                    menu_list+=("$display_name")
+                    
+                    # 存储文件路径映射
+                    file_paths[file_index]="$file"
+                    ((file_index++))
                 fi
             done < <(find "$mount_point/FRZR_UPDATE" -type f -print0 2>/dev/null)
         fi
@@ -367,13 +375,14 @@ scan_frzr_update_files() {
     kill $dialog_pid 2>/dev/null
     
     # 处理扫描结果
-    if [ "${#file_list[@]}" -gt 0 ]; then
+    if [ "${#menu_list[@]}" -gt 0 ]; then
         local temp_file=$(mktemp)
         if dialog --colors --title "${TITLE_COLOR}选择FRZR更新文件\Zn" \
             --menu "找到以下可用的更新文件:" $MENU_HEIGHT $MENU_WIDTH 10 \
-            "${file_list[@]}" 2> "$temp_file"; then
+            "${menu_list[@]}" 2> "$temp_file"; then
             
-            export SELECTED_FRZR_FILE="$(cat "$temp_file")"
+            local selected_index=$(cat "$temp_file")
+            export SELECTED_FRZR_FILE="${file_paths[$selected_index]}"
             # 导出清理信息供后续使用
             export MOUNTED_BY_SCAN="${mounted_by_us[*]}"
             rm "$temp_file"
@@ -385,9 +394,9 @@ scan_frzr_update_files() {
             return 1
         fi
     else
-        # 未找到文件，静默清理并返回失败
+        # 未找到文件，静默清理
         cleanup_scan_mounts "${mounted_by_us[@]}"
-        return 1
+        return 0
     fi
 }
 
@@ -500,8 +509,14 @@ fi
 
 # 遍历所有支持的分区，检索分区根目录存在FRZR_UPDATE文件夹的，列出文件夹中符合规则的文件，并提供选择
 if scan_frzr_update_files; then
-  export CHOICE="local"
-elif (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
+  if [ -n "$SELECTED_FRZR_FILE" ]; then
+    export CHOICE="local"
+  fi
+else
+    cancel_install
+fi
+
+if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
   dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
