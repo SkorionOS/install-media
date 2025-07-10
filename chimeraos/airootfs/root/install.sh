@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2034,SC2086,SC2155
 
-set -o pipefail
+set -xo pipefail
 
 # 对话框类型分组尺寸
 MENU_WIDTH=75
@@ -20,7 +20,7 @@ HIGHLIGHT_COLOR="\Z2"
 WARNING_COLOR="\Z3"
 
 # 捕获中断信号
-trap 'exit_gpm; echo "安装被中断"; exit 1' SIGINT SIGTERM
+trap 'cleanup_frzr_mounts; exit_gpm; echo "安装被中断"; exit 1' SIGINT SIGTERM
 
 clean_progress() {
   local scale=$1
@@ -229,10 +229,12 @@ get_disk_human_description() {
 
 cancel_install() {
     if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --yes-label "关机" --no-label "打开命令行" --yesno "安装已取消, 您还需要要做什么?\n您可以在命令行中输入 ~/install.sh 来再次启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+        cleanup_frzr_mounts
         exit_gpm
         poweroff
     fi
 
+    cleanup_frzr_mounts
     exit_gpm
     exit 1
 }
@@ -305,7 +307,106 @@ select_disk() {
     done
 }
 
+# 扫描FRZR_UPDATE文件的函数
+scan_frzr_update_files() {
+    local file_list=()
+    local temp_mount_base="/tmp/frzr_scan"
+    declare -a mounted_by_us=()  # 记录我们挂载的分区，用于后续清理
+    
+    # 显示扫描进度
+    dialog --colors --title "${TITLE_COLOR}扫描本地文件\Zn" --infobox "正在扫描分区中的FRZR更新文件..." $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    local dialog_pid=$!
+    
+    while read -r device_path; do
+        # 跳过特殊设备路径
+        if [[ "$device_path" =~ /dev/(loop|ram|sr) ]]; then
+            continue
+        fi
+        
+        local mount_point=""
+        
+        # 检查设备是否已挂载
+        local existing_mount=$(findmnt -n -o TARGET "$device_path" 2>/dev/null | head -1)
+        
+        if [ -n "$existing_mount" ]; then
+            # 设备已挂载，直接使用
+            mount_point="$existing_mount"
+        else
+            # 设备未挂载，尝试挂载并保持
+            local mount_suffix=$(echo "$device_path" | sed 's|/|_|g' | sed 's|^_dev_||')
+            mount_point="${temp_mount_base}_${mount_suffix}"
+            mkdir -p "$mount_point" 2>/dev/null
+            if mount -o rw "$device_path" "$mount_point" 2>/dev/null; then
+                mounted_by_us+=("$device_path:$mount_point")  # 记录完整设备路径
+            else
+                # 挂载失败，跳过此设备
+                rmdir "$mount_point" 2>/dev/null
+                continue
+            fi
+        fi
 
+        echo ">>>>>>>>>>> device_path: $device_path, mount_point: $mount_point" >&2
+        
+        # 扫描FRZR_UPDATE文件夹
+        if [ -d "$mount_point/FRZR_UPDATE" ]; then
+            while IFS= read -r -d '' file; do
+                local filename=$(basename "$file")
+                if echo "$filename" | grep -qE "^chimeraos-.*\.img(\.tar\.xz|\.xz|\.zst)?$"; then
+                    local filesize=$(du -h "$file" 2>/dev/null | cut -f1)
+                    local device_name=$(basename "$device_path")
+                    local display_name="[$device_name] $filename ($filesize)"
+                    file_list+=("$file")  # 直接存储完整路径
+                    file_list+=("$display_name")
+                fi
+            done < <(find "$mount_point/FRZR_UPDATE" -type f -print0 2>/dev/null)
+        fi
+        
+    done < <(lsblk -ln -o PATH,FSTYPE,TYPE | grep -E "(ntfs|ext4|vfat|exfat|btrfs)" | grep -E "(part|dm|crypt|lvm)" | awk '{print $1}')
+    
+    # 关闭进度提示
+    kill $dialog_pid 2>/dev/null
+    
+    # 处理扫描结果
+    if [ "${#file_list[@]}" -gt 0 ]; then
+        local temp_file=$(mktemp)
+        if dialog --colors --title "${TITLE_COLOR}选择FRZR更新文件\Zn" \
+            --menu "找到以下可用的更新文件:" $MENU_HEIGHT $MENU_WIDTH 10 \
+            "${file_list[@]}" 2> "$temp_file"; then
+            
+            export SELECTED_FRZR_FILE="$(cat "$temp_file")"
+            # 导出清理信息供后续使用
+            export MOUNTED_BY_SCAN="${mounted_by_us[*]}"
+            rm "$temp_file"
+            return 0
+        else
+            # 用户取消，清理我们挂载的分区
+            cleanup_scan_mounts "${mounted_by_us[@]}"
+            rm "$temp_file"
+            return 1
+        fi
+    else
+        # 未找到文件，静默清理并返回失败
+        cleanup_scan_mounts "${mounted_by_us[@]}"
+        return 1
+    fi
+}
+
+# 清理函数
+cleanup_scan_mounts() {
+    local mounts=("$@")
+    for mount_info in "${mounts[@]}"; do
+        local mount_point=$(echo "$mount_info" | cut -d':' -f2)
+        umount "$mount_point" 2>/dev/null
+        rmdir "$mount_point" 2>/dev/null
+    done
+}
+
+# 最终清理函数（安装完成后调用）
+cleanup_frzr_mounts() {
+    if [ -n "$MOUNTED_BY_SCAN" ]; then
+        cleanup_scan_mounts $MOUNTED_BY_SCAN
+    fi
+}
 
 
 if [ $EUID -ne 0 ]; then
@@ -328,7 +429,7 @@ setup_dialog
 dmesg --console-level 1
 
 # start polling for a gamepad
-# poll_gamepad &
+#poll_gamepad &
 
 # try to set correct date & time -- required to be able to connect to github via https if your hardware clock is set too far into the past
 timedatectl set-ntp true
@@ -348,6 +449,7 @@ while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
     $MSGBOX_HEIGHT $MSGBOX_WIDTH
 
   if [ $? -ne 0 ]; then
+    cleanup_frzr_mounts
     exit_gpm
     exit 1
   fi
@@ -396,7 +498,10 @@ if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee /tmp/frzr.log; then
   cancel_install
 fi
 
-if (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
+# 遍历所有支持的分区，检索分区根目录存在FRZR_UPDATE文件夹的，列出文件夹中符合规则的文件，并提供选择
+if scan_frzr_update_files; then
+  export CHOICE="local"
+elif (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
   dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
@@ -543,15 +648,23 @@ view_log_button() {
 }
 
 if [ "${CHOICE}" == "local" ]; then
-  export local_install=true
-  
   # 显示安装中提示
-  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
-  DIALOG_PID=$!
-  
-  # 在前台运行安装并记录日志
-  frzr-deploy 2>&1 | tee /tmp/frzr.log
-  RESULT=$?
+  if [ -n "$SELECTED_FRZR_FILE" ]; then
+    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地文件: $(basename "$SELECTED_FRZR_FILE")\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    DIALOG_PID=$!
+    
+    # 在前台运行安装并记录日志，使用选择的文件
+    frzr-deploy "$SELECTED_FRZR_FILE" 2>&1 | tee /tmp/frzr.log
+    RESULT=$?
+  else
+    export local_install=true
+    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    DIALOG_PID=$!
+    
+    # 在前台运行安装并记录日志
+    frzr-deploy 2>&1 | tee /tmp/frzr.log
+    RESULT=$?
+  fi
   
   # 关闭提示框
   kill $DIALOG_PID 2>/dev/null
@@ -633,7 +746,8 @@ else
   esac
 fi
 
-# 在退出前清理GPM
+# 在退出前清理GPM和FRZR挂载
+cleanup_frzr_mounts
 exit_gpm
 
 exit ${RESULT}
