@@ -15,6 +15,7 @@ dialog
 diffutils
 dosfstools
 efibootmgr
+expect
 fpaste
 frzr
 gpm

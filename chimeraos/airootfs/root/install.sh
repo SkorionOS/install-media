@@ -243,10 +243,15 @@ get_disk_human_description() {
 }
 
 cancel_install() {
+    fpaste_url=$(fpaste /tmp/frzr.log 2>/dev/null)
+    if [ -n "${fpaste_url}" ]; then
+        fpaste_msg="\n/tmp/frzr.log 日志已上传至 ${fpaste_url}"
+    fi
+
     dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
         --yes-label "关机" --no-label "打开命令行" \
         --extra-button --extra-label "重新安装" \
-        --yesno "安装已取消, 您还需要要做什么?" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+        --yesno "安装已取消, 您还需要要做什么?${fpaste_msg}" $MSGBOX_HEIGHT $MSGBOX_WIDTH
     
     local ret=$?
     case $ret in
@@ -535,7 +540,7 @@ confirm_installation
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee /tmp/frzr.log; then
-  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n输入 ~/install.sh 可以重新开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n请检查 /tmp/frzr.log 文件以获取更多信息" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
 
