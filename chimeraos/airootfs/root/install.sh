@@ -3,6 +3,13 @@
 
 set -o pipefail
 
+LOG_FILE="${LOG_FILE:-/tmp/frzr.log}"
+
+if [ -z "$SCRIPT_LOGGED" ]; then
+    export SCRIPT_LOGGED=1
+    exec script -f "$LOG_FILE" -c "$0 $*"
+fi
+
 # 对话框类型分组尺寸
 MENU_WIDTH=75
 MENU_HEIGHT=25
@@ -19,8 +26,15 @@ TEXT_COLOR="\Z0"
 HIGHLIGHT_COLOR="\Z2"
 WARNING_COLOR="\Z3"
 
-# 捕获中断信号
-trap 'cleanup_frzr_mounts; exit_gpm; echo "安装被中断"; exit 1' SIGINT SIGTERM
+echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S)-----------"
+
+# 清理日志中的ANSI转义码
+cleanup_log() {
+    if [ -f "$LOG_FILE" ]; then
+        perl -pi -e 's/\x1b.*?[a-zA-Z]//g; s/\[[0-9;]*[HKJm]//g; s/\[[?!][0-9;]*[hlH]//g; s/\([0-9AB]//g; s/\[[\d;]*[XG]//g' "$LOG_FILE"
+        sed -i '/^Script started on.*\[COMMAND=/d' "$LOG_FILE"
+    fi
+}
 
 clean_progress() {
   local scale=$1
@@ -138,7 +152,7 @@ handle_error() {
   dialog --colors --title "${TITLE_COLOR}错误\Zn" --msgbox "${WARNING_COLOR}$error_msg\Zn\n错误代码: $error_code" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   
   # 记录错误到日志
-  echo "[ERROR] $error_msg (code: $error_code)" >> /tmp/install_error.log
+  echo "[ERROR] $error_msg (code: $error_code)" >> $LOG_FILE
 }
 
 enable_all_gamepads() {
@@ -243,9 +257,10 @@ get_disk_human_description() {
 }
 
 cancel_install() {
-    fpaste_url=$(fpaste /tmp/frzr.log 2>/dev/null)
+    cleanup_log
+    fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
     if [ -n "${fpaste_url}" ]; then
-        fpaste_msg="\n/tmp/frzr.log 日志已上传至 ${fpaste_url}"
+        fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
     fi
 
     dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
@@ -256,23 +271,17 @@ cancel_install() {
     local ret=$?
     case $ret in
         0)  # Yes - 关机
-            cleanup_frzr_mounts
-            exit_gpm
+            cleanup_all 0
             poweroff
             ;;
         1)  # No - 打开命令行
-            cleanup_frzr_mounts
-            exit_gpm
             exit 1
             ;;
         3)  # Extra - 重新安装
-            cleanup_frzr_mounts
-            exit_gpm
+            cleanup_all 0
             exec ~/install.sh
             ;;
         *)  # ESC或其他
-            cleanup_frzr_mounts
-            exit_gpm
             exit 1
             ;;
     esac
@@ -456,6 +465,22 @@ cleanup_frzr_mounts() {
     fi
 }
 
+# 统一的清理函数
+cleanup_all() {
+    local interrupted=$1
+    cleanup_log
+    cleanup_frzr_mounts
+    exit_gpm
+    if [ "$interrupted" = "1" ]; then
+        echo "安装被中断"
+        exit 1
+    fi
+}
+
+# 设置trap
+trap 'cleanup_all 1' SIGINT SIGTERM
+trap 'cleanup_all 0' EXIT
+
 
 if [ $EUID -ne 0 ]; then
   echo "$(basename $0) must be run as root"
@@ -497,8 +522,6 @@ while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
     $MSGBOX_HEIGHT $MSGBOX_WIDTH
 
   if [ $? -ne 0 ]; then
-    cleanup_frzr_mounts
-    exit_gpm
     exit 1
   fi
 
@@ -539,8 +562,8 @@ confirm_installation() {
 confirm_installation
 
 # perform bootstrap of disk
-if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee /tmp/frzr.log; then
-  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n请检查 /tmp/frzr.log 文件以获取更多信息" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee -a $LOG_FILE; then
+  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n请检查 $LOG_FILE 文件以获取更多信息" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
 
@@ -704,8 +727,8 @@ export NOT_UMOUNT=true
 
 # 创建日志查看按钮
 view_log_button() {
-  if [ -f "/tmp/frzr.log" ]; then
-    dialog --colors --title "${TITLE_COLOR}安装日志\Zn" --textbox "/tmp/frzr.log" $MENU_HEIGHT $MENU_WIDTH
+  if [ -f "$LOG_FILE" ]; then
+    dialog --colors --title "${TITLE_COLOR}安装日志\Zn" --textbox "$LOG_FILE" $MENU_HEIGHT $MENU_WIDTH
   else
     dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "找不到日志文件" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   fi
@@ -714,19 +737,19 @@ view_log_button() {
 if [ "${CHOICE}" == "local" ]; then
   # 显示安装中提示
   if [ -n "$SELECTED_FRZR_FILE" ]; then
-    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地文件: $(basename "$SELECTED_FRZR_FILE")\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地文件: $(basename "$SELECTED_FRZR_FILE")\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 $LOG_FILE" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
     DIALOG_PID=$!
     
     # 在前台运行安装并记录日志，使用选择的文件
-    frzr-deploy "$SELECTED_FRZR_FILE" 2>&1 | tee /tmp/frzr.log
+    frzr-deploy "$SELECTED_FRZR_FILE" 2>&1 | tee -a $LOG_FILE
     RESULT=$?
   else
     export local_install=true
-    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在安装本地版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 $LOG_FILE" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
     DIALOG_PID=$!
     
     # 在前台运行安装并记录日志
-    frzr-deploy 2>&1 | tee /tmp/frzr.log
+    frzr-deploy 2>&1 | tee -a $LOG_FILE
     RESULT=$?
   fi
   
@@ -734,11 +757,11 @@ if [ "${CHOICE}" == "local" ]; then
   kill $DIALOG_PID 2>/dev/null
 else
   # 显示安装中提示
-  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在使用在线方式下载安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 /tmp/frzr.log" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+  dialog --colors --title "${TITLE_COLOR}安装进行中\Zn" --infobox "正在使用在线方式下载安装 ${TARGET} 版本...\n\n这可能需要几分钟时间，请耐心等待...\n\n安装日志将保存在 $LOG_FILE" $MSGBOX_HEIGHT $MSGBOX_WIDTH &
   DIALOG_PID=$!
   
   # 在前台运行安装并记录日志
-  frzr-deploy "3003n/chimeraos:${TARGET}" | tee /tmp/frzr.log
+  frzr-deploy "3003n/chimeraos:${TARGET}" | tee -a $LOG_FILE
   RESULT=$?
   
   # 关闭提示框
@@ -761,25 +784,26 @@ if [ "${RESULT}" == "0" ]; then
 elif [ "${RESULT}" == "29" ]; then
   MSG="遇到 GitHub API 速率限制错误, 请稍后重试安装"
 else
-  fpaste_url=$(fpaste /tmp/frzr.log 2>/dev/null)
+  cleanup_log
+  fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
   if [ -n "${fpaste_url}" ]; then
     fpaste_msg="日志已上传至 ${fpaste_url}"
   fi
-  MSG="安装失败. 请检查 /tmp/frzr.log 文件以获取更多信息. ${fpaste_msg}"
+  MSG="安装失败. 请检查 $LOG_FILE 文件以获取更多信息. ${fpaste_msg}"
 fi
 
 echo -e "${MSG} RESULT:${RESULT}\n\n"
 
 if [ "$SHOW_UI" == "1" ]; then
   if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yes-button "重启" --no-button "取消" --help-button --help-label "查看日志" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
-    # 在退出前清理GPM
-    exit_gpm
+    # 在重启前清理
+    cleanup_all 0
     reboot
   elif [ $? -eq 2 ]; then
     view_log_button
     # 再次询问是否重启
     if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --defaultno --yes-button "重启" --no-button "取消" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
-      exit_gpm
+      cleanup_all 0
       reboot
     fi
   fi
@@ -790,18 +814,17 @@ else
   echo
   case $input in
   [yY])
-    # 在退出前清理GPM
-    exit_gpm
+    # 在重启前清理
+    cleanup_all 0
     reboot
     ;;
   [nN])
-    # 在退出前清理GPM
-    exit_gpm
+    # EXIT trap 会自动处理清理
     exit 1
     ;;
   [rR])
-    # 在退出前清理GPM
-    exit_gpm
+    # 在重新安装前清理
+    cleanup_all 0
     ~/install.sh
     ;;
   *)
@@ -810,8 +833,5 @@ else
   esac
 fi
 
-# 在退出前清理GPM和FRZR挂载
-cleanup_frzr_mounts
-exit_gpm
-
+# cleanup_all 将通过 EXIT trap 自动调用
 exit ${RESULT}
