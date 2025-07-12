@@ -9,6 +9,8 @@ ZSH_THEME="ys"
 
 plugins=(git sudo z fast-syntax-highlighting)
 
+alias vi="vim"
+
 source $ZSH/oh-my-zsh.sh
 
 ./install.sh

@@ -31,8 +31,11 @@ echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S)-----------"
 # 清理日志中的ANSI转义码
 cleanup_log() {
     if [ -f "$LOG_FILE" ]; then
-        perl -pi -e 's/\x1b.*?[a-zA-Z]//g; s/\[[0-9;]*[HKJm]//g; s/\[[?!][0-9;]*[hlH]//g; s/\([0-9AB]//g; s/\[[\d;]*[XG]//g' "$LOG_FILE"
+        # 只匹配真正的ANSI转义序列（必须以ESC[开头）
+        perl -pi -e 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[?!][0-9;]*[hlH]//g; s/\x1b\([0-9AB]//g; s/\x1b\[[\d;]*[XG]//g' "$LOG_FILE"
         sed -i '/^Script started on.*\[COMMAND=/d' "$LOG_FILE"
+        # 删除空行
+        sed -i '/^$/d' "$LOG_FILE"
     fi
 }
 
@@ -395,13 +398,15 @@ scan_frzr_update_files() {
             fi
         fi
 
-        echo ">>>>>>>>>>> device_path: $device_path, mount_point: $mount_point" >&2
+        echo "device_path: $device_path, mount_point: $mount_point" >&2
         
         # 扫描FRZR_UPDATE文件夹
         if [ -d "$mount_point/FRZR_UPDATE" ]; then
+            echo "find $mount_point/FRZR_UPDATE" >&2
             while IFS= read -r -d '' file; do
                 local filename=$(basename "$file")
                 if echo "$filename" | grep -qE "^chimeraos-.*\.img(\.tar\.xz|\.xz|\.zst)?$"; then
+                    echo "find $file" >&2
                     local filesize=$(du -h "$file" 2>/dev/null | cut -f1)
                     local device_name=$(basename "$device_path")
                     local display_name="[$device_name] $filename ($filesize)"
@@ -415,6 +420,8 @@ scan_frzr_update_files() {
                     ((file_index++))
                 fi
             done < <(find "$mount_point/FRZR_UPDATE" -type f -print0 2>/dev/null)
+        else
+            echo "not find $mount_point/FRZR_UPDATE" >&2
         fi
         
     done < <(lsblk -ln -o PATH,FSTYPE,TYPE | grep -E "(ntfs|ext4|vfat|exfat|btrfs)" | grep -E "(part|dm|crypt|lvm)" | awk '{print $1}')
