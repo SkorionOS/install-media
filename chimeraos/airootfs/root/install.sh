@@ -290,6 +290,38 @@ cancel_install() {
     esac
 }
 
+finish_install() {
+    local msg="$1"
+    cleanup_log
+    fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
+    if [ -n "${fpaste_url}" ]; then
+        fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
+    fi
+
+    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
+        --yes-label "重启" --no-label "打开命令行" \
+        --extra-button --extra-label "重新安装" \
+        --yesno "安装结束${msg}, 您还需要要做什么?${fpaste_msg}" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+    
+    local ret=$?
+    case $ret in
+        0)  # Yes - 重启
+            cleanup_all 0
+            reboot
+            ;;
+        1)  # No - 打开命令行
+            exit 1
+            ;;
+        3)  # Extra - 重新安装
+            cleanup_all 0
+            exec ~/install.sh
+            ;;
+        *)  # ESC或其他
+            exit 1
+            ;;
+    esac
+}
+
 select_disk() {
     while true
     do
@@ -799,29 +831,30 @@ if [ "${RESULT}" == "0" ]; then
 elif [ "${RESULT}" == "29" ]; then
   MSG="遇到 GitHub API 速率限制错误, 请稍后重试安装"
 else
-  cleanup_log
-  fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
-  if [ -n "${fpaste_url}" ]; then
-    fpaste_msg="日志已上传至 ${fpaste_url}"
-  fi
+  # cleanup_log
+  # fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
+  # if [ -n "${fpaste_url}" ]; then
+  #   fpaste_msg="日志已上传至 ${fpaste_url}"
+  # fi
   MSG="安装失败. 请检查 $LOG_FILE 文件以获取更多信息. ${fpaste_msg}"
 fi
 
 echo -e "${MSG} RESULT:${RESULT}\n\n"
 
 if [ "$SHOW_UI" == "1" ]; then
-  if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yes-button "重启" --no-button "取消" --help-button --help-label "查看日志" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
-    # 在重启前清理
-    cleanup_all 0
-    reboot
-  elif [ $? -eq 2 ]; then
-    view_log_button
-    # 再次询问是否重启
-    if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --defaultno --yes-button "重启" --no-button "取消" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
-      cleanup_all 0
-      reboot
-    fi
-  fi
+  # if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --yes-button "重启" --no-button "取消" --help-button --help-label "查看日志" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+  #   # 在重启前清理
+  #   cleanup_all 0
+  #   reboot
+  # elif [ $? -eq 2 ]; then
+  #   view_log_button
+  #   # 再次询问是否重启
+  #   if (dialog --colors --title "${TITLE_COLOR}安装完成\Zn" --defaultno --yes-button "重启" --no-button "取消" --yesno "${MSG} RESULT:${RESULT}\n\n立即重启?" $MSGBOX_HEIGHT $MSGBOX_WIDTH); then
+  #     cleanup_all 0
+  #     reboot
+  #   fi
+  # fi
+  finish_install ", RESULT:${RESULT}, ${MSG}"
 else
   # 命令行显示错误信息，提示用户查看日志。检测用户输入，y重启，n退出，r执行 ~/install.sh 重新安装
   echo -e "${MSG} RESULT:${RESULT}\n\n立即重启? (y/n/r)"
