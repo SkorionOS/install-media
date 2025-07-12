@@ -597,6 +597,14 @@ if [ -z "$SELECTED_FRZR_FILE" ] && (ls -1 /dev/disk/by-label | grep -q FRZR_UPDA
   fi
 fi
 
+if [[ -z "$SELECTED_FRZR_FILE" && -z "$CHOICE" ]]; then
+  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --yes-button "退出安装" --no-button "在线安装" --yesno "未找到任何本地安装文件，是否继续使用在线安装方式?" $MSGBOX_HEIGHT $MENU_WIDTH); then
+    CHOICE="online"
+  else
+    cancel_install
+  fi
+fi
+
 #### Post install steps for system configuration
 # Copy over all network configuration from the live session to the system
 SYS_CONN_DIR="/etc/NetworkManager/system-connections"
