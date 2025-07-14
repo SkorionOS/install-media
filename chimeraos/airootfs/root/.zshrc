@@ -13,4 +13,4 @@ alias vi="vim"
 
 source $ZSH/oh-my-zsh.sh
 
-./install.sh
+./install-init.sh

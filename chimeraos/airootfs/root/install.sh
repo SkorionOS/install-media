@@ -1,30 +1,21 @@
 #!/bin/bash
-# shellcheck disable=SC2034,SC2086,SC2155
+# Version: 1.0.0
+# shellcheck disable=SC2034,SC2086,SC2155,SC1091
 
 set -o pipefail
 
+source $HOME/.dialog
+
+source $HOME/.install
+
 LOG_FILE="${LOG_FILE:-/tmp/frzr.log}"
+
+echo "" > $LOG_FILE
 
 if [ -z "$SCRIPT_LOGGED" ]; then
     export SCRIPT_LOGGED=1
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
-
-# 对话框类型分组尺寸
-MENU_WIDTH=75
-MENU_HEIGHT=25
-
-MSGBOX_WIDTH=60
-MSGBOX_HEIGHT=10
-
-GAUGE_WIDTH=70
-GAUGE_HEIGHT=8
-
-# 统一颜色样式
-TITLE_COLOR="\Z1"
-TEXT_COLOR="\Z0"
-HIGHLIGHT_COLOR="\Z2"
-WARNING_COLOR="\Z3"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S)-----------"
 
@@ -36,6 +27,8 @@ cleanup_log() {
         sed -i '/^Script started on.*\[COMMAND=/d' "$LOG_FILE"
         # 删除空行
         sed -i '/^$/d' "$LOG_FILE"
+        # 超过20个空字符的，替换为20个空格
+        sed -i 's/[[:space:]]\{21,\}/                    /g' "$LOG_FILE"
     fi
 }
 
@@ -71,45 +64,7 @@ exit_gpm() {
   fi
 }
 
-# 设置dialog样式
-setup_dialog() {
-  # 创建临时配置文件
-  export DIALOGRC="/tmp/dialogrc"
-  cat > $DIALOGRC << EOF
-# Dialog appearance
-use_colors = ON
-use_shadow = ON
-screen_color = (CYAN,BLUE,ON)
-shadow_color = (BLACK,BLACK,ON)
-dialog_color = (BLACK,WHITE,OFF)
-title_color = (BLUE,WHITE,ON)
-border_color = (WHITE,WHITE,ON)
-button_active_color = (WHITE,BLUE,ON)
-button_inactive_color = (BLACK,WHITE,OFF)
-button_key_active_color = (WHITE,BLUE,ON)
-button_key_inactive_color = (RED,WHITE,OFF)
-button_label_active_color = (WHITE,BLUE,ON)
-button_label_inactive_color = (BLACK,WHITE,ON)
-inputbox_color = (BLACK,WHITE,OFF)
-inputbox_border_color = (BLACK,WHITE,OFF)
-searchbox_color = (BLACK,WHITE,OFF)
-searchbox_title_color = (BLUE,WHITE,ON)
-searchbox_border_color = (WHITE,WHITE,ON)
-position_indicator_color = (BLUE,WHITE,ON)
-menubox_color = (BLACK,WHITE,OFF)
-menubox_border_color = (WHITE,WHITE,ON)
-item_color = (BLACK,WHITE,OFF)
-item_selected_color = (WHITE,BLUE,ON)
-tag_color = (BLUE,WHITE,ON)
-tag_selected_color = (YELLOW,BLUE,ON)
-tag_key_color = (RED,WHITE,OFF)
-tag_key_selected_color = (RED,BLUE,ON)
-check_color = (BLACK,WHITE,OFF)
-check_selected_color = (WHITE,BLUE,ON)
-uarrow_color = (GREEN,WHITE,ON)
-darrow_color = (GREEN,WHITE,ON)
-EOF
-}
+source $HOME/.dialog
 
 # 显示帮助信息
 show_help_old() {
@@ -579,19 +534,7 @@ echo "Starting installer..."
 # sleep 2
 
 # TARGET="stable"
-while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
-  dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
-    --yes-button "网络配置" \
-    --no-button "退出安装" \
-    --yesno "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <退出> 以退出工具并继续安装。" \
-    $MSGBOX_HEIGHT $MSGBOX_WIDTH
-
-  if [ $? -ne 0 ]; then
-    exit 1
-  fi
-
-  nmtui-connect
-done
+check_internet_connection
 #######################################
 
 MOUNT_PATH=/tmp/frzr_root

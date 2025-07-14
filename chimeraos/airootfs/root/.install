@@ -1,0 +1,18 @@
+#!/bin/bash
+# shellcheck disable=SC2034,SC2086,SC2155,SC1091
+
+function check_internet_connection() {
+  while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
+    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
+      --yes-button "网络配置" \
+      --no-button "退出安装" \
+      --yesno "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <退出> 以退出工具并继续。" \
+      $MSGBOX_HEIGHT $MSGBOX_WIDTH
+
+    if [ $? -ne 0 ]; then
+      exit 1
+    fi
+
+    nmtui-connect
+  done
+}
