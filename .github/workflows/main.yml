@@ -23,7 +23,7 @@ jobs:
           # URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.5-x86_64.pkg.tar.zst"
           # mkdir -p chimeraos/airootfs/root/packages
           # curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
-          TAG="1751405894"
+          TAG="1751405894.1"
           URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
           mkdir -p chimeraos/airootfs/root/packages
           curl -L -o chimeraos/airootfs/root/packages/bootstraplinux_ubuntu12_32.tar.xz $URL
