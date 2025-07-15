@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.1
+# Version: 1.0.2
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091
 
 set -o pipefail
@@ -216,7 +216,7 @@ get_disk_human_description() {
 
 cancel_install() {
     cleanup_log
-    fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
+    fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
     if [ -n "${fpaste_url}" ]; then
         fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
     fi
@@ -248,7 +248,7 @@ cancel_install() {
 finish_install() {
     local msg="$1"
     cleanup_log
-    fpaste_url=$(fpaste $LOG_FILE 2>/dev/null)
+    fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
     if [ -n "${fpaste_url}" ]; then
         fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
     fi
