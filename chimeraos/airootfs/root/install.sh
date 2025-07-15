@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.0
+# Version: 1.0.1
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091
 
 set -o pipefail
@@ -617,23 +617,52 @@ if [ -d ${SYS_CONN_DIR} ] && [ -n "$(ls -A ${SYS_CONN_DIR})" ]; then
 fi
 
 # Grab the steam bootstrap for first boot
+function grab_steam_bootstrap() {
+  echo "grab_steam_bootstrap"
 
-# URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.79-1.1-x86_64.pkg.tar.zst"
-# TMP_PKG="/tmp/package.pkg.tar.zst"
-STM_PKG="/root/packages/steam-jupiter-stable.pkg.tar.zst"
-TMP_FILE="/tmp/bootstraplinux_ubuntu12_32.tar.xz"
-DESTINATION="/tmp/frzr_root/etc/first-boot/"
-if [[ ! -d "$DESTINATION" ]]; then
-  mkdir -p /tmp/frzr_root/etc/first-boot
-fi
+  local STEAM_BOOTSTRAP_CONFIG="${MOUNT_PATH}/home/gamer/.config/gamescope/bootstrap.cfg"
 
-# curl --http1.1 -# -L -o "${TMP_PKG}" -C - "${URL}" 2>&1 |
-#   stdbuf -oL tr '\r' '\n' | grep --line-buffered -oP '[0-9]*+(?=.[0-9])' | clean_progress 100 |
-#   dialog --gauge "正在下载 Steam ..." 10 50 0
+  local STM_PKG="/root/packages/steam-jupiter-stable.pkg.tar.zst"
 
-tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" || handle_error "解压 Steam 引导失败" $?
-mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" $?
-# rm "$TMP_PKG"
+  local TMP_FILE="/tmp/bootstraplinux_ubuntu12_32.tar.xz"
+  local DESTINATION="/tmp/frzr_root/etc/first-boot/"
+  if [[ ! -d "$DESTINATION" ]]; then
+    mkdir -p "$DESTINATION"
+  fi
+
+  if [ -n "$SELECTED_FRZR_FILE" ]; then
+    local dir_name=$(dirname "$SELECTED_FRZR_FILE")
+    if [ -f "$dir_name/bootstraplinux_ubuntu12_32.tar.xz" ]; then
+      echo "find $dir_name/bootstraplinux_ubuntu12_32.tar.xz"
+      TMP_FILE="$dir_name/bootstraplinux_ubuntu12_32.tar.xz"
+      cp "$TMP_FILE" "$DESTINATION"
+      echo "copy $TMP_FILE to $DESTINATION success"
+      if [ -f "$STEAM_BOOTSTRAP_CONFIG" ]; then
+        rm -f "$STEAM_BOOTSTRAP_CONFIG"
+      fi
+      return 0
+    fi
+  fi
+
+  local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.5-x86_64.pkg.tar.zst"
+  local STEAM_TMP_PKG="/tmp/package.pkg.tar.zst"
+
+  if [ ! -f "$STEAM_TMP_PKG" ]; then
+    curl --http1.1 -# -L -o "${STEAM_TMP_PKG}" -C - "${STEAM_URL}" 2>&1 |
+      stdbuf -oL tr '\r' '\n' | grep --line-buffered -oP '[0-9]*+(?=.[0-9])' | clean_progress 100 |
+      dialog --gauge "正在下载 Steam ..." 10 50 0 || handle_error "下载 Steam 失败" $?
+    mv "$STEAM_TMP_PKG" "$STM_PKG"
+  fi
+
+  tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" || handle_error "解压 Steam 引导失败" $?
+  mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" $?
+  
+  if [ -f "$STEAM_TMP_PKG" ]; then
+    rm "$STEAM_TMP_PKG"
+  fi
+}
+
+grab_steam_bootstrap
 
 if [ "${CHOICE}" != "local" ]; then
   TEMP_FILE=$(mktemp)
