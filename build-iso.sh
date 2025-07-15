@@ -26,6 +26,7 @@ AUR_PACKAGES="\
     fpaste \
     frzr-sk \
     inputplumber-bin \
+    pikaur \
     rtl88x2bu-dkms-git \
     rtw89-dkms-git \
     r8152-dkms \

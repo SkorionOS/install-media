@@ -35,6 +35,7 @@ ntfs-3g
 coreutils
 openssh
 parted
+pikaur
 syslinux
 usbutils
 vim
