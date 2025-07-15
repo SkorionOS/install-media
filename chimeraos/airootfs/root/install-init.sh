@@ -86,6 +86,8 @@ function version_greater() {
     [ "$(printf '%s\n' "$ver1" "$ver2" | sort -V | tail -1)" = "$ver1" ] && [ "$ver1" != "$ver2" ]
 }
 
+poll_gamepad &
+
 check_internet_connection
 
 check_and_update_install_script

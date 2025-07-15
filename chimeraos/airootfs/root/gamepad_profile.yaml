@@ -78,3 +78,21 @@ mapping:
         button: South
     target_events:
       - keyboard: KeyEnter
+  - name: B Button
+    source_event:
+      gamepad:
+        button: East
+    target_events:
+      - keyboard: KeyEsc
+  - name: X Button
+    source_event:
+      gamepad:
+        button: West
+    target_events:
+      - keyboard: KeyBackspace
+  - name: Y Button
+    source_event:
+      gamepad:
+        button: North
+    target_events:
+      - keyboard: KeySpace
