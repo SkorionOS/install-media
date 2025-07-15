@@ -624,6 +624,8 @@ function grab_steam_bootstrap() {
 
   local STM_PKG="/root/packages/steam-jupiter-stable.pkg.tar.zst"
 
+  local BOOTSTRAP_PKG="/root/packages/bootstraplinux_ubuntu12_32.tar.xz"
+
   local TMP_FILE="/tmp/bootstraplinux_ubuntu12_32.tar.xz"
   local DESTINATION="/tmp/frzr_root/etc/first-boot/"
   if [[ ! -d "$DESTINATION" ]]; then
@@ -642,6 +644,12 @@ function grab_steam_bootstrap() {
       fi
       return 0
     fi
+  fi
+
+  if [ -f "$BOOTSTRAP_PKG" ]; then
+    cp "$BOOTSTRAP_PKG" "$DESTINATION"
+    echo "copy $BOOTSTRAP_PKG to $DESTINATION success"
+    return 0
   fi
 
   local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.5-x86_64.pkg.tar.zst"
