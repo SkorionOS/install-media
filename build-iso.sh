@@ -78,9 +78,16 @@ ISO_FILE_NAME=$(basename "${ISO_FILE_PATH}")
 VERSION=$(echo "${ISO_FILE_NAME}" | cut -c14-23 | sed 's/\./-/g')
 ID=$(git rev-parse --short HEAD)
 
+# Generate checksum file with appropriate name based on variant
+SHA256_FILE_NAME="sha256sum"
+if [ "${VARIANT_SUFFIX}" = "-lite" ]; then
+	SHA256_FILE_NAME="sha256sum-lite"
+fi
+SHA256_FILE_NAME="${SHA256_FILE_NAME}.txt"
+
 pushd ${output_dir}
-sha256sum ${ISO_FILE_NAME} > sha256sum.txt
-cat sha256sum.txt
+sha256sum ${ISO_FILE_NAME} > ${SHA256_FILE_NAME}
+cat ${SHA256_FILE_NAME}
 popd
 
 if [ -f "${GITHUB_OUTPUT}" ]; then

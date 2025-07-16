@@ -43,16 +43,13 @@ jobs:
         env:
           VARIANT_SUFFIX: ${{ matrix.iso_suffix }}
         run: ./build-iso-docker.sh
-      - name: Rename checksum file
-        run: |
-          mv output/sha256sum.txt output/${{ matrix.sha256_name }}
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: iso-${{ matrix.variant }}
           path: |
             output/*.iso
-            output/${{ matrix.sha256_name }}
+            output/sha256sum*.txt
 
   release:
     name: Create release
