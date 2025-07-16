@@ -134,9 +134,7 @@ main() {
     log "最终安装的包总数: $total_packages"
 }
 
-# 只在构建环境中运行（检查特定标记）
-if [[ -f "/.buildenv" ]] || [[ "$1" == "--force" ]]; then
-    main
-else
-    log "非构建环境，跳过包清理"
-fi 
+# 更简单可靠的方法：既然这个脚本是通过pacman hook调用的，
+# 而pacman hook只在ISO构建过程中执行，那就直接运行
+log "通过pacman hook调用，执行包清理"
+main 
