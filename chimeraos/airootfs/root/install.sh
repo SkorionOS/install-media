@@ -1,6 +1,6 @@
 #!/bin/bash
-# Version: 1.0.2
-# shellcheck disable=SC2034,SC2086,SC2155,SC1091
+# Version: 1.0.3
+# shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016
 
 set -o pipefail
 
@@ -111,6 +111,7 @@ handle_error() {
   
   # 记录错误到日志
   echo "[ERROR] $error_msg (code: $error_code)" >> $LOG_FILE
+  cancel_install
 }
 
 enable_all_gamepads() {
@@ -214,17 +215,69 @@ get_disk_human_description() {
         echo "[${transport}] ${vendor} ${model:=Unknown model} ($size)" | xargs echo -n
 }
 
+# 通用的异步上传dialog函数
+show_upload_dialog() {
+    local title="$1"
+    local base_message="$2"
+    local yes_label="$3"
+    local no_label="$4"
+    local extra_label="$5"
+    
+    # 后台上传
+    {
+        fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
+        if [ -n "${fpaste_url}" ]; then
+            echo "$fpaste_url" > /tmp/upload_result
+        fi
+        echo "done" > /tmp/upload_status
+        
+        if [ -n "$DIALOG_PID" ]; then
+            kill $DIALOG_PID 2>/dev/null
+        fi
+    } &
+
+    # 显示初始dialog
+    dialog --colors --title "$title" \
+        --yes-label "$yes_label" --no-label "$no_label" \
+        --extra-button --extra-label "$extra_label" \
+        --yesno "${base_message}\n\n日志上传中..." \
+        $MSGBOX_HEIGHT $MSGBOX_WIDTH &
+    DIALOG_PID=$!
+    
+    wait $DIALOG_PID
+    local ret=$?
+    
+    # 如果被后台进程关闭，显示最终结果
+    if [ $ret -eq 143 ] && [ -f /tmp/upload_status ]; then
+        if [ -f /tmp/upload_result ]; then
+            fpaste_msg="\n\n$LOG_FILE 日志已上传至 $(cat /tmp/upload_result)"
+        else
+            fpaste_msg="\n\n日志上传失败"
+        fi
+        
+        dialog --colors --title "$title" \
+            --yes-label "$yes_label" --no-label "$no_label" \
+            --extra-button --extra-label "$extra_label" \
+            --yesno "${base_message}${fpaste_msg}" \
+            $MSGBOX_HEIGHT $MSGBOX_WIDTH
+        ret=$?
+    fi
+    
+    # 清理临时文件
+    rm -f /tmp/upload_result /tmp/upload_status
+    
+    return $ret
+}
+
 cancel_install() {
     cleanup_log
-    fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
-    if [ -n "${fpaste_url}" ]; then
-        fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
-    fi
-
-    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
-        --yes-label "关机" --no-label "打开命令行" \
-        --extra-button --extra-label "重新安装" \
-        --yesno "安装已取消, 您还需要要做什么?${fpaste_msg}" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+    
+    show_upload_dialog \
+        "${TITLE_COLOR}$OS_NAME 安装\Zn" \
+        "安装已取消, 您还需要要做什么?" \
+        "关机" \
+        "打开命令行" \
+        "重新安装"
     
     local ret=$?
     case $ret in
@@ -248,17 +301,15 @@ cancel_install() {
 finish_install() {
     local msg="$1"
     cleanup_log
-    fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
-    if [ -n "${fpaste_url}" ]; then
-        fpaste_msg="\n$LOG_FILE 日志已上传至 ${fpaste_url}"
-    fi
 
     if [ "$SHOW_UI" == "1" ]; then
-      dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
-        --yes-label "重启" --no-label "打开命令行" \
-        --extra-button --extra-label "重新安装" \
-        --yesno "安装结束${msg}, 您还需要要做什么?${fpaste_msg}" $MSGBOX_HEIGHT $MSGBOX_WIDTH
-    
+      show_upload_dialog \
+          "${TITLE_COLOR}$OS_NAME 安装\Zn" \
+          "安装结束${msg}, 您还需要要做什么?" \
+          "重启" \
+          "打开命令行" \
+          "重新安装"
+      
       local ret=$?
       case $ret in
         0)  # Yes - 重启
@@ -277,8 +328,17 @@ finish_install() {
             ;;
       esac
     else
+      # 命令行模式：简单的带超时上传
+      echo -e "安装结束${msg}\n正在上传日志..."
+      if timeout 5 bash -c 'fpaste_url=$(cat '$LOG_FILE' | fpaste 2>/dev/null); echo $fpaste_url' > /tmp/upload_result 2>/dev/null; then
+          fpaste_msg="\n$LOG_FILE 日志已上传至 $(cat /tmp/upload_result)"
+          rm -f /tmp/upload_result
+      else
+          fpaste_msg="\n日志上传超时，可稍后手动上传 $LOG_FILE"
+      fi
+      
       # 命令行显示错误信息，提示用户查看日志。检测用户输入，y重启，n退出，r执行 ~/install.sh 重新安装
-      echo -e "安装结束${msg}\n${fpaste_msg}\n立即重启? (y/n/r)"
+      echo -e "${fpaste_msg}\n立即重启? (y/n/r)"
       read -r -n 1 -s -t 60 -p "立即重启? (y/n/r)" input
       echo
       case $input in
@@ -626,6 +686,8 @@ function grab_steam_bootstrap() {
 
   local BOOTSTRAP_PKG="/root/packages/bootstraplinux_ubuntu12_32.tar.xz"
 
+  mkdir -p /root/packages
+
   local TMP_FILE="/tmp/bootstraplinux_ubuntu12_32.tar.xz"
   local DESTINATION="/tmp/frzr_root/etc/first-boot/"
   if [[ ! -d "$DESTINATION" ]]; then
@@ -655,15 +717,22 @@ function grab_steam_bootstrap() {
   local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.5-x86_64.pkg.tar.zst"
   local STEAM_TMP_PKG="/tmp/package.pkg.tar.zst"
 
-  if [ ! -f "$STEAM_TMP_PKG" ]; then
-    curl --http1.1 -# -L -o "${STEAM_TMP_PKG}" -C - "${STEAM_URL}" 2>&1 |
+  if [ ! -f "$STM_PKG" ]; then
+    if (curl --http1.1 -# -L -o "${STEAM_TMP_PKG}" -C - "${STEAM_URL}" 2>&1 |
       stdbuf -oL tr '\r' '\n' | grep --line-buffered -oP '[0-9]*+(?=.[0-9])' | clean_progress 100 |
-      dialog --gauge "正在下载 Steam ..." 10 50 0 || handle_error "下载 Steam 失败" $?
-    mv "$STEAM_TMP_PKG" "$STM_PKG"
+      dialog --gauge "正在下载 Steam ..." 10 50 0 
+    ); then
+      STM_PKG="$STEAM_TMP_PKG"
+    else
+      handle_error "下载 Steam 失败" $?
+    fi
   fi
 
-  tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" || handle_error "解压 Steam 引导失败" $?
-  mv "$TMP_FILE" "$DESTINATION" || handle_error "移动 Steam 引导文件失败" $?
+  if (tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" 2>&1); then
+    mv -f "$TMP_FILE" "$DESTINATION"
+  else
+    handle_error "解压 Steam 引导失败" $?
+  fi
   
   if [ -f "$STEAM_TMP_PKG" ]; then
     rm "$STEAM_TMP_PKG"
