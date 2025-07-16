@@ -2,7 +2,7 @@
 # Package cleanup script for ChimeraOS ISO
 # This script removes unnecessary packages to reduce ISO size
 
-set -e
+set -xe
 
 # 日志记录函数
 log() {
@@ -15,8 +15,8 @@ log "开始包清理过程..."
 # 这些是在最终ISO中不需要的包，但可能在构建过程中被作为依赖安装
 PACKAGES_TO_REMOVE=(
     # 开发工具（如果不需要）
-    "gcc"
     "make"
+    "gcc"
     "cmake"
     "autoconf"
     "automake"
@@ -87,7 +87,7 @@ safe_remove_package() {
     # fi
     
     log "尝试卸载包: $pkg"
-    if pacman -Rnsdd --noconfirm "$pkg" 2>/dev/null; then
+    if pacman -Rnsdd --noconfirm "$pkg"; then
         log "成功卸载: $pkg"
     else
         log "卸载失败: $pkg (可能有依赖问题)"
