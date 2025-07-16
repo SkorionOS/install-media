@@ -1,6 +1,6 @@
 #!/bin/bash
-# Version: 1.0.3
-# shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016
+# Version: 1.0.4
+# shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
 
@@ -47,6 +47,8 @@ clean_progress() {
 
 # 启动鼠标支持
 enable_mouse() {
+  # 暂时禁用鼠标支持
+  return 0
   # 检查gpm是否已安装
   if ! command -v gpm &> /dev/null; then
     return
