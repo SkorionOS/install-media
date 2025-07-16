@@ -9,6 +9,7 @@ base
 broadcom-wl-dkms
 btrfs-progs
 cpio
+debugedit
 dhcpcd
 dialog
 diffutils
@@ -34,6 +35,7 @@ coreutils
 openssh
 parted
 pikaur
+sudo
 syslinux
 usbutils
 vim

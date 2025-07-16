@@ -3,9 +3,28 @@
 
 set -e
 
+# 清理函数：删除 build 用户
+cleanup_build_user() {
+    if id build >/dev/null 2>&1; then
+        echo "清理临时 build 用户..."
+        # 终止所有 build 用户的进程
+        pkill -u build 2>/dev/null || true
+        # 删除用户及其家目录
+        userdel -r build 2>/dev/null || true
+    fi
+}
+
+# 设置陷阱，确保脚本退出时清理
+trap cleanup_build_user EXIT
+
 # 为makepkg创建build用户（如果不存在）
 if ! id build >/dev/null 2>&1; then
-    useradd -m build
+    useradd -m -G wheel build
+fi
+
+# 确保 wheel 组有 sudo 权限
+if ! grep -q "^%wheel.*NOPASSWD.*ALL" /etc/sudoers; then
+    echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 fi
 
 if [ -x "$(command -v sk-unlock-pacman)" ]; then
@@ -42,10 +61,23 @@ echo "pkgver: $full_pkgver"
 
 if [ -z "$installed_pkgver" ] || [ "$(vercmp "$full_pkgver" "$installed_pkgver")" -gt 0 ]; then
     echo "安装新版本 $pkgname"
-    runuser -u build -- env PKGDEST="$(pwd)" pikaur --noconfirm --rebuild -P PKGBUILD --overwrite "*"
+    
+    # 验证 build 用户的 sudo 权限
+    if ! runuser -u build -- sudo -n true 2>/dev/null; then
+        echo "警告: build 用户 sudo 权限验证失败，尝试重新配置..."
+        usermod -aG wheel build
+        # 等待一下让系统更新组信息
+        sleep 1
+    fi
+    
+    systemd-run --uid=build --gid=build --setenv=HOME=/home/build \
+        --setenv=PKGDEST="$(pwd)" --setenv=BUILDDIR="$(pwd)" \
+        --working-directory="$(pwd)" --wait --pipe \
+        pikaur --noconfirm --rebuild -P PKGBUILD --overwrite "*"
 else
     echo "已安装最新版本 $pkgname"
     exit 0
 fi
 
 pacman -U --noconfirm *.pkg.tar.zst --overwrite "*" --needed
+
