@@ -88,6 +88,8 @@ function version_greater() {
 
 poll_gamepad &
 
+copy_network_config
+
 check_internet_connection
 
 check_and_update_install_script

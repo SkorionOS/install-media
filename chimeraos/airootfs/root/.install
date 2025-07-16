@@ -17,6 +17,135 @@ function check_internet_connection() {
   done
 }
 
+function reload_network_connections() {
+  echo "正在应用新的网络配置..."
+  
+  if ! command -v nmcli &> /dev/null; then
+    echo "nmcli不可用，使用服务重启方式"
+    systemctl restart NetworkManager 2>/dev/null
+    sleep 3
+    return 0
+  fi
+  
+  # 1. 重新加载配置
+  nmcli connection reload 2>/dev/null
+  
+  # 2. 获取可用的连接
+  local available_connections=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null | grep -v loopback)
+  
+  if [ -n "$available_connections" ]; then
+    echo "找到可用连接，尝试激活..."
+    
+    # 3. 按优先级尝试连接 (wifi > ethernet > 其他)
+    echo "$available_connections" | grep wifi | head -1 | cut -d: -f1 | while read conn; do
+      if [ -n "$conn" ]; then
+        echo "激活WiFi连接: $conn"
+        nmcli connection up "$conn" 2>/dev/null && return 0
+      fi
+    done
+    
+    echo "$available_connections" | grep ethernet | head -1 | cut -d: -f1 | while read conn; do
+      if [ -n "$conn" ]; then
+        echo "激活以太网连接: $conn"
+        nmcli connection up "$conn" 2>/dev/null && return 0
+      fi
+    done
+    
+    # 4. 如果以上都失败，尝试第一个可用连接
+    echo "$available_connections" | head -1 | cut -d: -f1 | while read conn; do
+      if [ -n "$conn" ]; then
+        echo "激活连接: $conn"
+        nmcli connection up "$conn" 2>/dev/null
+      fi
+    done
+  else
+    echo "未找到可用连接配置"
+  fi
+  
+  sleep 2
+  echo "网络配置应用完成"
+}
+
+function copy_network_config() {
+  local frzr_partition=""
+  local mount_point="/tmp/frzr_old_root"
+  local config_copied=false
+  
+  echo "正在查找现有网络配置..."
+  
+  # 查找frzr-root分区
+  frzr_partition=$(blkid -l -t LABEL=frzr_root -o device 2>/dev/null)
+  
+  if [ -z "$frzr_partition" ]; then
+    echo "未找到现有系统分区 (frzr_root)，跳过网络配置复制"
+    return 0
+  fi
+  
+  echo "找到现有系统分区: $frzr_partition"
+  
+  # 检查是否已挂载
+  local existing_mount=$(findmnt -n -o TARGET "$frzr_partition" 2>/dev/null)
+  
+  if [ -n "$existing_mount" ]; then
+    mount_point="$existing_mount"
+    echo "使用已存在的挂载点: $mount_point"
+  else
+    # 创建临时挂载点
+    mkdir -p "$mount_point"
+    if ! mount -o ro "$frzr_partition" "$mount_point" 2>/dev/null; then
+      echo "无法挂载现有系统分区"
+      rmdir "$mount_point" 2>/dev/null
+      return 1
+    fi
+    echo "已挂载现有系统分区到: $mount_point"
+  fi
+  
+  # 复制网络配置
+  local src_dir="$mount_point/etc/NetworkManager/system-connections"
+  local dst_dir="/etc/NetworkManager/system-connections"
+  
+  if [ -d "$src_dir" ]; then
+    local config_count=$(ls -1 "$src_dir" 2>/dev/null | wc -l)
+    if [ "$config_count" -gt 0 ]; then
+      echo "找到 $config_count 个网络配置文件，正在复制..."
+      
+      # 备份现有配置（如果有）
+      if [ -d "$dst_dir" ] && [ -n "$(ls -A "$dst_dir" 2>/dev/null)" ]; then
+        mv "$dst_dir" "${dst_dir}.backup.$(date +%s)" 2>/dev/null
+      fi
+      
+      mkdir -p "$dst_dir"
+      chmod 700 "$dst_dir"
+      
+      if cp "$src_dir"/* "$dst_dir"/ 2>/dev/null; then
+        chmod 600 "$dst_dir"/*
+        echo "成功复制 $config_count 个网络配置文件"
+        config_copied=true
+      else
+        echo "复制网络配置时出错"
+      fi
+    else
+      echo "现有系统中无网络配置文件"
+    fi
+  else
+    echo "现有系统中未找到网络配置目录"
+  fi
+  
+  # 清理：只卸载我们自己挂载的分区
+  if [ -z "$existing_mount" ]; then
+    umount "$mount_point" 2>/dev/null
+    rmdir "$mount_point" 2>/dev/null
+  fi
+  
+  # 如果复制了配置，重新加载网络
+  if [ "$config_copied" = true ]; then
+    echo "正在重新加载网络配置..."
+    reload_network_connections
+  fi
+  
+  return 0
+}
+
 enable_all_gamepads() {
         # by default, only handheld gamepads are enabled, this enables all other supported gamepads
         busctl set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager \
