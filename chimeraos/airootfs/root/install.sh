@@ -223,16 +223,31 @@ show_upload_dialog() {
     local no_label="$4"
     local extra_label="$5"
     
+    # 清理旧的临时文件
+    rm -f /tmp/upload_result /tmp/upload_status /tmp/dialog_pid
+    
     # 后台上传
     {
+        sleep 1  # 确保dialog完全启动
         fpaste_url=$(cat $LOG_FILE | fpaste 2>/dev/null)
         if [ -n "${fpaste_url}" ]; then
             echo "$fpaste_url" > /tmp/upload_result
         fi
         echo "done" > /tmp/upload_status
         
-        if [ -n "$DIALOG_PID" ]; then
-            kill $DIALOG_PID 2>/dev/null
+        # 从文件读取DIALOG_PID
+        if [ -f /tmp/dialog_pid ]; then
+            DIALOG_PID=$(cat /tmp/dialog_pid)
+            # 检查进程是否还在运行
+            if kill -0 $DIALOG_PID 2>/dev/null; then
+                # 尝试优雅关闭
+                kill -TERM $DIALOG_PID 2>/dev/null
+                sleep 0.5
+                # 如果还在运行，强制关闭
+                if kill -0 $DIALOG_PID 2>/dev/null; then
+                    kill -KILL $DIALOG_PID 2>/dev/null
+                fi
+            fi
         fi
     } &
 
@@ -244,11 +259,14 @@ show_upload_dialog() {
         $MSGBOX_HEIGHT $MSGBOX_WIDTH &
     DIALOG_PID=$!
     
+    # 将PID写入文件供后台进程使用
+    echo "$DIALOG_PID" > /tmp/dialog_pid
+    
     wait $DIALOG_PID
     local ret=$?
     
-    # 如果被后台进程关闭，显示最终结果
-    if [ $ret -eq 143 ] && [ -f /tmp/upload_status ]; then
+    # 检查多种可能的退出状态码
+    if ([ $ret -eq 143 ] || [ $ret -eq 137 ] || [ $ret -eq 1 ]) && [ -f /tmp/upload_status ]; then
         if [ -f /tmp/upload_result ]; then
             fpaste_msg="\n\n$LOG_FILE 日志已上传至 $(cat /tmp/upload_result)"
         else
@@ -264,7 +282,7 @@ show_upload_dialog() {
     fi
     
     # 清理临时文件
-    rm -f /tmp/upload_result /tmp/upload_status
+    rm -f /tmp/upload_result /tmp/upload_status /tmp/dialog_pid
     
     return $ret
 }
