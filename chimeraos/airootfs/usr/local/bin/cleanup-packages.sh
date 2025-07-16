@@ -2,7 +2,7 @@
 # Package cleanup script for ChimeraOS ISO
 # This script removes unnecessary packages to reduce ISO size
 
-set -xe
+set -e
 
 # 日志记录函数
 log() {
@@ -80,7 +80,7 @@ safe_remove_package() {
     
     # 检查包是否已安装
     if ! package_installed "$pkg"; then
-        log "包未安装，跳过: $pkg"
+        # log "包未安装，跳过: $pkg"
         return 0
     fi
     
@@ -114,8 +114,8 @@ main() {
         log "发现孤立包: $orphans"
         echo "$orphans" | xargs -r pacman -Rs --noconfirm 2>/dev/null || true
         log "孤立包清理完成"
-    else
-        log "没有发现孤立包"
+    # else
+    #     log "没有发现孤立包"
     fi
     
     log "清理包缓存..."
