@@ -9,6 +9,10 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /tmp/package-cleanup.log
 }
 
+# 删除pacman锁文件以允许在hook中执行pacman操作
+echo "Removing pacman database lock..."
+rm -f /var/lib/pacman/db.lck
+
 log "开始包清理过程..."
 
 # 定义要卸载的包列表
