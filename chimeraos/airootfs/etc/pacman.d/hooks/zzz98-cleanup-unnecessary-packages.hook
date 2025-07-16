@@ -1,0 +1,18 @@
+# remove from airootfs!
+# Cleanup unnecessary packages to reduce ISO size
+# This hook runs after all package operations are complete
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Cleaning up unnecessary packages to reduce ISO size...
+When = PostTransaction
+Depends = pacman
+Depends = sh
+Depends = coreutils
+Exec = /bin/sh -c "/usr/local/bin/cleanup-packages.sh" 

@@ -3,7 +3,6 @@
 
 acpica
 aic8800d80-dkms
-amd-ucode
 aria2
 b43-fwcutter
 base
@@ -20,7 +19,6 @@ fpaste
 frzr
 gpm
 git
-intel-ucode
 inputplumber
 jq
 libnewt
@@ -40,6 +38,5 @@ syslinux
 usbutils
 vim
 wget
-yay
 zsh
 networkmanager
