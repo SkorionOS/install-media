@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -xe
+
 if [ $EUID -ne 0 ]; then
 	echo "$(basename $0) must be run as root"
 	exit 1
@@ -45,16 +47,53 @@ ADDITIONAL_PACKAGES="\
 LOCAL_REPO="${script_dir}/extra_pkg"
 mkdir -p ${LOCAL_REPO}
 
-PIKAUR_CMD="PKGDEST=/tmp/temp_repo pikaur --noconfirm -Sw ${AUR_PACKAGES}"
-PIKAUR_RUN=(bash -c "${PIKAUR_CMD}")
-if [ -n "${BUILD_USER}" ]; then
-	PIKAUR_RUN=(su "${BUILD_USER}" -c "${PIKAUR_CMD}")
-fi
+# Clear temp repo directory
+rm -rf /tmp/temp_repo
+mkdir -p /tmp/temp_repo
 
-# build packages to the repo
-pushd /home/${BUILD_USER}
-"${PIKAUR_RUN[@]}"
-popd
+# Build packages one by one with retry
+BUILT_PACKAGES=()
+total_packages=$(echo ${AUR_PACKAGES} | wc -w)
+current=0
+
+for package in ${AUR_PACKAGES}; do
+    current=$((current + 1))
+    echo "[$current/$total_packages] Building package: $package"
+    
+    # Retry up to 3 times
+    success=false
+    for retry in {1..3}; do
+        if [ $retry -gt 1 ]; then
+            echo "Retry attempt $((retry-1)) for: $package"
+        fi
+        
+        PIKAUR_CMD="PKGDEST=/tmp/temp_repo pikaur --noconfirm -Sw ${package}"
+        PIKAUR_RUN=(bash -c "${PIKAUR_CMD}")
+        if [ -n "${BUILD_USER}" ]; then
+            PIKAUR_RUN=(su "${BUILD_USER}" -c "${PIKAUR_CMD}")
+        fi
+        
+        pushd /home/${BUILD_USER}
+        if "${PIKAUR_RUN[@]}"; then
+            BUILT_PACKAGES+=("$package")
+            success=true
+            echo "✅ Package $package built successfully"
+            break
+        else
+            echo "Build failed (attempt $retry/3) for: $package"
+        fi
+        popd
+    done
+    
+    # Exit on failure
+    if [ "$success" = false ]; then
+        echo "❌ Error: Package $package failed after 3 attempts"
+        echo "Build aborted"
+        exit 1
+    fi
+done
+
+echo "✅ All AUR packages built successfully (${#BUILT_PACKAGES[@]}/$total_packages)"
 
 # copy all built packages to the repo
 cp /tmp/temp_repo/* ${LOCAL_REPO}
