@@ -47,9 +47,8 @@ ADDITIONAL_PACKAGES="\
 LOCAL_REPO="${script_dir}/extra_pkg"
 mkdir -p ${LOCAL_REPO}
 
-# Clear temp repo directory
+# Clear temp repo directory (pikaur will create it with correct permissions)
 rm -rf /tmp/temp_repo
-mkdir -p /tmp/temp_repo
 
 # Build packages one by one with retry
 BUILT_PACKAGES=()
