@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091
 
 function check_internet_connection() {
-  while ! (curl -Ls --http1.1 https://bing.com | grep '<html' >/dev/null); do
+  while ! (curl -Ls --http1.1 https://www.baidu.com | grep '<html' >/dev/null); do
     dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
       --yes-button "网络配置" \
       --no-button "退出安装" \
