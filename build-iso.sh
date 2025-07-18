@@ -110,11 +110,11 @@ mkarchiso -v -w "${temp_dir}" -o "${output_dir}" "${script_dir}"
 # allow git command to work
 git config --global --add safe.directory "${work_dir}"
 
-set +e
 
 ISO_FILE_PATH=$(ls ${output_dir}/*.iso)
 ISO_FILE_NAME=$(basename "${ISO_FILE_PATH}")
 VERSION=$(echo "${ISO_FILE_NAME}" | cut -c14-23 | sed 's/\./-/g')
+cd "${work_dir}"
 ID=$(git rev-parse --short HEAD)
 
 # Generate checksum file with appropriate name based on variant
