@@ -88,7 +88,7 @@ function version_greater() {
 
 poll_gamepad &
 
-copy_network_config
+copy_system_configs
 
 check_internet_connection
 

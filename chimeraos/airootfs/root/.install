@@ -17,6 +17,20 @@ function check_internet_connection() {
   done
 }
 
+function is_ssh_session() {
+  # 检查SSH相关环境变量
+  if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_TTY" ]; then
+    return 0  # 是SSH会话
+  fi
+  
+  # 检查当前TTY是否是SSH
+  if [[ "$(tty)" =~ ^/dev/pts/ ]] && pstree -p $$ 2>/dev/null | grep -q sshd; then
+    return 0  # 是SSH会话
+  fi
+  
+  return 1  # 不是SSH会话
+}
+
 function reload_network_connections() {
   echo "正在应用新的网络配置..."
   
@@ -66,18 +80,25 @@ function reload_network_connections() {
   echo "网络配置应用完成"
 }
 
-function copy_network_config() {
+function copy_system_configs() {
+  # 如果是SSH会话，跳过配置复制
+  if is_ssh_session; then
+    echo "检测到SSH会话，跳过系统配置复制"
+    return 0
+  fi
+  
   local frzr_partition=""
   local mount_point="/tmp/frzr_old_root"
-  local config_copied=false
+  local network_copied=false
+  local ssh_copied=false
   
-  echo "正在查找现有网络配置..."
+  echo "正在查找现有系统配置..."
   
   # 查找frzr-root分区
   frzr_partition=$(blkid -l -t LABEL=frzr_root -o device 2>/dev/null)
   
   if [ -z "$frzr_partition" ]; then
-    echo "未找到现有系统分区 (frzr_root)，跳过网络配置复制"
+    echo "未找到现有系统分区 (frzr_root)，跳过配置复制"
     return 0
   fi
   
@@ -101,26 +122,26 @@ function copy_network_config() {
   fi
   
   # 复制网络配置
-  local src_dir="$mount_point/etc/NetworkManager/system-connections"
-  local dst_dir="/etc/NetworkManager/system-connections"
+  local net_src_dir="$mount_point/etc/NetworkManager/system-connections"
+  local net_dst_dir="/etc/NetworkManager/system-connections"
   
-  if [ -d "$src_dir" ]; then
-    local config_count=$(ls -1 "$src_dir" 2>/dev/null | wc -l)
+  if [ -d "$net_src_dir" ]; then
+    local config_count=$(ls -1 "$net_src_dir" 2>/dev/null | wc -l)
     if [ "$config_count" -gt 0 ]; then
       echo "找到 $config_count 个网络配置文件，正在复制..."
       
       # 备份现有配置（如果有）
-      if [ -d "$dst_dir" ] && [ -n "$(ls -A "$dst_dir" 2>/dev/null)" ]; then
-        mv "$dst_dir" "${dst_dir}.backup.$(date +%s)" 2>/dev/null
+      if [ -d "$net_dst_dir" ] && [ -n "$(ls -A "$net_dst_dir" 2>/dev/null)" ]; then
+        mv "$net_dst_dir" "${net_dst_dir}.backup.$(date +%s)" 2>/dev/null
       fi
       
-      mkdir -p "$dst_dir"
-      chmod 700 "$dst_dir"
+      mkdir -p "$net_dst_dir"
+      chmod 700 "$net_dst_dir"
       
-      if cp "$src_dir"/* "$dst_dir"/ 2>/dev/null; then
-        chmod 600 "$dst_dir"/*
+      if cp "$net_src_dir"/* "$net_dst_dir"/ 2>/dev/null; then
+        chmod 600 "$net_dst_dir"/*
         echo "成功复制 $config_count 个网络配置文件"
-        config_copied=true
+        network_copied=true
       else
         echo "复制网络配置时出错"
       fi
@@ -131,16 +152,62 @@ function copy_network_config() {
     echo "现有系统中未找到网络配置目录"
   fi
   
+  # 复制SSH主机密钥
+  local ssh_src_dir="$mount_point/etc/ssh"
+  local ssh_dst_dir="/etc/ssh"
+  
+  if [ -d "$ssh_src_dir" ]; then
+    local key_count=0
+    
+    # 计算主机密钥文件数量
+    key_count=$(ls -1 "$ssh_src_dir"/ssh_host_*_key 2>/dev/null | wc -l)
+    
+    if [ "$key_count" -gt 0 ]; then
+      echo "找到 $key_count 个SSH主机密钥，正在复制..."
+      
+      # 复制所有主机密钥文件（私钥和公钥）
+      for key_file in "$ssh_src_dir"/ssh_host_*_key*; do
+        if [ -f "$key_file" ]; then
+          local key_name=$(basename "$key_file")
+          if cp "$key_file" "$ssh_dst_dir/$key_name" 2>/dev/null; then
+            # 设置正确权限
+            if [[ "$key_name" == *".pub" ]]; then
+              chmod 644 "$ssh_dst_dir/$key_name"  # 公钥
+            else
+              chmod 600 "$ssh_dst_dir/$key_name"  # 私钥
+            fi
+            echo "已复制SSH密钥: $key_name"
+          fi
+        fi
+      done
+      
+      ssh_copied=true
+    else
+      echo "现有系统中无SSH主机密钥文件"
+    fi
+  else
+    echo "现有系统中未找到SSH配置目录"
+  fi
+  
   # 清理：只卸载我们自己挂载的分区
   if [ -z "$existing_mount" ]; then
     umount "$mount_point" 2>/dev/null
     rmdir "$mount_point" 2>/dev/null
   fi
   
-  # 如果复制了配置，重新加载网络
-  if [ "$config_copied" = true ]; then
+  # 重新加载服务（如果有配置被复制）
+  if [ "$network_copied" = true ]; then
     echo "正在重新加载网络配置..."
     reload_network_connections
+  fi
+  
+  if [ "$ssh_copied" = true ]; then
+    echo "正在重启SSH服务..."
+    if systemctl restart sshd 2>/dev/null; then
+      echo "SSH服务重启成功"
+    else
+      echo "SSH服务重启失败，但密钥已复制"
+    fi
   fi
   
   return 0
