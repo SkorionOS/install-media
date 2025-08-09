@@ -79,19 +79,19 @@ jobs:
           MOBILE_CLOUD_AUTHORIZATION: ${{ secrets.MOBILE_CLOUD_AUTHORIZATION }}
           # 下载模式配置环境变量
           USE_BATCH_DOWNLOAD: ${{ inputs.use_batch_download }}
-          BATCH_DOWNLOAD_THREADS: ${{ inputs.download_threads || '3' }}
-          BATCH_TRANSFER_THREADS: ${{ inputs.transfer_threads || '3' }}
-          TABLE_LANGUAGE: ${{ inputs.table_language || 'en' }}
+          BATCH_DOWNLOAD_THREADS: ${{ inputs.download_threads }}
+          BATCH_TRANSFER_THREADS: ${{ inputs.transfer_threads }}
+          TABLE_LANGUAGE: ${{ inputs.table_language }}
           USE_EMOJI: ${{ inputs.use_emoji }}
           FORCE_SYNC: ${{ inputs.force_sync }}
         run: |
           # 调试：显示原始输入值
-          echo "🐛 调试信息："
-          echo "  inputs.table_language: '${{ inputs.table_language }}'"
-          echo "  inputs.use_emoji: '${{ inputs.use_emoji }}'"
-          echo "  inputs.force_sync: '${{ inputs.force_sync }}'"
-          echo "  inputs.use_batch_download: '${{ inputs.use_batch_download }}'"
-          echo ""
+          # echo "🐛 调试信息："
+          # echo "  inputs.table_language: '${{ inputs.table_language }}'"
+          # echo "  inputs.use_emoji: '${{ inputs.use_emoji }}'"
+          # echo "  inputs.force_sync: '${{ inputs.force_sync }}'"
+          # echo "  inputs.use_batch_download: '${{ inputs.use_batch_download }}'"
+          # echo ""
           
           # 检查必需的环境变量
           if [ -z "$MOBILE_CLOUD_AUTHORIZATION" ]; then
@@ -102,6 +102,20 @@ jobs:
           
           # 确定参数
           TAG_NAME="${{ inputs.tag_name }}"
+
+          USE_BATCH_DOWNLOAD="${USE_BATCH_DOWNLOAD:-true}"  # true: 多线程批量下载, false: 单文件下载
+          BATCH_DOWNLOAD_THREADS="${BATCH_DOWNLOAD_THREADS:-3}"   # 批量下载线程数
+          BATCH_TRANSFER_THREADS="${BATCH_TRANSFER_THREADS:-3}"   # 批量传输线程数
+          TABLE_LANGUAGE="${TABLE_LANGUAGE:-en}"      # 表格语言: zh(中文) 或 en(英文)
+          USE_EMOJI="${USE_EMOJI:-true}"           # 是否在状态中显示emoji
+          FORCE_SYNC="${FORCE_SYNC:-false}"       # 强制同步模式
+
+          export USE_BATCH_DOWNLOAD
+          export BATCH_DOWNLOAD_THREADS
+          export BATCH_TRANSFER_THREADS
+          export TABLE_LANGUAGE
+          export USE_EMOJI
+          export FORCE_SYNC
           
           # 显示配置
           echo "🔧 同步配置:"
