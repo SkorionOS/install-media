@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.4
+# Version: 1.0.5
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -577,6 +577,28 @@ cleanup_all() {
     fi
 }
 
+post_install() {
+  local MOUNT_PATH=${1:-/tmp/frzr_root}
+  sessions_file="usr/share/gamescope-session-plus/sessions.d/steam"
+  add_line='    export CLIENTCMD="steam -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -nobootstrapupdate -skipinitialbootstrap"'
+  if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q "deployments/chimeraos"; then
+    current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep "deployments/chimeraos" | awk '{print $9}'))
+    for current_deploy in "${current_deploys_array[@]}"; do
+      real_sessions_file="${MOUNT_PATH}/${current_deploy}/${sessions_file}"
+      if [ -f "${real_sessions_file}" ] && ! grep -q "nobootstrapupdate" "${real_sessions_file}"; then
+        btrfs property set -fts "deployments/${CURRENT_RELEASE}" ro false || true
+        # 找到含有 'echo "set_bootstrap=1" >>' 的行，在下一行添加 add_line
+        sed -i "/echo \"set_bootstrap=1\" >>/a ${add_line}" "${real_sessions_file}"
+        btrfs property set -fts "deployments/${CURRENT_RELEASE}" ro true || true
+      fi
+    done
+  fi
+
+  if [ -f "${MOUNT_PATH}/source" ]; then
+    sed -i "s#.img##" "${MOUNT_PATH}/source"
+  fi
+}
+
 # 设置trap
 trap 'cleanup_all 1' SIGINT SIGTERM
 trap 'cleanup_all 0' EXIT
@@ -909,6 +931,8 @@ else
   # 关闭提示框
   kill $DIALOG_PID 2>/dev/null
 fi
+
+post_install $MOUNT_PATH
 
 MSG="安装失败."
 if [ "${RESULT}" == "0" ]; then
