@@ -31,13 +31,13 @@ jobs:
       - name: Download Steam
         if: matrix.download_steam
         run: |
-          # URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.5-x86_64.pkg.tar.zst"
-          # mkdir -p chimeraos/airootfs/root/packages
-          # curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
-          TAG="1751405894.2"
-          URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
+          URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
           mkdir -p chimeraos/airootfs/root/packages
-          curl -L -o chimeraos/airootfs/root/packages/bootstraplinux_ubuntu12_32.tar.xz $URL
+          curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
+          # TAG="1751405894.2"
+          # URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
+          # mkdir -p chimeraos/airootfs/root/packages
+          # curl -L -o chimeraos/airootfs/root/packages/bootstraplinux_ubuntu12_32.tar.xz $URL
 
       - name: Build ISO
         id: build_iso
