@@ -617,7 +617,7 @@ post_install() {
 
   if [ -f "${MOUNT_PATH}/source" ]; then
     echo >&2 "source 文件处理" 
-    sed -i "s#\.[^:]*$##" "${MOUNT_PATH}/source"
+    sed -i 's#\.[^:]*$##' "${MOUNT_PATH}/source"
     echo >&2 "source 当前内容: $(cat ${MOUNT_PATH}/source)"
   fi
 }
