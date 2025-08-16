@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.1.1
+# Version: 1.1.2
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -753,7 +753,10 @@ function grab_steam_bootstrap() {
 
   mkdir -p /root/packages
 
-  local TMP_FILE="/tmp/bootstraplinux_ubuntu12_32.tar.xz"
+  tmp_dir=$(mktemp -d)
+  echo "tmp_dir: ${tmp_dir}"
+
+  local TMP_FILE="${tmp_dir}/bootstraplinux_ubuntu12_32.tar.xz"
   local DESTINATION="/tmp/frzr_root/etc/first-boot/"
   if [[ ! -d "$DESTINATION" ]]; then
     mkdir -p "$DESTINATION"
@@ -788,7 +791,7 @@ function grab_steam_bootstrap() {
   fi
 
   local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
-  local STEAM_TMP_PKG="/tmp/package.pkg.tar.zst"
+  local STEAM_TMP_PKG="${tmp_dir}/package.pkg.tar.zst"
 
   if [ ! -f "$STM_PKG" ]; then
     if (curl --http1.1 -# -L -o "${STEAM_TMP_PKG}" -C - "${STEAM_URL}" 2>&1 |
@@ -801,18 +804,53 @@ function grab_steam_bootstrap() {
     fi
   fi
 
-  if (tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" 2>&1); then
-    if xz -t "$TMP_FILE"; then
+  echo "开始从 $STM_PKG 提取 bootstraplinux_ubuntu12_32.tar.xz..."
+  
+  # 检查文件是否存在于包中，使用更可靠的方法
+  echo "验证 Steam 包内容..."
+  tar_list_output=$(tar -I zstd -tf "$STM_PKG" 2>/dev/null)
+  if [ $? -ne 0 ]; then
+    handle_error "无法读取 Steam 包内容" $?
+    return 1
+  fi
+  
+  # 使用变量而不是管道来避免时序问题
+  if ! echo "$tar_list_output" | grep -q "usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"; then
+    echo "Steam 包中未找到 bootstraplinux_ubuntu12_32.tar.xz 文件"
+    echo "包中包含的 steam 相关文件:"
+    echo "$tar_list_output" | grep -i steam | head -5
+    handle_error "Steam 包结构异常" 1
+    return 1
+  fi
+  
+  echo "文件验证通过，开始提取..."
+  
+  # 提取文件，分离错误输出
+  if tar -I zstd -xf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" 2>/dev/null; then
+    echo "提取完成，文件大小: $(du -h "$TMP_FILE" | cut -f1)"
+    
+    # 验证提取的文件
+    if [ -s "$TMP_FILE" ] && xz -t "$TMP_FILE" 2>/dev/null; then
+      echo "文件验证成功，复制到目标位置..."
       cp -f "$TMP_FILE" "$DESTINATION"
+      echo "Steam 引导文件处理完成"
     else
-      handle_error "解压 Steam 引导失败" $?
+      echo "文件验证失败，检查文件内容..."
+      echo "文件前100字节: $(head -c 100 "$TMP_FILE" | hexdump -C)"
+      handle_error "提取的 Steam 引导文件格式不正确或为空" 1
     fi
   else
-    handle_error "解压 Steam 引导失败" $?
+    handle_error "从 Steam 包提取 bootstraplinux_ubuntu12_32.tar.xz 失败" $?
   fi
   
   if [ -f "$STEAM_TMP_PKG" ]; then
     rm "$STEAM_TMP_PKG"
+  fi
+  
+  # 清理临时目录
+  if [ -d "$tmp_dir" ]; then
+    rm -rf "$tmp_dir"
+    echo "清理临时目录: $tmp_dir"
   fi
 }
 
