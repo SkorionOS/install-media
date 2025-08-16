@@ -113,16 +113,13 @@ git config --global --add safe.directory "${work_dir}"
 
 ISO_FILE_PATH=$(ls ${output_dir}/*.iso)
 ISO_FILE_NAME=$(basename "${ISO_FILE_PATH}")
-VERSION=$(echo "${ISO_FILE_NAME}" | cut -c14-23 | sed 's/\./-/g')
+# 匹配 xxxx.xx.xx 部分
+VERSION=$(echo "${ISO_FILE_NAME}" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | sed 's/\./-/g')
 cd "${work_dir}"
 ID=$(git rev-parse --short HEAD)
 
 # Generate checksum file with appropriate name based on variant
-SHA256_FILE_NAME="sha256sum"
-if [ "${VARIANT_SUFFIX}" = "-lite" ]; then
-	SHA256_FILE_NAME="sha256sum-lite"
-fi
-SHA256_FILE_NAME="${SHA256_FILE_NAME}.txt"
+SHA256_FILE_NAME="sha256sum${VARIANT_SUFFIX}.txt"
 
 pushd ${output_dir}
 sha256sum ${ISO_FILE_NAME} > ${SHA256_FILE_NAME}
