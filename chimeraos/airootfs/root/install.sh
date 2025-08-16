@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.8
+# Version: 1.1.0
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -577,23 +577,41 @@ cleanup_all() {
     fi
 }
 
+post_install_with_deployments() {
+  local DEPLOY_SUBVOL=$1
+  local MOUNT_PATH=${2:-/tmp/frzr_root}
+  local DEPLOY_SUBVOL_PATH="${MOUNT_PATH}/${DEPLOY_SUBVOL}"
+
+  echo "正在优化部署: $DEPLOY_SUBVOL"
+
+  steam_sessions="${DEPLOY_SUBVOL_PATH}/usr/share/gamescope-session-plus/sessions.d/steam"
+  steam_add_line='    export CLIENTCMD="steam -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -nobootstrapupdate -skipinitialbootstrap"'
+
+  if [ -f "${steam_sessions}" ] && ! grep -q "nobootstrapupdate" "${steam_sessions}"; then
+    # 找到含有 'echo "set_bootstrap=1" >>' 的行，在下一行添加 add_line
+    sed -i "/echo \"set_bootstrap=1\" >>/a ${steam_add_line}" "${steam_sessions}"
+    echo >&2 "now ${steam_sessions} : $(grep "nobootstrapupdate" "${steam_sessions}")"
+  fi
+
+  steamos_update="${DEPLOY_SUBVOL_PATH}/usr/bin/steamos-update"
+  update_add_line='ps -ef | grep -v grep | grep "steamdeck" | grep "steamos" | grep "nobootstrapupdate" >/dev/null && exit 0'
+  if [ -f "${steamos_update}" ] && ! grep -q "nobootstrapupdate" "${steamos_update}"; then
+    # 找到 'if command -v frzr-deploy' 开头的行， 在前面添加一行 add_line
+    sed -i "/if command -v frzr-deploy/i ${update_add_line}" "${steamos_update}"
+    echo >&2 "now ${steamos_update} : $(grep "nobootstrapupdate" "${steamos_update}")"
+  fi
+
+}
+
 post_install() {
   echo >&2 "进行后安装步骤"
   local MOUNT_PATH=${1:-/tmp/frzr_root}
-  sessions_file="usr/share/gamescope-session-plus/sessions.d/steam"
-  add_line='    export CLIENTCMD="steam -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -nobootstrapupdate -skipinitialbootstrap"'
   if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q "deployments/chimeraos"; then
     current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep "deployments/chimeraos" | awk '{print $9}'))
     for current_deploy in "${current_deploys_array[@]}"; do
-      real_sessions_file="${MOUNT_PATH}/${current_deploy}/${sessions_file}"
-      echo >&2 "real_sessions_file: ${real_sessions_file}"
-      if [ -f "${real_sessions_file}" ] && ! grep -q "nobootstrapupdate" "${real_sessions_file}"; then
-        btrfs property set -fts "deployments/${CURRENT_RELEASE}" ro false || true
-        # 找到含有 'echo "set_bootstrap=1" >>' 的行，在下一行添加 add_line
-        sed -i "/echo \"set_bootstrap=1\" >>/a ${add_line}" "${real_sessions_file}"
-        echo >&2 "now ${real_sessions_file} : $(grep "nobootstrapupdate" "${real_sessions_file}")"
-        btrfs property set -fts "deployments/${CURRENT_RELEASE}" ro true || true
-      fi
+      btrfs property set -fts "${current_deploy}" ro false || true
+      post_install_with_deployments "${current_deploy}" "${MOUNT_PATH}"
+      btrfs property set -fts "${current_deploy}" ro true || true
     done
   fi
 

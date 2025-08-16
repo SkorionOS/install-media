@@ -53,6 +53,7 @@ function check_and_update_install_script() {
     fi
     
     rm -f "$temp_script"
+    sleep 3
 }
 
 # 脚本验证函数
