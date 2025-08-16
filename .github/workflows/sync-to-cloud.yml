@@ -85,19 +85,17 @@ jobs:
           USE_EMOJI: ${{ inputs.use_emoji }}
           FORCE_SYNC: ${{ inputs.force_sync }}
         run: |
-          # 调试：显示原始输入值
-          # echo "🐛 调试信息："
-          # echo "  inputs.table_language: '${{ inputs.table_language }}'"
-          # echo "  inputs.use_emoji: '${{ inputs.use_emoji }}'"
-          # echo "  inputs.force_sync: '${{ inputs.force_sync }}'"
-          # echo "  inputs.use_batch_download: '${{ inputs.use_batch_download }}'"
-          # echo ""
           
           # 检查必需的环境变量
           if [ -z "$MOBILE_CLOUD_AUTHORIZATION" ]; then
             echo "❌ 未找到移动云盘认证信息"
             echo "请在仓库Secrets中设置 MOBILE_CLOUD_AUTHORIZATION"
             exit 1
+          fi
+
+          # 根据触发方式设置参数
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            FORCE_SYNC=true
           fi
           
           # 确定参数

@@ -11,16 +11,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [lite, full]
+        variant: [lite, standard, full]
         include:
           - variant: lite
             download_steam: false
+            download_steam_custom: false
             iso_suffix: "-lite"
             sha256_name: "sha256sum-lite.txt"
-          - variant: full
+          - variant: standard
             download_steam: true
+            download_steam_custom: false
             iso_suffix: ""
             sha256_name: "sha256sum.txt"
+          - variant: full
+            download_steam: false
+            download_steam_custom: true
+            iso_suffix: "-full"
+            sha256_name: "sha256sum-full.txt"
     outputs:
       version: ${{ steps.build_iso.outputs.version }}
       id: ${{ steps.build_iso.outputs.id }}
@@ -28,6 +35,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Update submodules
         run: git submodule update --init --recursive
+
+      - name: Download Steam Custom
+        if: matrix.download_steam_custom
+        run: |
+          TAG="1751405894.2"
+          URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
+          BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"
+          BOOTSTRAP_PKG_DIR="chimeraos/airootfs/root/packages"
+          BOOTSTRAP_PKG="bootstraplinux_ubuntu12_32.tar.xz"
+
+          mkdir -p $BOOTSTRAP_PKG_DIR
+          curl -L -o $BOOTSTRAP_PKG_DIR/$BOOTSTRAP_PKG $URL
+
+          # 检查 .tar.xz 文件格式是否正确
+          if ! xz -t $BOOTSTRAP_PKG_DIR/$BOOTSTRAP_PKG; then
+            echo "Steam 引导文件格式不正确"
+            exit 1
+          fi
+      
       - name: Download Steam
         if: matrix.download_steam
         run: |
@@ -45,12 +71,6 @@ jobs:
             echo "Steam 引导文件格式不正确"
             exit 1
           fi
-
-          # curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
-          # TAG="1751405894.2"
-          # URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
-          # mkdir -p chimeraos/airootfs/root/packages
-          # curl -L -o chimeraos/airootfs/root/packages/bootstraplinux_ubuntu12_32.tar.xz $URL
 
       - name: Build ISO
         id: build_iso
