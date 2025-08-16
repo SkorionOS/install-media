@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.7
+# Version: 1.0.8
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -759,12 +759,14 @@ function grab_steam_bootstrap() {
     fi
   fi
 
-  if [ -f "$BOOTSTRAP_PKG" ] && xz -t "$BOOTSTRAP_PKG"; then
-    cp -f "$BOOTSTRAP_PKG" "$DESTINATION"
-    echo "copy $BOOTSTRAP_PKG to $DESTINATION success"
-    return 0
-  else
-    handle_error "Steam 引导文件格式不正确" $?
+  if [ -f "$BOOTSTRAP_PKG" ]; then
+    if xz -t "$BOOTSTRAP_PKG"; then
+      cp -f "$BOOTSTRAP_PKG" "$DESTINATION"
+      echo "copy $BOOTSTRAP_PKG to $DESTINATION success"
+      return 0
+    else
+      handle_error "Steam 引导文件格式不正确" $?
+    fi
   fi
 
   local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
