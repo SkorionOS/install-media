@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.1.0
+# Version: 1.1.1
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -609,9 +609,9 @@ post_install() {
   if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q "deployments/chimeraos"; then
     current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep "deployments/chimeraos" | awk '{print $9}'))
     for current_deploy in "${current_deploys_array[@]}"; do
-      btrfs property set -fts "${current_deploy}" ro false || true
+      btrfs property set -fts "${MOUNT_PATH}/${current_deploy}" ro false || true
       post_install_with_deployments "${current_deploy}" "${MOUNT_PATH}"
-      btrfs property set -fts "${current_deploy}" ro true || true
+      btrfs property set -fts "${MOUNT_PATH}/${current_deploy}" ro true || true
     done
   fi
 
