@@ -16,9 +16,14 @@ function check_and_update_install_script() {
     local timeout_main=5    # 主URL超时
     local timeout_backup=10 # 备用URL超时
     
-    # 获取当前脚本版本
+    # 获取当前脚本版本（支持两种格式）
     if [ -f "$INSTALL_SCRIPT" ]; then
-        current_version=$(grep "^# Version:" "$INSTALL_SCRIPT" | head -1 | sed 's/^# Version: //')
+        # 优先尝试变量形式 VERSION="x.x.x"
+        current_version=$(grep "^VERSION=" "$INSTALL_SCRIPT" | head -1 | sed 's/^VERSION="\(.*\)"/\1/')
+        # 如果变量形式不存在，尝试注释形式 # Version: x.x.x
+        if [ -z "$current_version" ]; then
+            current_version=$(grep "^# Version:" "$INSTALL_SCRIPT" | head -1 | sed 's/^# Version: //')
+        fi
     fi
     
     # 尝试从主URL下载
@@ -39,8 +44,13 @@ function check_and_update_install_script() {
         return 1
     fi
     
-    # 获取远程版本
-    remote_version=$(grep "^# Version:" "$temp_script" | head -1 | sed 's/^# Version: //')
+    # 获取远程版本（支持两种格式）
+    # 优先尝试变量形式 VERSION="x.x.x"
+    remote_version=$(grep "^VERSION=" "$temp_script" | head -1 | sed 's/^VERSION="\(.*\)"/\1/')
+    # 如果变量形式不存在，尝试注释形式 # Version: x.x.x
+    if [ -z "$remote_version" ]; then
+        remote_version=$(grep "^# Version:" "$temp_script" | head -1 | sed 's/^# Version: //')
+    fi
     
     # 版本比较和更新
     if [ -n "$remote_version" ] && version_greater "$remote_version" "$current_version"; then

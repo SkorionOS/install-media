@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.1.3
+# Version: 1.1.4
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,9 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S)-----------"
+VERSION="1.1.4"
+
+echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
 # 清理日志中的ANSI转义码
 cleanup_log() {
@@ -412,7 +414,7 @@ select_disk() {
             TEMP_FILE=$(mktemp)
             # NOTE: each disk entry consists of 2 elements in the array (disk name & disk description)
             if [ "${#device_list[@]}" -gt 2 ]; then
-                    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" $MENU_HEIGHT $MENU_WIDTH 10 "${device_list[@]}" 2> $TEMP_FILE); then
+                    if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装程序 v$VERSION\Zn" --menu "选择一个磁盘来安装 $OS_NAME:" $MENU_HEIGHT $MENU_WIDTH 10 "${device_list[@]}" 2> $TEMP_FILE); then
                             export DISK=$(cat $TEMP_FILE)
                             rm $TEMP_FILE
                     else
@@ -422,7 +424,7 @@ select_disk() {
                     # skip selection menu if only a single disk is available to choose from
                     export DISK=${device_list[0]}
             else
-                    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH
+                    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装程序 v$VERSION\Zn" --msgbox "找不到可安装的磁盘\n\n请连接一个容量为64GB或更大的磁盘, 然后重新启动安装程序." $MSGBOX_HEIGHT $MSGBOX_WIDTH
                     cancel_install
             fi
 
@@ -676,7 +678,7 @@ confirm_installation() {
     dialog --colors --title "${WARNING_COLOR}警告\Zn" --defaultno --yes-button "继续" --no-button "取消安装" --help-button --help-label "帮助" --yesno "\
 警告: $OS_NAME 将被安装到以下磁盘: \n\n\
         $DISK - $DISK_DESC\n\n\
-您是否要继续?\n(在后续步骤可进行更详细的安装选项设置)" $MSGBOX_HEIGHT $MENU_WIDTH
+您是否要继续?\n(在后续步骤可进行更详细的安装选项设置)\n\n安装程序版本: v$VERSION" $MSGBOX_HEIGHT $MENU_WIDTH
 
     local dialog_ret=$?
     
