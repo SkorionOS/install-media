@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.0.5
+# Version: 1.0.6
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -595,7 +595,7 @@ post_install() {
   fi
 
   if [ -f "${MOUNT_PATH}/source" ]; then
-    sed -i "s#.img##" "${MOUNT_PATH}/source"
+    sed -i "s#\.[^:]*$##" "${MOUNT_PATH}/source"
   fi
 }
 
