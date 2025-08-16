@@ -32,8 +32,21 @@ jobs:
         if: matrix.download_steam
         run: |
           URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
-          mkdir -p chimeraos/airootfs/root/packages
-          curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
+          STM_PKG="steam-jupiter-stable.pkg.tar.zst"
+          BOOTSTRAP_PKG="bootstraplinux_ubuntu12_32.tar.xz"
+          BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"
+          BOOTSTRAP_PKG_DIR="chimeraos/airootfs/root/packages"
+
+          curl -L -o $STM_PKG $URL
+          mkdir -p $BOOTSTRAP_PKG_DIR
+          tar -I zstd -xvf $STM_PKG $BOOTSTRAP_PATH -O > $BOOTSTRAP_PKG_DIR/$BOOTSTRAP_PKG
+          # 检查 .tar.xz 文件格式是否正确
+          if ! xz -t $BOOTSTRAP_PKG_DIR/$BOOTSTRAP_PKG; then
+            echo "Steam 引导文件格式不正确"
+            exit 1
+          fi
+
+          # curl -L -o chimeraos/airootfs/root/packages/steam-jupiter-stable.pkg.tar.zst $URL
           # TAG="1751405894.2"
           # URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
           # mkdir -p chimeraos/airootfs/root/packages

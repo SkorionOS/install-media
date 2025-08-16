@@ -746,19 +746,25 @@ function grab_steam_bootstrap() {
     if [ -f "$dir_name/bootstraplinux_ubuntu12_32.tar.xz" ]; then
       echo "find $dir_name/bootstraplinux_ubuntu12_32.tar.xz"
       TMP_FILE="$dir_name/bootstraplinux_ubuntu12_32.tar.xz"
-      cp "$TMP_FILE" "$DESTINATION"
-      echo "copy $TMP_FILE to $DESTINATION success"
-      if [ -f "$STEAM_BOOTSTRAP_CONFIG" ]; then
-        rm -f "$STEAM_BOOTSTRAP_CONFIG"
+      if xz -t "$TMP_FILE"; then
+        cp -f "$TMP_FILE" "$DESTINATION"
+        echo "copy $TMP_FILE to $DESTINATION success"
+        if [ -f "$STEAM_BOOTSTRAP_CONFIG" ]; then
+          rm -f "$STEAM_BOOTSTRAP_CONFIG"
+        fi
+        return 0
+      else
+        handle_error "Steam 引导文件格式不正确" $?
       fi
-      return 0
     fi
   fi
 
-  if [ -f "$BOOTSTRAP_PKG" ]; then
-    cp "$BOOTSTRAP_PKG" "$DESTINATION"
+  if [ -f "$BOOTSTRAP_PKG" ] && xz -t "$BOOTSTRAP_PKG"; then
+    cp -f "$BOOTSTRAP_PKG" "$DESTINATION"
     echo "copy $BOOTSTRAP_PKG to $DESTINATION success"
     return 0
+  else
+    handle_error "Steam 引导文件格式不正确" $?
   fi
 
   local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
@@ -776,7 +782,11 @@ function grab_steam_bootstrap() {
   fi
 
   if (tar -I zstd -xvf "$STM_PKG" usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz -O >"$TMP_FILE" 2>&1); then
-    mv -f "$TMP_FILE" "$DESTINATION"
+    if xz -t "$TMP_FILE"; then
+      cp -f "$TMP_FILE" "$DESTINATION"
+    else
+      handle_error "解压 Steam 引导失败" $?
+    fi
   else
     handle_error "解压 Steam 引导失败" $?
   fi
