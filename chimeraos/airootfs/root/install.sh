@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.1.2
+# Version: 1.1.3
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -605,6 +605,8 @@ post_install_with_deployments() {
 
 post_install() {
   echo >&2 "进行后安装步骤"
+  # 提示
+  dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   local MOUNT_PATH=${1:-/tmp/frzr_root}
   if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q "deployments/chimeraos"; then
     current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep "deployments/chimeraos" | awk '{print $9}'))
@@ -620,6 +622,8 @@ post_install() {
     sed -i 's#\.[^:]*$##' "${MOUNT_PATH}/source"
     echo >&2 "source 当前内容: $(cat ${MOUNT_PATH}/source)"
   fi
+  # 提示
+  dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤结束" $MSGBOX_HEIGHT $MSGBOX_WIDTH
 }
 
 # 设置trap
