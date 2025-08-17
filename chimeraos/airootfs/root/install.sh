@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.1.4
+# Version: 1.2.0
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="1.1.4"
+VERSION="1.2.0"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -588,11 +588,22 @@ post_install_with_deployments() {
 
   steam_sessions="${DEPLOY_SUBVOL_PATH}/usr/share/gamescope-session-plus/sessions.d/steam"
   steam_add_line='    export CLIENTCMD="steam -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -nobootstrapupdate -skipinitialbootstrap"'
+  steam_add_line_2='if [[ ! -f "${HOME}/.steam/root/config/loginusers.vdf" ]] || ! grep -q "AccountName" "${HOME}/.steam/root/config/loginusers.vdf"; then
+    export CLIENTCMD="steam -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -nobootstrapupdate -skipinitialbootstrap"
+fi'
 
   if [ -f "${steam_sessions}" ] && ! grep -q "nobootstrapupdate" "${steam_sessions}"; then
     # 找到含有 'echo "set_bootstrap=1" >>' 的行，在下一行添加 add_line
     sed -i "/echo \"set_bootstrap=1\" >>/a ${steam_add_line}" "${steam_sessions}"
-    echo >&2 "now ${steam_sessions} : $(grep "nobootstrapupdate" "${steam_sessions}")"
+  fi
+  if [ -f "${steam_sessions}" ] && ! grep -q "loginusers" "${steam_sessions}"; then
+    # 找到含有 'if command -v steam_notif_daemon' 的行，在前面插入多行内容
+    # 将多行变量转换为sed可用的格式
+    steam_formatted=$(echo "$steam_add_line_2" | sed 's/$/\\/')
+    steam_formatted=${steam_formatted%\\}  # 移除最后的反斜杠
+    
+    sed -i "/if command -v steam_notif_daemon/i\\
+$steam_formatted" "${steam_sessions}"
   fi
 
   steamos_update="${DEPLOY_SUBVOL_PATH}/usr/bin/steamos-update"
@@ -600,7 +611,6 @@ post_install_with_deployments() {
   if [ -f "${steamos_update}" ] && ! grep -q "nobootstrapupdate" "${steamos_update}"; then
     # 找到 'if command -v frzr-deploy' 开头的行， 在前面添加一行 add_line
     sed -i "/if command -v frzr-deploy/i ${update_add_line}" "${steamos_update}"
-    echo >&2 "now ${steamos_update} : $(grep "nobootstrapupdate" "${steamos_update}")"
   fi
 
 }
