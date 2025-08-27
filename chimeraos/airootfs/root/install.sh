@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 1.2.0
+# Version: 2.0.0
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="1.2.0"
+VERSION="2.0.0"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -500,7 +500,7 @@ scan_frzr_update_files() {
             echo "find $mount_point/FRZR_UPDATE" >&2
             while IFS= read -r -d '' file; do
                 local filename=$(basename "$file")
-                if echo "$filename" | grep -qE "^chimeraos-.*\.img(\.tar\.xz|\.xz|\.zst)?$"; then
+                if echo "$filename" | grep -qE "^(chimeraos|skorionos)-.*(\.img(\.tar\.xz|\.xz|\.zst)?|\.skosys)$"; then
                     echo "find $file" >&2
                     local filesize=$(du -h "$file" 2>/dev/null | cut -f1)
                     local device_name=$(basename "$device_path")
@@ -620,8 +620,8 @@ post_install() {
   # 提示
   dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   local MOUNT_PATH=${1:-/tmp/frzr_root}
-  if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q "deployments/chimeraos"; then
-    current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep "deployments/chimeraos" | awk '{print $9}'))
+  if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q -E "deployments/(chimeraos|skorionos)"; then
+    current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep -E "deployments/(chimeraos|skorionos)" | awk '{print $9}'))
     for current_deploy in "${current_deploys_array[@]}"; do
       btrfs property set -fts "${MOUNT_PATH}/${current_deploy}" ro false || true
       post_install_with_deployments "${current_deploy}" "${MOUNT_PATH}"
@@ -649,7 +649,7 @@ if [ $EUID -ne 0 ]; then
 fi
 
 
-OS_NAME=ChimeraOS
+OS_NAME=SkorionOS
 MIN_DISK_SIZE=55 # GB
 
 DEVICE_VENDOR=$(cat /sys/devices/virtual/dmi/id/sys_vendor)
@@ -727,7 +727,7 @@ fi
 
 if [ -z "$SELECTED_FRZR_FILE" ] && (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
-  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装ChimeraOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
+  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装SkorionOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
     "local" "使用本地媒介行安装." \
     "online" "在线获取最新系统镜像." \
     2> $TEMP_FILE
@@ -898,8 +898,8 @@ fi
 
 TEMP_FILE=$(mktemp)
 if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装选项\Zn" --menu "安装程序选项" $MENU_HEIGHT $MENU_WIDTH 10 \
-  "Standard:" "使用默认选项安装 ChimeraOS" \
-  "Advanced:" "使用高级选项安装 ChimeraOS" \
+  "Standard:" "使用默认选项安装 SkorionOS" \
+  "Advanced:" "使用高级选项安装 SkorionOS" \
   2> $TEMP_FILE
   ); then
     MENU_SELECT=$(cat $TEMP_FILE)
@@ -1014,7 +1014,7 @@ else
   DIALOG_PID=$!
   
   # 在前台运行安装并记录日志
-  frzr-deploy "3003n/chimeraos:${TARGET}" | tee -a $LOG_FILE
+  frzr-deploy "3003n/skorionos:${TARGET}" | tee -a $LOG_FILE
   RESULT=$?
   
   # 关闭提示框
