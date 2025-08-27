@@ -12,7 +12,7 @@ work_dir="$(realpath $0|rev|cut -d '/' -f2-|rev)"
 
 # configuration variables for the iso
 output_dir="${work_dir}/output"
-script_dir="${work_dir}/chimeraos"
+script_dir="${work_dir}/skorionos"
 temp_dir="${work_dir}/temp"
 
 # create output directory if it doesn't exist yet

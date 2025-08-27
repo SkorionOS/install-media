@@ -94,6 +94,6 @@ Include = /etc/pacman.d/mirrorlist
 #SigLevel = Optional TrustAll
 #Server = file:///home/custompkgs
 
-[chimeraos]
+[skorionos]
 SigLevel = Optional TrustAll
 Server = file://LOCAL_REPO
