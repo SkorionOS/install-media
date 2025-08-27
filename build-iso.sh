@@ -101,7 +101,7 @@ cp /tmp/temp_repo/* ${LOCAL_REPO}
 curl -L --remote-name-all --output-dir ${LOCAL_REPO} ${ADDITIONAL_PACKAGES}
 
 # Add the repo to the build
-repo-add ${LOCAL_REPO}/chimeraos.db.tar.gz ${LOCAL_REPO}/*.pkg.*
+repo-add ${LOCAL_REPO}/skorionos.db.tar.gz ${LOCAL_REPO}/*.pkg.*
 sed "s|LOCAL_REPO|$LOCAL_REPO|g" $script_dir/pacman.conf.template > $script_dir/pacman.conf
 
 # make the container build the iso

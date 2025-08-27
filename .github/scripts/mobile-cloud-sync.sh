@@ -48,7 +48,7 @@ FORCE_SYNC="${FORCE_SYNC:-false}"       # 强制同步模式
 #   "suffix:.img.xz,size_min:100"               # 下载.img.xz结尾且大于100MB的文件
 #   "contains:kde,exclude:contains:nv"          # 包含kde但不包含nv的文件
 #   "regex:.*-(kde|gnome)\..*"                  # 正则匹配包含kde或gnome的文件
-FILE_FILTER_RULES="prefix:sk-skorionos-"
+FILE_FILTER_RULES="prefix:skorionos-"
 TIMEOUT_SECONDS=1800
 CHECK_INTERVAL=5
 
