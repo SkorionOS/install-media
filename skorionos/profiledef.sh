@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
-iso_name="sk-skorionos${VARIANT_SUFFIX:-}"
-iso_label="SK-CHIMERAOS_$(date +%Y%m)"
-iso_publisher="Sk-SkorionOS <https://github.com/SkorionOS>"
-iso_application="Sk SkorionOS Installer"
+iso_name="skorionos${VARIANT_SUFFIX:-}"
+iso_label="SKORIONOS_$(date +%Y%m)"
+iso_publisher="SkorionOS <https://github.com/3003n/SkorionOS>"
+iso_application="SkorionOS Installer"
 iso_version=$(date +%Y.%m.%d)
 install_dir="arch"
 buildmodes=('iso')

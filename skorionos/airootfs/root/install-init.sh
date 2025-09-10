@@ -6,8 +6,8 @@ source "$HOME/.install"
 
 INSTALL_SCRIPT="$HOME/install.sh"
 
-SCRIPT_URL="https://github.com/3003n/install-media/raw/dialog/chimeraos/airootfs/root/install.sh"
-SCRIPT_URL_FALLBACK="https://gitee.com/honjow/install-media/raw/dialog/chimeraos/airootfs/root/install.sh"
+SCRIPT_URL="https://github.com/3003n/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
+SCRIPT_URL_FALLBACK="https://gitee.com/honjow/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
 
 function check_and_update_install_script() {
     local current_version=""
