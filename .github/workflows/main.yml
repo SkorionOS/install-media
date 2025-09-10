@@ -4,6 +4,7 @@ on:
     branches:
     - 'sk'
     - 'dialog'
+    - 'skorionos'
 jobs:
   build:
     name: Build ISO (${{ matrix.variant }})
@@ -42,7 +43,7 @@ jobs:
           TAG="1757452101.1"
           URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
           BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"
-          BOOTSTRAP_PKG_DIR="chimeraos/airootfs/root/packages"
+          BOOTSTRAP_PKG_DIR="skorionos/airootfs/root/packages"
           BOOTSTRAP_PKG="bootstraplinux_ubuntu12_32.tar.xz"
 
           mkdir -p $BOOTSTRAP_PKG_DIR
@@ -61,7 +62,7 @@ jobs:
           STM_PKG="steam-jupiter-stable.pkg.tar.zst"
           BOOTSTRAP_PKG="bootstraplinux_ubuntu12_32.tar.xz"
           BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"
-          BOOTSTRAP_PKG_DIR="chimeraos/airootfs/root/packages"
+          BOOTSTRAP_PKG_DIR="skorionos/airootfs/root/packages"
 
           curl -L -o $STM_PKG $URL
           mkdir -p $BOOTSTRAP_PKG_DIR

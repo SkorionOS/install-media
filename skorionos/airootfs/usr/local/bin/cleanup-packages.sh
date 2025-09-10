@@ -1,5 +1,5 @@
 #!/bin/bash
-# Package cleanup script for ChimeraOS ISO
+# Package cleanup script for SkorionOS ISO
 # This script removes unnecessary packages to reduce ISO size
 
 set -e

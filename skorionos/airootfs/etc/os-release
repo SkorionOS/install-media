@@ -1,0 +1,8 @@
+NAME="SkorionOS"
+PRETTY_NAME="SkorionOS"
+ID=skorionos
+ID_LIKE=arch
+ANSI_COLOR="1;31"
+HOME_URL="https://github.com/3003n/skorionos"
+DOCUMENTATION_URL="https://github.com/3003n/skorionos"
+BUG_REPORT_URL="https://github.com/3003n/skorionos/issues"

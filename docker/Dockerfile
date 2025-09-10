@@ -1,4 +1,4 @@
-#Dockerfile for building ChimeraOS install-media
+#Dockerfile for building SkorionOS install-media
 #Based on Arch
 
 FROM archlinux:base-devel
@@ -21,7 +21,7 @@ RUN echo -e "#!/bin/bash\nif [[ \"$1\" == \"--version\" ]]; then echo 'fake 244 
     chmod +x /usr/bin/systemd-run
 
 #set working dir, you'll have to mount something yourself here
-WORKDIR /root/chimeraos
+WORKDIR /root/skorionos
 
 # Build pikaur packages as the 'build' user
 ENV BUILD_USER "build"
@@ -29,4 +29,4 @@ ENV BUILD_USER "build"
 ENV GNUPGHOME  "/etc/pacman.d/gnupg"
 
 #Copy archiso files from this git repo
-ADD chimeraos /root/chimeraos
+ADD skorionos /root/skorionos
