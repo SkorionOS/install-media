@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.0.0
+# Version: 2.0.1
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.0.0"
+VERSION="2.0.1"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -712,7 +712,7 @@ confirm_installation
 
 # perform bootstrap of disk
 if ! frzr-bootstrap gamer "/dev/${DISK}" 2>&1 | tee -a $LOG_FILE; then
-  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "系统引导步骤失败\n请检查 $LOG_FILE 文件以获取更多信息" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  dialog --colors --title "${WARNING_COLOR}错误\Zn" --msgbox "frzr-bootstrap 失败\n" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   cancel_install
 fi
 
