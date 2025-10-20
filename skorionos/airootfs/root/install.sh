@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.0.1
+# Version: 2.0.2
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -619,7 +619,7 @@ $steam_formatted" "${steam_sessions}"
 post_install() {
   echo >&2 "进行后安装步骤"
   # 提示
-  dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  # dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤开始" $MSGBOX_HEIGHT $MSGBOX_WIDTH
   local MOUNT_PATH=${1:-/tmp/frzr_root}
   if btrfs subvolume list ${MOUNT_PATH} 2>/dev/null | grep -q -E "deployments/(chimeraos|skorionos)"; then
     current_deploys_array=($(btrfs subvolume list ${MOUNT_PATH} | grep -E "deployments/(chimeraos|skorionos)" | awk '{print $9}'))
@@ -636,7 +636,7 @@ post_install() {
     echo >&2 "source 当前内容: $(cat ${MOUNT_PATH}/source)"
   fi
   # 提示
-  dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤结束" $MSGBOX_HEIGHT $MSGBOX_WIDTH
+  # dialog --colors --title "${TITLE_COLOR}提示\Zn" --msgbox "后安装步骤结束" $MSGBOX_HEIGHT $MSGBOX_WIDTH
 }
 
 # 设置trap
