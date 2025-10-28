@@ -46,11 +46,33 @@ echo "✅ Detected resolution: ${WIDTH}x${HEIGHT}"
 echo "🚀 Starting gamescope..."
 echo ""
 
-# Launch gamescope + installer
-exec gamescope \
-  -W "$WIDTH" \
-  -H "$HEIGHT" \
-  -f \
-  --force-grab-cursor \
-  -- python3 /usr/local/bin/installer-poc.py "$@"
+# Log file for debugging
+LOGFILE="/tmp/installer-poc.log"
+echo "📝 Logging to: $LOGFILE"
+echo ""
+
+# Launch gamescope + installer (with logging)
+{
+    echo "=========================================="
+    echo "Installer PoC Log - $(date)"
+    echo "=========================================="
+    echo "Resolution: ${WIDTH}x${HEIGHT}"
+    echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+    echo "TTY: $(tty)"
+    echo ""
+    
+    gamescope \
+      -W "$WIDTH" \
+      -H "$HEIGHT" \
+      -f \
+      --force-grab-cursor \
+      -- python3 /usr/local/bin/installer-poc.py "$@" 2>&1
+    
+    EXIT_CODE=$?
+    echo ""
+    echo "=========================================="
+    echo "Exit code: $EXIT_CODE"
+    echo "=========================================="
+    exit $EXIT_CODE
+} | tee "$LOGFILE"
 

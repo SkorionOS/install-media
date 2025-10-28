@@ -19,6 +19,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Window setup
         self.set_default_size(1280, 800)
         self.set_title("SkorionOS Installer PoC")
+        self.add_css_class("installer-window")
         
         # Data
         self.current_page = 0
@@ -51,7 +52,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Show first page (no history for initial page)
         self.show_page(0, add_to_history=False)
         
-        print("✅ GTK4 window created")
+        print("[INFO] GTK4 window created")
     
     def apply_styling(self):
         """Apply custom CSS styling"""
@@ -59,6 +60,15 @@ class InstallerPoC(Gtk.ApplicationWindow):
         css_provider.load_from_data(b"""
             .installer-window {
                 background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                color: #e0e0e0;
+            }
+            
+            .installer-window label {
+                color: #e0e0e0;
+            }
+            
+            .installer-window image {
+                color: #e0e0e0;
             }
             
             .installer-title {
@@ -69,7 +79,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
             
             .installer-subtitle {
                 font-size: 16px;
-                color: #aaa;
+                color: #bbb;
             }
             
             .installer-button {
@@ -77,6 +87,38 @@ class InstallerPoC(Gtk.ApplicationWindow):
                 min-height: 50px;
                 font-size: 16px;
                 border-radius: 8px;
+            }
+            
+            button {
+                background: rgba(255,255,255,0.15);
+                color: #e0e0e0;
+                border: 1px solid rgba(255,255,255,0.2);
+                border-radius: 8px;
+                padding: 10px 20px;
+                min-height: 40px;
+            }
+            
+            button:hover {
+                background: rgba(255,255,255,0.25);
+                border-color: rgba(255,255,255,0.3);
+            }
+            
+            button image {
+                color: #e0e0e0;
+            }
+            
+            button.suggested-action {
+                background: rgba(52, 152, 219, 0.8);
+                color: white;
+                border-color: rgba(52, 152, 219, 1);
+            }
+            
+            button.suggested-action:hover {
+                background: rgba(52, 152, 219, 1);
+            }
+            
+            button.suggested-action image {
+                color: white;
             }
             
             .page-container {
@@ -88,6 +130,11 @@ class InstallerPoC(Gtk.ApplicationWindow):
                 border-radius: 8px;
                 padding: 20px;
                 margin: 10px 0;
+                color: #e0e0e0;
+            }
+            
+            .info-box label {
+                color: #e0e0e0;
             }
             
             .wifi-row {
@@ -121,12 +168,12 @@ class InstallerPoC(Gtk.ApplicationWindow):
         controller = Gtk.EventControllerKey()
         controller.connect("key-pressed", self.on_key_pressed)
         self.add_controller(controller)
-        print("✅ Input controller setup")
+        print("[INFO] Input controller setup")
     
     def on_key_pressed(self, controller, keyval, keycode, state):
         """Handle keyboard/gamepad input"""
         key_name = Gdk.keyval_name(keyval)
-        print(f"🎮 Key pressed: {key_name} (keyval: {keyval})")
+        print(f"[INPUT] Key pressed: {key_name} (keyval: {keyval})")
         
         # Navigation keys
         if keyval == Gdk.KEY_Return or keyval == Gdk.KEY_space:
@@ -163,7 +210,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
             # Avoid duplicate entries
             if len(self.page_history) == 0 or self.page_history[-1] != self.current_page:
                 self.page_history.append(self.current_page)
-                print(f"📚 History: {self.page_history}")
+                print(f"[NAV] History: {self.page_history}")
         
         self.current_page = page_num
         
@@ -178,24 +225,24 @@ class InstallerPoC(Gtk.ApplicationWindow):
         if 0 <= page_num < len(pages):
             content = pages[page_num]()
             self.set_child(content)
-            print(f"📄 Showing page {page_num + 1}/{len(pages)}")
+            print(f"[PAGE] Showing page {page_num + 1}/{len(pages)}")
     
     def go_back(self):
         """Go back to previous page using navigation history"""
         if len(self.page_history) > 0:
             previous_page = self.page_history.pop()
-            print(f"⬅️  Going back to page {previous_page + 1}")
-            print(f"📚 History after pop: {self.page_history}")
+            print(f"[NAV] Going back to page {previous_page + 1}")
+            print(f"[NAV] History after pop: {self.page_history}")
             self.show_page(previous_page, add_to_history=False)
         else:
             # No history, just go to previous page number
-            print("⬅️  No history, going to previous page number")
+            print("[NAV] No history, going to previous page number")
             if self.current_page > 0:
                 self.show_page(self.current_page - 1, add_to_history=False)
     
     def restart_wizard(self):
         """Restart the wizard from the beginning"""
-        print("🔄 Restarting wizard, clearing history")
+        print("[NAV] Restarting wizard, clearing history")
         self.page_history.clear()
         self.show_page(0, add_to_history=False)
     
@@ -214,7 +261,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Title
         title = Gtk.Label()
-        title.set_markup('<span size="xx-large" weight="bold" foreground="white">SkorionOS 图形化安装器</span>')
+        title.set_markup('<span size="xx-large" weight="bold">SkorionOS 图形化安装器</span>')
         title.add_css_class("installer-title")
         box.append(title)
         
@@ -235,15 +282,14 @@ class InstallerPoC(Gtk.ApplicationWindow):
         info_box.set_size_request(600, -1)
         
         tests = [
-            "✅ GTK4 窗口已创建",
-            "✅ Gamescope 合成器正常",
-            "✅ 输入系统已就绪",
+            "• GTK4 窗口已创建",
+            "• Gamescope 合成器正常",
+            "• 输入系统已就绪",
         ]
         
         for test in tests:
             label = Gtk.Label(label=test)
             label.set_xalign(0)
-            label.set_markup(f'<span foreground="white">{test}</span>')
             info_box.append(label)
         
         # Gamepad hint with icon
@@ -282,7 +328,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         title_box.append(network_icon)
         
         title = Gtk.Label()
-        title.set_markup('<span size="x-large" weight="bold" foreground="white">网络连接</span>')
+        title.set_markup('<span size="x-large" weight="bold">网络连接</span>')
         title_box.append(title)
         
         box.append(title_box)
@@ -302,22 +348,22 @@ class InstallerPoC(Gtk.ApplicationWindow):
             status_box.set_size_request(600, -1)
             
             connected_box = self.create_icon_label_box(
-                "emblem-ok-symbolic",
+                "radio-checked-symbolic",
                 "网络已连接，可以继续安装"
             )
             status_box.append(connected_box)
             
             box.append(status_box)
-        else:
-            # WiFi list
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_vexpand(True)
-            scroll.set_size_request(700, 300)
-            scroll.set_child(self.wifi_list)
-            box.append(scroll)
-            
-            # Scan networks
-            self.scan_networks()
+        
+        # Always show WiFi list for reselection
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_size_request(700, 300)
+        scroll.set_child(self.wifi_list)
+        box.append(scroll)
+        
+        # Scan networks
+        self.scan_networks()
         
         # Navigation buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -329,17 +375,17 @@ class InstallerPoC(Gtk.ApplicationWindow):
         back_btn.connect("clicked", lambda b: self.go_back())
         btn_box.append(back_btn)
         
-        if not is_online:
-            refresh_btn = Gtk.Button(label="刷新")
-            refresh_btn.set_icon_name("view-refresh-symbolic")
-            refresh_btn.connect("clicked", lambda b: self.show_page(1, add_to_history=False))
-            btn_box.append(refresh_btn)
-            
-            connect_btn = Gtk.Button(label="连接")
-            connect_btn.set_icon_name("network-wireless-symbolic")
-            connect_btn.add_css_class("suggested-action")
-            connect_btn.connect("clicked", lambda b: self.on_wifi_connect())
-            btn_box.append(connect_btn)
+        # Always show refresh and connect buttons
+        refresh_btn = Gtk.Button(label="刷新")
+        refresh_btn.set_icon_name("view-refresh-symbolic")
+        refresh_btn.connect("clicked", lambda b: self.show_page(1, add_to_history=False))
+        btn_box.append(refresh_btn)
+        
+        connect_btn = Gtk.Button(label="连接" if not is_online else "重新连接")
+        connect_btn.set_icon_name("network-wireless-symbolic")
+        connect_btn.add_css_class("suggested-action")
+        connect_btn.connect("clicked", lambda b: self.on_wifi_connect())
+        btn_box.append(connect_btn)
         
         skip_btn = Gtk.Button(label="跳过" if not is_online else "下一步")
         skip_btn.set_icon_name("go-next-symbolic")
@@ -433,9 +479,23 @@ class InstallerPoC(Gtk.ApplicationWindow):
         hbox.set_margin_start(10)
         hbox.set_margin_end(10)
         
+        # Check if this network is currently connected
+        is_connected = self.is_wifi_connected(ssid)
+        
+        # Connected indicator at the front (or placeholder for alignment)
+        if is_connected:
+            connected_icon = Gtk.Image.new_from_icon_name("radio-checked-symbolic")
+            connected_icon.set_icon_size(Gtk.IconSize.NORMAL)
+            hbox.append(connected_icon)
+        else:
+            # Empty placeholder to keep alignment
+            placeholder = Gtk.Box()
+            placeholder.set_size_request(16, 16)  # Same size as icon
+            hbox.append(placeholder)
+        
         # Security icon
         flags = ap.get_wpa_flags() | ap.get_rsn_flags()
-        if flags != NM.80211ApSecurityFlags.NONE:
+        if flags != 0:  # Check if network has encryption
             icon_name = "network-wireless-encrypted-symbolic"
         else:
             icon_name = "network-wireless-symbolic"
@@ -479,6 +539,35 @@ class InstallerPoC(Gtk.ApplicationWindow):
         else:
             return "network-wireless-signal-weak-symbolic"
     
+    def is_wifi_connected(self, ssid):
+        """Check if a specific WiFi network is currently connected"""
+        if not self.nm_client:
+            return False
+        
+        try:
+            active_connections = self.nm_client.get_active_connections()
+            for conn in active_connections:
+                if conn.get_connection_type() == "802-11-wireless":
+                    # Get the SSID of the active connection
+                    devices = conn.get_devices()
+                    if devices:
+                        device = devices[0]
+                        if hasattr(device, 'get_active_access_point'):
+                            active_ap = device.get_active_access_point()
+                            if active_ap:
+                                active_ssid_bytes = active_ap.get_ssid()
+                                if active_ssid_bytes:
+                                    try:
+                                        active_ssid = active_ssid_bytes.get_data().decode('utf-8')
+                                        if active_ssid == ssid:
+                                            return True
+                                    except:
+                                        pass
+        except Exception as e:
+            print(f"[ERROR] Failed to check connected WiFi: {e}")
+        
+        return False
+    
     def check_ethernet(self):
         """Check ethernet connections"""
         if not self.nm_client:
@@ -511,7 +600,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         label.set_hexpand(True)
         hbox.append(label)
         
-        ok_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+        ok_icon = Gtk.Image.new_from_icon_name("radio-checked-symbolic")
         ok_icon.set_icon_size(Gtk.IconSize.NORMAL)
         hbox.append(ok_icon)
         
@@ -554,7 +643,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         row.set_sensitive(False)
         
         box = self.create_icon_label_box(
-            "dialog-information-symbolic",
+            "radio-checked-symbolic",
             "未找到可用网络，请刷新重试"
         )
         box.set_margin_top(10)
@@ -580,7 +669,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Check if network needs password
         flags = ap.get_wpa_flags() | ap.get_rsn_flags()
-        if flags != NM.80211ApSecurityFlags.NONE:
+        if flags != 0:  # Check if network has encryption
             self.show_password_dialog(ap, ssid)
         else:
             self.connect_to_network(ap, ssid, None)
@@ -699,7 +788,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         try:
             active_conn = client.add_and_activate_connection_finish(result)
             if active_conn:
-                print(f"✅ Connected to {ssid}!")
+                print(f"[NETWORK] Connected to {ssid}!")
                 self.test_data['network_configured'] = True
                 
                 # Refresh page to show connected status - only if still on network page
@@ -710,7 +799,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
                 
                 GLib.timeout_add_seconds(2, refresh_if_on_network_page)
         except Exception as e:
-            print(f"❌ Connection failed: {e}")
+            print(f"[ERROR] Connection failed: {e}")
             # Show error dialog
             self.show_connection_error(str(e))
     
@@ -777,7 +866,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Title
         title = Gtk.Label()
-        title.set_markup('<span size="x-large" weight="bold" foreground="white">测试 Bash 集成</span>')
+        title.set_markup('<span size="x-large" weight="bold">测试 Bash 集成</span>')
         box.append(title)
         
         # Test results box
@@ -811,10 +900,22 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Test 4: Check network
         network = self.test_network()
-        network_icon = "network-idle-symbolic" if network else "network-offline-symbolic"
+        network_icon = "network-wired-symbolic" if network else "network-offline-symbolic"
         status_text = f"网络状态: {'已连接' if network else '未连接'}"
-        network_box = self.create_icon_label_box(network_icon, status_text)
-        results_box.append(network_box)
+        
+        # Create network box with custom color
+        network_label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        net_icon = Gtk.Image.new_from_icon_name(network_icon)
+        net_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        network_label_box.append(net_icon)
+        
+        net_label = Gtk.Label(label=status_text)
+        net_label.set_xalign(0)
+        if network:
+            net_label.set_markup(f'<span foreground="green">{status_text}</span>')
+        network_label_box.append(net_label)
+        
+        results_box.append(network_label_box)
         
         box.append(results_box)
         
@@ -846,7 +947,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Title
         title = Gtk.Label()
-        title.set_markup('<span size="x-large" weight="bold" foreground="white">测试数据选择</span>')
+        title.set_markup('<span size="x-large" weight="bold">测试数据选择</span>')
         box.append(title)
         
         # Radio buttons test
@@ -855,7 +956,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         group_box.set_size_request(500, -1)
         
         section_label = Gtk.Label()
-        section_label.set_markup('<span foreground="white" weight="bold">选择版本通道：</span>')
+        section_label.set_markup('<span weight="bold">选择版本通道：</span>')
         section_label.set_xalign(0)
         group_box.append(section_label)
         
@@ -892,7 +993,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         btn_box.append(back_btn)
         
         next_btn = Gtk.Button(label="完成测试")
-        next_btn.set_icon_name("emblem-ok-symbolic")
+        next_btn.set_icon_name("radio-checked-symbolic")
         next_btn.add_css_class("suggested-action")
         next_btn.connect("clicked", lambda b: self.show_page(4))
         btn_box.append(next_btn)
@@ -912,7 +1013,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=15)
         title_box.set_halign(Gtk.Align.CENTER)
         
-        success_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+        success_icon = Gtk.Image.new_from_icon_name("radio-checked-symbolic")
         success_icon.set_icon_size(Gtk.IconSize.LARGE)
         success_icon.set_pixel_size(64)
         title_box.append(success_icon)
@@ -930,15 +1031,15 @@ class InstallerPoC(Gtk.ApplicationWindow):
         results_box.set_size_request(600, -1)
         
         results = [
-            "✅ GTK4 图形界面正常",
-            "✅ Gamescope 合成器工作正常",
-            "✅ 键盘/手柄输入响应正常",
-            "✅ Bash 函数调用成功",
-            "✅ 网络连接管理正常",
-            "✅ 多页面导航正常",
-            "✅ 数据选择功能正常",
+            "• GTK4 图形界面正常",
+            "• Gamescope 合成器工作正常",
+            "• 键盘/手柄输入响应正常",
+            "• Bash 函数调用成功",
+            "• 网络连接管理正常",
+            "• 多页面导航正常",
+            "• 数据选择功能正常",
             "",
-            "🎉 可以继续开发完整版本！"
+            ">> 可以继续开发完整版本！"
         ]
         
         for result in results:
@@ -950,7 +1051,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Data summary
         summary_label = Gtk.Label()
-        summary_label.set_markup(f'''<span foreground="white">
+        summary_label.set_markup(f'''<span>
 测试数据: {self.test_data}
         </span>''')
         box.append(summary_label)
@@ -976,7 +1077,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
     def on_data_changed(self, key, value):
         """Handle data changes"""
         self.test_data[key] = value
-        print(f"📝 Data updated: {key} = {value}")
+        print(f"[DATA] Updated: {key} = {value}")
     
     # Helper functions - calling bash/system
     
@@ -1033,12 +1134,12 @@ class InstallerPoC(Gtk.ApplicationWindow):
 class InstallerApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id='com.skorionos.installer.poc')
-        print("🚀 SkorionOS Installer PoC starting...")
+        print("[START] SkorionOS Installer PoC starting...")
     
     def do_activate(self):
         win = InstallerPoC(application=self)
         win.present()
-        print("✅ Application activated")
+        print("[INFO] Application activated")
 
 if __name__ == '__main__':
     print("="*50)
