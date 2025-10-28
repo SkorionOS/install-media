@@ -53,3 +53,5 @@ vulkan-icd-loader
 vulkan-radeon
 vulkan-intel
 wayland
+libnm
+adwaita-icon-theme
