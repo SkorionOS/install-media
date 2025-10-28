@@ -55,7 +55,12 @@ class InstallerPoC(Gtk.ApplicationWindow):
         print("[INFO] GTK4 window created")
     
     def apply_styling(self):
-        """Apply custom CSS styling"""
+        """Apply custom CSS styling and dark theme"""
+        # Enable dark theme globally
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+        
         css_provider = Gtk.CssProvider()
         css_provider.load_from_data(b"""
             .installer-window {
@@ -69,6 +74,57 @@ class InstallerPoC(Gtk.ApplicationWindow):
             
             .installer-window image {
                 color: #e0e0e0;
+            }
+            
+            /* Dialog styling */
+            dialog {
+                background: #2b2b2b;
+                color: #e0e0e0;
+            }
+            
+            dialog .dialog-content-area {
+                background: #2b2b2b;
+            }
+            
+            dialog label {
+                color: #e0e0e0;
+            }
+            
+            dialog entry {
+                background: #3a3a3a;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 10px;
+                font-size: 16px;
+            }
+            
+            .password-title {
+                font-size: 20px;
+                font-weight: bold;
+                color: #e0e0e0;
+            }
+            
+            /* Dialog action area (bottom buttons) */
+            dialog .dialog-action-area {
+                padding: 20px;
+            }
+            
+            dialog .dialog-action-area button {
+                min-height: 44px;
+                min-width: 120px;
+                margin-left: 8px;
+                margin-right: 8px;
+                padding: 10px 24px;
+                font-size: 15px;
+            }
+            
+            dialog .dialog-action-area button:first-child {
+                margin-left: 0;
+            }
+            
+            dialog .dialog-action-area button:last-child {
+                margin-right: 0;
             }
             
             .installer-title {
@@ -93,9 +149,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
                 background: rgba(255,255,255,0.15);
                 color: #e0e0e0;
                 border: 1px solid rgba(255,255,255,0.2);
-                border-radius: 8px;
-                padding: 10px 20px;
-                min-height: 40px;
+                border-radius: 6px;
+                padding: 6px 12px;
+                min-height: 36px;
+                font-size: 14px;
             }
             
             button:hover {
@@ -119,6 +176,35 @@ class InstallerPoC(Gtk.ApplicationWindow):
             
             button.suggested-action image {
                 color: white;
+            }
+            
+            /* Larger nav buttons at page bottom */
+            button.nav-button {
+                min-height: 44px;
+                padding: 10px 24px;
+                font-size: 15px;
+            }
+            
+            /* Virtual keyboard buttons */
+            .keyboard-key {
+                background: #505050;
+                color: white;
+                border: 1px solid #707070;
+                border-radius: 4px;
+                min-width: 48px;
+                min-height: 48px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 0;
+            }
+            
+            .keyboard-key:hover {
+                background: #606060;
+                border-color: #808080;
+            }
+            
+            .keyboard-key:active {
+                background: #404040;
             }
             
             .page-container {
@@ -372,23 +458,27 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         back_btn = Gtk.Button(label="返回")
         back_btn.set_icon_name("go-previous-symbolic")
+        back_btn.add_css_class("nav-button")
         back_btn.connect("clicked", lambda b: self.go_back())
         btn_box.append(back_btn)
         
         # Always show refresh and connect buttons
         refresh_btn = Gtk.Button(label="刷新")
         refresh_btn.set_icon_name("view-refresh-symbolic")
+        refresh_btn.add_css_class("nav-button")
         refresh_btn.connect("clicked", lambda b: self.show_page(1, add_to_history=False))
         btn_box.append(refresh_btn)
         
         connect_btn = Gtk.Button(label="连接" if not is_online else "重新连接")
         connect_btn.set_icon_name("network-wireless-symbolic")
         connect_btn.add_css_class("suggested-action")
+        connect_btn.add_css_class("nav-button")
         connect_btn.connect("clicked", lambda b: self.on_wifi_connect())
         btn_box.append(connect_btn)
         
         skip_btn = Gtk.Button(label="跳过" if not is_online else "下一步")
         skip_btn.set_icon_name("go-next-symbolic")
+        skip_btn.add_css_class("nav-button")
         skip_btn.connect("clicked", lambda b: self.show_page(2))
         btn_box.append(skip_btn)
         
@@ -654,6 +744,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
     
     def on_wifi_connect(self):
         """Handle WiFi connect button"""
+        print("[INFO] WiFi connect button clicked")
         # Prevent multiple connection attempts
         if self.connecting:
             print("⚠️  Connection already in progress")
@@ -666,64 +757,428 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         ap = row.ap
         ssid = row.ssid
+        print(f"[INFO] Selected network: {ssid}")
         
         # Check if network needs password
         flags = ap.get_wpa_flags() | ap.get_rsn_flags()
+        print(f"[INFO] Network encryption flags: {flags}")
         if flags != 0:  # Check if network has encryption
+            print("[INFO] Network requires password, showing dialog")
             self.show_password_dialog(ap, ssid)
         else:
+            print("[INFO] Network is open, connecting directly")
             self.connect_to_network(ap, ssid, None)
     
     def show_password_dialog(self, ap, ssid):
-        """Show password input dialog"""
+        """Show password input dialog with virtual keyboard"""
         # Prevent multiple dialogs
         if self.password_dialog is not None:
             print("⚠️  Password dialog already open")
             return
         
-        dialog = Gtk.Dialog(title="输入密码")
+        print(f"[INFO] Showing password dialog for: {ssid}")
+        
+        # Create dialog (same 16:10 ratio as main window)
+        dialog = Gtk.Dialog(title=f"连接到: {ssid}")
         dialog.set_transient_for(self)
         dialog.set_modal(True)
-        dialog.set_default_size(400, 200)
+        dialog.set_default_size(960, 600)  # 16:10 ratio
         self.password_dialog = dialog
         
+        # Content area
         content = dialog.get_content_area()
         content.set_margin_top(20)
         content.set_margin_bottom(20)
         content.set_margin_start(20)
         content.set_margin_end(20)
-        content.set_spacing(15)
+        content.set_spacing(20)
         
-        # Network info
-        info_box = self.create_icon_label_box(
-            "network-wireless-encrypted-symbolic",
-            f"网络: {ssid}"
-        )
+        # Network info with icon
+        info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        info_box.set_halign(Gtk.Align.CENTER)
+        
+        icon = Gtk.Image.new_from_icon_name("network-wireless-encrypted-symbolic")
+        icon.set_pixel_size(32)
+        info_box.append(icon)
+        
+        ssid_label = Gtk.Label(label=ssid)
+        ssid_label.add_css_class("password-title")
+        info_box.append(ssid_label)
+        
         content.append(info_box)
         
-        # Password entry
+        # Password entry with show/hide toggle
+        entry_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        
         entry = Gtk.Entry()
         entry.set_visibility(False)
         entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
-        entry.set_placeholder_text("输入密码")
-        content.append(entry)
+        entry.set_placeholder_text("输入WiFi密码")
+        entry.set_size_request(-1, 45)
+        entry.set_hexpand(True)
+        entry_box.append(entry)
         
-        # Buttons
-        dialog.add_button("取消", Gtk.ResponseType.CANCEL)
+        # Show/hide password toggle button
+        self.password_visible = False
+        toggle_btn = Gtk.Button()
+        toggle_btn.set_icon_name("view-conceal-symbolic")
+        toggle_btn.set_size_request(45, 45)
+        toggle_btn.set_tooltip_text("显示/隐藏密码")
+        toggle_btn.connect("clicked", lambda b: self.toggle_password_visibility(entry, b))
+        entry_box.append(toggle_btn)
+        
+        content.append(entry_box)
+        
+        # Virtual keyboard (pass dialog for Enter key)
+        keyboard = self.create_virtual_keyboard(entry, dialog)
+        content.append(keyboard)
+        
+        # Dialog buttons
+        cancel_btn = dialog.add_button("取消", Gtk.ResponseType.CANCEL)
         connect_btn = dialog.add_button("连接", Gtk.ResponseType.OK)
+        
+        # Apply styling to buttons - make them wider
+        cancel_btn.set_size_request(150, 44)
+        cancel_btn.set_margin_end(8)
+        
+        connect_btn.set_size_request(150, 44)
+        connect_btn.set_margin_start(8)
+        connect_btn.set_margin_end(30)
         connect_btn.add_css_class("suggested-action")
         
+        # Handle response
         dialog.connect("response", lambda d, r: self.on_password_response(d, r, ap, ssid, entry))
+        
         dialog.present()
+        print("[INFO] Password dialog presented")
+    
+    def create_virtual_keyboard(self, entry, dialog=None):
+        """Create virtual keyboard for password input"""
+        # Keyboard button size configuration (easy to adjust)
+        self.key_size = 48  # Base key size (was 40)
+        self.key_height = 48  # Key height (was 40)
+        self.key_spacing = 4  # Spacing between keys
+        
+        # Create a container for keyboard
+        container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=self.key_spacing)
+        container.set_halign(Gtk.Align.CENTER)
+        
+        # Keyboard state and letter buttons list
+        self.keyboard_shift = False
+        self.caps_lock = False
+        self.keyboard_symbol_mode = False  # False = letters, True = symbols
+        self.keyboard_letter_btns = []
+        
+        # Create letter keyboard
+        self.letter_keyboard = self.create_letter_keyboard(entry, dialog)
+        # Create symbol keyboard
+        self.symbol_keyboard = self.create_symbol_keyboard(entry)
+        
+        # Show letter keyboard by default
+        container.append(self.letter_keyboard)
+        self.current_keyboard_container = container
+        
+        return container
+    
+    def create_letter_keyboard(self, entry, dialog=None):
+        """Create letter keyboard layout"""
+        keyboard = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=self.key_spacing)
+        keyboard.set_halign(Gtk.Align.CENTER)
+        
+        # Define keyboard layout: (label, units, callback)
+        # units: -1 means expand/fill, positive number means fixed units
+        layout = [
+            # Row 1: Numbers + Backspace
+            [
+                ('1', 1), ('2', 1), ('3', 1), ('4', 1), ('5', 1),
+                ('6', 1), ('7', 1), ('8', 1), ('9', 1), ('0', 1),
+                ('←', 2, 'backspace'),
+            ],
+            # Row 2: Q-P
+            [
+                ('', 0.5), ('q', 1), ('w', 1), ('e', 1), ('r', 1), ('t', 1),
+                ('y', 1), ('u', 1), ('i', 1), ('o', 1), ('p', 1), ('|', 1)
+            ],
+            # Row 3: Caps + A-L + Backspace
+            [
+                ('⇪', 1, 'caps'),
+                ('a', 1), ('s', 1), ('d', 1), ('f', 1), ('g', 1),
+                ('h', 1), ('j', 1), ('k', 1), ('l', 1),
+                ('↵', -1, 'enter')
+            ],
+            # Row 4: Shift + Z-M + Enter
+            [
+                ('⇧', 1.5, 'shift'),
+                ('z', 1), ('x', 1), ('c', 1), ('v', 1),
+                ('b', 1), ('n', 1), ('m', 1),
+                ('<', 1), ('>', 1), ('/', -1),
+            ],
+            # Row 5: Symbol + Space + Clear
+            [
+                ('?123', -1, 'symbol'),
+                ('空格', 6, 'space'),
+                ('清空', -1, 'clear'),
+            ],
+        ]
+        
+        for row_index, row_layout in enumerate(layout):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=self.key_spacing)
+            
+            for item in row_layout:
+                label = item[0]
+                units = item[1]
+                action = item[2] if len(item) > 2 else None
+                
+                # Check if it's a spacer (empty label)
+                is_spacer = (label == '' or label is None)
+                
+                if is_spacer:
+                    # Create invisible spacer
+                    spacer = Gtk.Box()
+                    # Width includes spacing: units * key_size + (units-1) * spacing
+                    if units > 0:
+                        spacer_width = int(self.key_size * units + self.key_spacing * (units - 1))
+                        spacer.set_size_request(spacer_width, self.key_height)
+                    row.append(spacer)
+                    continue
+                
+                btn = Gtk.Button(label=label)
+                btn.add_css_class("keyboard-key")
+                
+                # Set button width based on units
+                if units == -1:
+                    # Expand to fill
+                    btn.set_hexpand(True)
+                    btn.set_size_request(-1, self.key_height)
+                else:
+                    # Fixed units: width includes spacing
+                    # Formula: units * key_size + (units-1) * spacing
+                    width = int(self.key_size * units + self.key_spacing * (units - 1))
+                    btn.set_size_request(width, self.key_height)
+                
+                # Connect actions
+                if action == 'backspace':
+                    btn.connect("clicked", lambda b: self.on_keyboard_backspace(entry))
+                elif action == 'caps':
+                    self.caps_btn = btn
+                    btn.connect("clicked", lambda b: self.on_keyboard_caps())
+                elif action == 'shift':
+                    self.shift_btn = btn
+                    btn.connect("clicked", lambda b: self.on_keyboard_shift())
+                elif action == 'enter':
+                    if dialog:
+                        btn.connect("clicked", lambda b: dialog.response(Gtk.ResponseType.OK))
+                elif action == 'symbol':
+                    btn.connect("clicked", lambda b: self.switch_keyboard_mode(entry))
+                elif action == 'space':
+                    btn.connect("clicked", lambda b: self.on_keyboard_key(entry, ' '))
+                elif action == 'clear':
+                    btn.connect("clicked", lambda b: entry.set_text(""))
+                else:
+                    # Regular letter/number key
+                    btn.char = label
+                    btn.connect("clicked", lambda b, l=label: self.on_keyboard_key(entry, l))
+                    if label.isalpha():
+                        self.keyboard_letter_btns.append(btn)
+                
+                row.append(btn)
+            
+            keyboard.append(row)
+        
+        return keyboard
+    
+    def create_symbol_keyboard(self, entry):
+        """Create symbol keyboard layout"""
+        keyboard = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=self.key_spacing)
+        keyboard.set_halign(Gtk.Align.CENTER)
+        
+        # Define symbol keyboard layout
+        layout = [
+            # Row 1: Symbols + Backspace
+            [
+                ('!', 1), ('@', 1), ('#', 1), ('$', 1), ('%', 1),
+                ('^', 1), ('&', 1), ('*', 1), ('(', 1), (')', 1),
+                ('←', 2, 'backspace'),
+            ],
+            # Row 2: More symbols
+            [
+                ('', 0.5),
+                ('+', 1), ('=', 1), ('<', 1), ('>', 1), ('?', 1),
+                ('/', 1), ('\\', 1), ('|', 1), ('_', 1), ('-', 1),
+            ],
+            # Row 3: Even more symbols
+            [
+                ('', 1),
+                (':', 1), (';', 1), ("'", 1), ('"', 1), (',', 1),
+                ('.', 1), ('[', 1), (']', 1), ('{', 1), ('}', 1),
+            ],
+            # Row 4: Special symbols + Backspace
+            [
+                ('', 0.5),
+                ('~', 1), ('`', 1), ('€', 1), ('£', 1), ('¥', 1),
+                ('§', 1), ('©', 1), ('®', 1), ('™', 1),
+                ('←', -1, 'backspace'),
+            ],
+            # Row 5: ABC + Space + Clear
+            [
+                ('ABC', -1, 'letter'),
+                ('空格', 6, 'space'),
+                ('清空', -1, 'clear'),
+            ],
+        ]
+        
+        for row_index, row_layout in enumerate(layout):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=self.key_spacing)
+            
+            for item in row_layout:
+                label = item[0]
+                units = item[1]
+                action = item[2] if len(item) > 2 else None
+                
+                # Check if it's a spacer
+                is_spacer = (label == '' or label is None)
+                
+                if is_spacer:
+                    # Create invisible spacer
+                    spacer = Gtk.Box()
+                    if units > 0:
+                        spacer_width = int(self.key_size * units + self.key_spacing * (units - 1))
+                        spacer.set_size_request(spacer_width, self.key_height)
+                    row.append(spacer)
+                    continue
+                
+                btn = Gtk.Button(label=label)
+                btn.add_css_class("keyboard-key")
+                
+                # Set button width
+                if units == -1:
+                    btn.set_hexpand(True)
+                    btn.set_size_request(-1, self.key_height)
+                else:
+                    width = int(self.key_size * units + self.key_spacing * (units - 1))
+                    btn.set_size_request(width, self.key_height)
+                
+                # Connect actions
+                if action == 'backspace':
+                    btn.connect("clicked", lambda b: self.on_keyboard_backspace(entry))
+                elif action == 'letter':
+                    btn.connect("clicked", lambda b: self.switch_keyboard_mode(entry))
+                elif action == 'space':
+                    btn.connect("clicked", lambda b: self.on_keyboard_key(entry, ' '))
+                elif action == 'clear':
+                    btn.connect("clicked", lambda b: entry.set_text(""))
+                else:
+                    # Regular symbol key
+                    btn.char = label
+                    btn.connect("clicked", lambda b, l=label: self.on_keyboard_key(entry, l))
+                
+                row.append(btn)
+            
+            keyboard.append(row)
+        
+        return keyboard
+    
+    def switch_keyboard_mode(self, entry):
+        """Switch between letter and symbol keyboard"""
+        self.keyboard_symbol_mode = not self.keyboard_symbol_mode
+        
+        # Remove current keyboard
+        child = self.current_keyboard_container.get_first_child()
+        if child:
+            self.current_keyboard_container.remove(child)
+        
+        # Add the other keyboard
+        if self.keyboard_symbol_mode:
+            self.current_keyboard_container.append(self.symbol_keyboard)
+        else:
+            self.current_keyboard_container.append(self.letter_keyboard)
+    
+    def create_keyboard_button(self, char, entry, units=1):
+        """Create a keyboard button with specified units"""
+        btn = Gtk.Button(label=char)
+        btn.add_css_class("keyboard-key")
+        # Width includes spacing: units * key_size + (units-1) * spacing
+        width = int(self.key_size * units + self.key_spacing * (units - 1))
+        btn.set_size_request(width, self.key_height)
+        btn.char = char  # Store original char
+        btn.connect("clicked", lambda b: self.on_keyboard_key(entry, b.get_label()))
+        return btn
+    
+    def on_keyboard_key(self, entry, char):
+        """Handle keyboard key press"""
+        current = entry.get_text()
+        # Apply shift or caps lock for letters
+        if (self.keyboard_shift or self.caps_lock) and char.isalpha():
+            char = char.upper()
+        entry.set_text(current + char)
+        # Reset shift after letter input (but not caps lock)
+        if self.keyboard_shift and char.isalpha():
+            self.on_keyboard_shift()
+    
+    def on_keyboard_backspace(self, entry):
+        """Handle backspace"""
+        current = entry.get_text()
+        if current:
+            entry.set_text(current[:-1])
+    
+    def on_keyboard_shift(self):
+        """Toggle shift state"""
+        self.keyboard_shift = not self.keyboard_shift
+        
+        if self.keyboard_shift:
+            self.shift_btn.add_css_class("suggested-action")
+        else:
+            self.shift_btn.remove_css_class("suggested-action")
+        
+        # Update all letter buttons
+        self.update_letter_case()
+    
+    def on_keyboard_caps(self):
+        """Toggle caps lock state"""
+        self.caps_lock = not self.caps_lock
+        
+        if self.caps_lock:
+            self.caps_btn.add_css_class("suggested-action")
+        else:
+            self.caps_btn.remove_css_class("suggested-action")
+        
+        # Update all letter buttons
+        self.update_letter_case()
+    
+    def update_letter_case(self):
+        """Update all letter buttons based on shift/caps state"""
+        for btn in self.keyboard_letter_btns:
+            current_label = btn.get_label()
+            # Show uppercase if either shift OR caps is active
+            if self.keyboard_shift or self.caps_lock:
+                btn.set_label(current_label.upper())
+            else:
+                btn.set_label(current_label.lower())
+    
+    def toggle_password_visibility(self, entry, button):
+        """Toggle password visibility"""
+        self.password_visible = not self.password_visible
+        entry.set_visibility(self.password_visible)
+        
+        # Update button icon
+        if self.password_visible:
+            button.set_icon_name("view-reveal-symbolic")
+        else:
+            button.set_icon_name("view-conceal-symbolic")
     
     def on_password_response(self, dialog, response, ap, ssid, entry):
         """Handle password dialog response"""
+        print(f"[INFO] Password dialog response: {response}")
+        
         if response == Gtk.ResponseType.OK:
             password = entry.get_text()
+            print(f"[INFO] Password length: {len(password)}")
             if password:
                 self.connect_to_network(ap, ssid, password)
+            else:
+                print("⚠️  Password is empty")
         
-        # Clear dialog reference before closing
+        # Close dialog
         self.password_dialog = None
         dialog.close()
     
@@ -925,12 +1380,14 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         back_btn = Gtk.Button(label="返回")
         back_btn.set_icon_name("go-previous-symbolic")
+        back_btn.add_css_class("nav-button")
         back_btn.connect("clicked", lambda b: self.go_back())
         btn_box.append(back_btn)
         
         next_btn = Gtk.Button(label="下一步")
         next_btn.set_icon_name("go-next-symbolic")
         next_btn.add_css_class("suggested-action")
+        next_btn.add_css_class("nav-button")
         next_btn.connect("clicked", lambda b: self.show_page(3))
         btn_box.append(next_btn)
         
@@ -989,12 +1446,14 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         back_btn = Gtk.Button(label="返回")
         back_btn.set_icon_name("go-previous-symbolic")
+        back_btn.add_css_class("nav-button")
         back_btn.connect("clicked", lambda b: self.go_back())
         btn_box.append(back_btn)
         
         next_btn = Gtk.Button(label="完成测试")
         next_btn.set_icon_name("radio-checked-symbolic")
         next_btn.add_css_class("suggested-action")
+        next_btn.add_css_class("nav-button")
         next_btn.connect("clicked", lambda b: self.show_page(4))
         btn_box.append(next_btn)
         
