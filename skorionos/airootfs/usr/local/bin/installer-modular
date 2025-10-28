@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# SkorionOS Graphical Installer - Modular Version Launcher
+# This script sets up the environment and launches the modular installer
+
+set -e
+
+echo "=========================================="
+echo "SkorionOS Installer - Modular Version"
+echo "=========================================="
+echo ""
+
+# Check dependencies
+REQUIRED_BINS=("gamescope" "python3")
+MISSING_BINS=()
+
+for bin in "${REQUIRED_BINS[@]}"; do
+    if ! command -v "$bin" &> /dev/null; then
+        MISSING_BINS+=("$bin")
+    fi
+done
+
+if [ ${#MISSING_BINS[@]} -gt 0 ]; then
+    echo "❌ Error: Missing dependencies: ${MISSING_BINS[*]}"
+    echo "   Please install them first."
+    exit 1
+fi
+
+# Check Python modules
+echo "Checking Python dependencies..."
+if ! python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null; then
+    echo "❌ Error: GTK4 Python bindings not found"
+    echo "   Install python-gobject package"
+    exit 1
+fi
+
+if ! python3 -c "import gi; gi.require_version('NM', '1.0')" 2>/dev/null; then
+    echo "⚠️  Warning: NetworkManager Python bindings not found"
+    echo "   Network features may not work"
+fi
+
+echo "✅ All dependencies found"
+echo ""
+
+# Setup XDG_RUNTIME_DIR
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    export XDG_RUNTIME_DIR="/tmp/runtime-${USER}"
+    mkdir -p "$XDG_RUNTIME_DIR"
+    chmod 700 "$XDG_RUNTIME_DIR"
+    echo "✅ Created XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+fi
+
+# Detect screen resolution
+WIDTH=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 1 || echo "1280")
+HEIGHT=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 2 || echo "800")
+
+# Fallback to xrandr if fb0 doesn't exist
+if [ "$WIDTH" == "1280" ] && command -v xrandr &> /dev/null; then
+    RESOLUTION=$(xrandr 2>/dev/null | grep '*' | awk '{print $1}' | head -n1)
+    if [ -n "$RESOLUTION" ]; then
+        WIDTH=$(echo "$RESOLUTION" | cut -d 'x' -f 1)
+        HEIGHT=$(echo "$RESOLUTION" | cut -d 'x' -f 2)
+    fi
+fi
+
+echo "📺 Detected resolution: ${WIDTH}x${HEIGHT}"
+
+# GDK_SCALE is optional - you can set it manually for testing
+# It will work combined with CSS scaling
+# export GDK_SCALE=2
+
+# Pass actual resolution to Python app (UI will auto-scale via CSS)
+export INSTALLER_WIDTH="$WIDTH"
+export INSTALLER_HEIGHT="$HEIGHT"
+echo "📐 Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
+
+export INNER_WIDTH=1280
+export INNER_HEIGHT=720
+echo "📐 Inner window size: ${INNER_WIDTH}x${INNER_HEIGHT}"
+
+# UI_SCALE can be set manually (default: 1.0)
+# export UI_SCALE=2.0
+
+echo "🚀 Starting gamescope..."
+echo ""
+
+# Log file for debugging
+LOGFILE="/tmp/installer-modular.log"
+echo "📝 Logging to: $LOGFILE"
+echo ""
+
+# Launch gamescope + installer (with logging)
+{
+    echo "=========================================="
+    echo "Installer Modular Log - $(date)"
+    echo "=========================================="
+    echo "Resolution: ${WIDTH}x${HEIGHT}"
+    echo "INSTALLER_WIDTH: $INSTALLER_WIDTH"
+    echo "INSTALLER_HEIGHT: $INSTALLER_HEIGHT"
+    echo "UI_SCALE: ${UI_SCALE:-1.0}"
+    echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+    echo "TTY: $(tty)"
+    echo ""
+    
+    gamescope \
+      -W "$WIDTH" \
+      -H "$HEIGHT" \
+      -w "$INNER_WIDTH" \
+      -h "$INNER_HEIGHT" \
+      -f \
+      -F fsr \
+      --force-grab-cursor \
+      --expose-wayland \
+      -- python3 /usr/local/bin/installer-poc-modular "$@" 2>&1
+    
+    EXIT_CODE=$?
+    echo ""
+    echo "=========================================="
+    echo "Exit code: $EXIT_CODE"
+    echo "=========================================="
+    exit $EXIT_CODE
+} | tee "$LOGFILE"
+

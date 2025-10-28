@@ -3,3 +3,4 @@ output/
 skorionos/extra_pkg/
 skorionos/work/
 skorionos/pacman.conf
+*.pyc
