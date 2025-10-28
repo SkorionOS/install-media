@@ -1,0 +1,56 @@
+#!/bin/bash
+# PoC Launcher for Graphical Installer
+
+echo "=========================================="
+echo "SkorionOS Graphical Installer PoC"
+echo "=========================================="
+
+# Check dependencies
+check_dependencies() {
+    local missing=()
+    
+    command -v gamescope >/dev/null 2>&1 || missing+=("gamescope")
+    command -v python3 >/dev/null 2>&1 || missing+=("python3")
+    python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null || missing+=("python-gobject + GTK4")
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "❌ Missing dependencies: ${missing[*]}"
+        echo ""
+        echo "Please install:"
+        echo "  pacman -S gamescope gtk4 python-gobject"
+        echo ""
+        read -p "Press any key to return..." -n1
+        exit 1
+    fi
+    
+    echo "✅ All dependencies installed"
+}
+
+check_dependencies
+
+# Setup environment
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+
+# Detect resolution
+RESOLUTION=$(cat /sys/class/drm/card*/modes 2>/dev/null | head -1)
+WIDTH=${RESOLUTION%x*}
+HEIGHT=${RESOLUTION#*x}
+
+# Default resolution if detection fails
+WIDTH=${WIDTH:-1280}
+HEIGHT=${HEIGHT:-800}
+
+echo "✅ Detected resolution: ${WIDTH}x${HEIGHT}"
+echo "🚀 Starting gamescope..."
+echo ""
+
+# Launch gamescope + installer
+exec gamescope \
+  -W "$WIDTH" \
+  -H "$HEIGHT" \
+  -f \
+  --force-grab-cursor \
+  -- python3 /usr/local/bin/installer-poc.py "$@"
+

@@ -5,6 +5,7 @@ on:
     - 'sk'
     - 'dialog'
     - 'skorionos'
+    - 'gui'
 jobs:
   build:
     name: Build ISO (${{ matrix.variant }})

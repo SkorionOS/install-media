@@ -42,3 +42,14 @@ vim
 wget
 zsh
 networkmanager
+
+# Graphical installer dependencies (PoC)
+gamescope
+gtk4
+python-gobject
+mesa
+libdrm
+vulkan-icd-loader
+vulkan-radeon
+vulkan-intel
+wayland

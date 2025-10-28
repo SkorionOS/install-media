@@ -105,4 +105,44 @@ check_internet_connection
 
 check_and_update_install_script
 
-eval "$INSTALL_SCRIPT"
+# ===== Select installer mode =====
+INSTALLER_MODE=""
+
+# Check if graphical installer is available
+if command -v gamescope &> /dev/null && \
+   command -v python3 &> /dev/null && \
+   python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null && \
+   [ -f /usr/local/bin/installer-poc ]; then
+  
+  TEMP_FILE=$(mktemp)
+  if (dialog --colors --title "\Z1SkorionOS 安装器\Zn" \
+    --default-item "text" \
+    --menu "请选择安装器模式" 15 70 2 \
+    "text" "文本安装器 -- 默认，稳定可靠" \
+    "poc"  "图形化安装器 -- PoC 测试版，验证新界面" \
+    2> $TEMP_FILE
+  ); then
+    INSTALLER_MODE=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    # User cancelled, default to text mode
+    INSTALLER_MODE="text"
+    rm $TEMP_FILE
+  fi
+else
+  # Graphical installer not available, use text mode
+  INSTALLER_MODE="text"
+fi
+
+# Launch installer based on selection
+case "$INSTALLER_MODE" in
+  poc)
+    clear
+    echo "启动图形化安装器 PoC..."
+    exec /usr/local/bin/installer-poc
+    ;;
+  text|*)
+    # Default text mode
+    eval "$INSTALL_SCRIPT"
+    ;;
+esac
