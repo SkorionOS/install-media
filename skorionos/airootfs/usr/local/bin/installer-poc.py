@@ -469,12 +469,24 @@ class InstallerPoC(Gtk.ApplicationWindow):
         refresh_btn.connect("clicked", lambda b: self.show_page(1, add_to_history=False))
         btn_box.append(refresh_btn)
         
+        # Check if currently connected to WiFi
+        connected_wifi = self.get_connected_wifi_ssid()
+        
         connect_btn = Gtk.Button(label="连接" if not is_online else "重新连接")
         connect_btn.set_icon_name("network-wireless-symbolic")
         connect_btn.add_css_class("suggested-action")
         connect_btn.add_css_class("nav-button")
         connect_btn.connect("clicked", lambda b: self.on_wifi_connect())
         btn_box.append(connect_btn)
+        
+        # Add disconnect button if connected to WiFi
+        if connected_wifi:
+            disconnect_btn = Gtk.Button(label="断开连接")
+            disconnect_btn.set_icon_name("network-wireless-offline-symbolic")
+            disconnect_btn.add_css_class("destructive-action")
+            disconnect_btn.add_css_class("nav-button")
+            disconnect_btn.connect("clicked", lambda b: self.on_wifi_disconnect())
+            btn_box.append(disconnect_btn)
         
         skip_btn = Gtk.Button(label="跳过" if not is_online else "下一步")
         skip_btn.set_icon_name("go-next-symbolic")
@@ -629,10 +641,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
         else:
             return "network-wireless-signal-weak-symbolic"
     
-    def is_wifi_connected(self, ssid):
-        """Check if a specific WiFi network is currently connected"""
+    def get_connected_wifi_ssid(self):
+        """Get the SSID of currently connected WiFi, or None if not connected"""
         if not self.nm_client:
-            return False
+            return None
         
         try:
             active_connections = self.nm_client.get_active_connections()
@@ -649,14 +661,18 @@ class InstallerPoC(Gtk.ApplicationWindow):
                                 if active_ssid_bytes:
                                     try:
                                         active_ssid = active_ssid_bytes.get_data().decode('utf-8')
-                                        if active_ssid == ssid:
-                                            return True
+                                        return active_ssid
                                     except:
                                         pass
         except Exception as e:
-            print(f"[ERROR] Failed to check connected WiFi: {e}")
+            print(f"[ERROR] Failed to get connected WiFi: {e}")
         
-        return False
+        return None
+    
+    def is_wifi_connected(self, ssid):
+        """Check if a specific WiFi network is currently connected"""
+        connected_ssid = self.get_connected_wifi_ssid()
+        return connected_ssid == ssid if connected_ssid else False
     
     def check_ethernet(self):
         """Check ethernet connections"""
@@ -769,6 +785,57 @@ class InstallerPoC(Gtk.ApplicationWindow):
             print("[INFO] Network is open, connecting directly")
             self.connect_to_network(ap, ssid, None)
     
+    def on_wifi_disconnect(self):
+        """Handle WiFi disconnect button"""
+        print("[INFO] WiFi disconnect button clicked")
+        
+        if not self.nm_client:
+            print("[ERROR] NetworkManager client not available")
+            return
+        
+        # Get currently connected WiFi
+        connected_ssid = self.get_connected_wifi_ssid()
+        if not connected_ssid:
+            print("[WARN] No WiFi connection to disconnect")
+            return
+        
+        print(f"[INFO] Disconnecting from: {connected_ssid}")
+        
+        # Find and deactivate the active WiFi connection
+        try:
+            active_connections = self.nm_client.get_active_connections()
+            for conn in active_connections:
+                if conn.get_connection_type() == "802-11-wireless":
+                    print(f"[INFO] Deactivating connection: {conn.get_id()}")
+                    self.nm_client.deactivate_connection_async(
+                        conn, None,
+                        self.on_disconnection_complete, connected_ssid
+                    )
+                    return
+        except Exception as e:
+            print(f"[ERROR] Failed to disconnect: {e}")
+    
+    def on_disconnection_complete(self, client, result, ssid):
+        """Handle disconnection result"""
+        try:
+            success = client.deactivate_connection_finish(result)
+            if success:
+                print(f"[NETWORK] Disconnected from {ssid}")
+                self.test_data['network_configured'] = False
+                
+                # Refresh network page after a short delay to ensure state is updated
+                def refresh_network_page():
+                    if self.current_page == 1:
+                        print(f"[NETWORK] Refreshing network page after disconnect")
+                        self.show_page(1, add_to_history=False)
+                    return False  # Don't repeat
+                
+                GLib.timeout_add(500, refresh_network_page)  # 0.5 second delay
+            else:
+                print(f"[ERROR] Failed to disconnect from {ssid}")
+        except Exception as e:
+            print(f"[ERROR] Disconnection error: {e}")
+    
     def show_password_dialog(self, ap, ssid):
         """Show password input dialog with virtual keyboard"""
         # Prevent multiple dialogs
@@ -829,9 +896,26 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         content.append(entry_box)
         
+        # Status label (for connection feedback)
+        status_label = Gtk.Label()
+        status_label.set_wrap(True)
+        status_label.set_justify(Gtk.Justification.CENTER)
+        status_label.set_visible(False)  # Hidden by default
+        content.append(status_label)
+        dialog.status_label = status_label  # Store reference
+        
+        # Spinner for connecting state
+        spinner = Gtk.Spinner()
+        spinner.set_size_request(32, 32)
+        spinner.set_halign(Gtk.Align.CENTER)
+        spinner.set_visible(False)
+        content.append(spinner)
+        dialog.spinner = spinner  # Store reference
+        
         # Virtual keyboard (pass dialog for Enter key)
         keyboard = self.create_virtual_keyboard(entry, dialog)
         content.append(keyboard)
+        dialog.keyboard = keyboard  # Store reference
         
         # Dialog buttons
         cancel_btn = dialog.add_button("取消", Gtk.ResponseType.CANCEL)
@@ -845,6 +929,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
         connect_btn.set_margin_start(8)
         connect_btn.set_margin_end(30)
         connect_btn.add_css_class("suggested-action")
+        
+        # Store button references for later access
+        dialog.cancel_btn = cancel_btn
+        dialog.connect_btn = connect_btn
         
         # Handle response
         dialog.connect("response", lambda d, r: self.on_password_response(d, r, ap, ssid, entry))
@@ -1170,17 +1258,31 @@ class InstallerPoC(Gtk.ApplicationWindow):
         """Handle password dialog response"""
         print(f"[INFO] Password dialog response: {response}")
         
+        if response == Gtk.ResponseType.CANCEL:
+            # User cancelled
+            self.password_dialog = None
+            dialog.close()
+            return
+        
         if response == Gtk.ResponseType.OK:
             password = entry.get_text()
             print(f"[INFO] Password length: {len(password)}")
-            if password:
-                self.connect_to_network(ap, ssid, password)
-            else:
+            if not password:
                 print("⚠️  Password is empty")
-        
-        # Close dialog
-        self.password_dialog = None
-        dialog.close()
+                return
+            
+            # Disable the connect button to prevent multiple clicks
+            dialog.connect_btn.set_sensitive(False)
+            
+            # Hide keyboard and show connecting status
+            dialog.keyboard.set_visible(False)
+            dialog.status_label.set_markup('<span foreground="#4a90d9">正在连接...</span>')
+            dialog.status_label.set_visible(True)
+            dialog.spinner.set_spinning(True)
+            dialog.spinner.set_visible(True)
+            
+            # Start connection (don't close dialog yet)
+            self.connect_to_network(ap, ssid, password)
     
     def connect_to_network(self, ap, ssid, password):
         """Connect to selected network"""
@@ -1189,9 +1291,6 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Set connecting flag
         self.connecting = True
-        
-        # Show connecting dialog
-        self.show_connecting_dialog(ssid)
         
         ssid_bytes = ap.get_ssid()
         
@@ -1237,47 +1336,141 @@ class InstallerPoC(Gtk.ApplicationWindow):
         """Handle connection result"""
         self.connecting = False  # Reset connecting flag
         
-        # Close connecting dialog
-        self.close_connecting_dialog()
-        
         try:
             active_conn = client.add_and_activate_connection_finish(result)
+            
             if active_conn:
-                print(f"[NETWORK] Connected to {ssid}!")
-                self.test_data['network_configured'] = True
+                # Get the connection state
+                state = active_conn.get_state()
+                print(f"[NETWORK] Connection state: {state} ({state})")
+                print(f"[NETWORK] State values: UNKNOWN=0, ACTIVATING=1, ACTIVATED=2, DEACTIVATING=3, DEACTIVATED=4")
                 
-                # Refresh page to show connected status - only if still on network page
-                def refresh_if_on_network_page():
-                    if self.current_page == 1:
-                        self.show_page(1, add_to_history=False)
-                    return False  # Don't repeat
+                # State 1 = ACTIVATING, wait for it to become ACTIVATED or fail
+                # State 2 = ACTIVATED (success)
+                if state == 1:  # ACTIVATING
+                    print(f"[NETWORK] Connection is activating, waiting for final state...")
+                    # Monitor state changes
+                    active_conn.connect('state-changed', lambda c, s, r: self.on_connection_state_changed(c, s, r, ssid))
+                    return
+                elif state == 2:  # ACTIVATED
+                    print(f"[NETWORK] Successfully connected to {ssid}!")
+                    self.test_data['network_configured'] = True
+                    self.show_connection_result(True, None, ssid)
+                else:
+                    print(f"[NETWORK] Connection failed with state {state}")
+                    self.show_connection_result(False, f"连接状态异常 (state={state})", ssid)
+            else:
+                print(f"[ERROR] active_conn is None")
+                self.show_connection_result(False, "无法建立连接", ssid)
                 
-                GLib.timeout_add_seconds(2, refresh_if_on_network_page)
         except Exception as e:
-            print(f"[ERROR] Connection failed: {e}")
-            # Show error dialog
-            self.show_connection_error(str(e))
+            print(f"[ERROR] Connection failed with exception: {e}")
+            import traceback
+            traceback.print_exc()
+            self.show_connection_result(False, str(e), ssid)
+    
+    def on_connection_state_changed(self, active_conn, state, reason, ssid):
+        """Handle connection state changes during activation"""
+        print(f"[NETWORK] State changed to {state}, reason: {reason}")
+        
+        if state == 2:  # ACTIVATED
+            print(f"[NETWORK] Successfully connected to {ssid}!")
+            self.test_data['network_configured'] = True
+            self.show_connection_result(True, None, ssid)
+        elif state in [3, 4]:  # DEACTIVATING or DEACTIVATED (failed)
+            print(f"[NETWORK] Connection failed, state={state}, reason={reason}")
+            # Reason codes: 0=unknown, 1=none, 2=user_disconnected, etc.
+            if reason == 7:  # NO_SECRETS
+                error_msg = "密码错误"
+            elif reason == 8:  # SUPPLICANT_TIMEOUT
+                error_msg = "认证超时，密码可能错误"
+            else:
+                error_msg = f"连接失败 (reason={reason})"
+            self.show_connection_result(False, error_msg, ssid)
+    
+    def show_connection_result(self, success, error_msg, ssid):
+        """Show connection result in password dialog"""
+        if not self.password_dialog:
+            return
+        
+        dialog = self.password_dialog
+        dialog.spinner.set_spinning(False)
+        dialog.spinner.set_visible(False)
+        
+        if success:
+            # Show success status
+            dialog.status_label.set_markup('<span foreground="#4e9a06">✓ 连接成功！</span>')
+            
+            # Close dialog after 1 second
+            def close_dialog_and_refresh():
+                if self.password_dialog:
+                    self.password_dialog.close()
+                    self.password_dialog = None
+                
+                # Refresh network list
+                if self.current_page == 1:
+                    self.show_page(1, add_to_history=False)
+                return False
+            
+            GLib.timeout_add_seconds(1, close_dialog_and_refresh)
+        else:
+            # Show error status
+            friendly_msg = self.get_friendly_error_message(error_msg)
+            dialog.status_label.set_markup(f'<span foreground="#cc0000">✗ {friendly_msg}</span>')
+            dialog.keyboard.set_visible(True)
+            
+            # Re-enable connect button for retry
+            dialog.connect_btn.set_sensitive(True)
+    
+    def get_friendly_error_message(self, error_msg):
+        """Convert technical error message to user-friendly message"""
+        if not error_msg:
+            return "连接失败"
+        
+        error_lower = error_msg.lower()
+        if "secrets were required" in error_lower or "password" in error_lower:
+            return "密码错误"
+        elif "timeout" in error_lower:
+            return "连接超时，请检查信号"
+        elif "not found" in error_lower:
+            return "网络不可用"
+        elif "未能激活" in error_msg:
+            return "密码可能不正确"
+        else:
+            return "连接失败，请重试"
     
     def show_connecting_dialog(self, ssid):
         """Show connecting progress dialog"""
         if self.connecting_dialog is not None:
             return
         
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            modal=True,
-            message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.NONE,
-            text=f"正在连接到 {ssid}"
-        )
-        dialog.format_secondary_text("请稍候...")
+        # Create a simple dialog with spinner
+        dialog = Gtk.Dialog(title="连接中")
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+        dialog.set_default_size(300, 150)
         
-        # Add spinner
         content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_spacing(15)
+        
+        # Message
+        label = Gtk.Label(label=f"正在连接到 {ssid}")
+        label.set_wrap(True)
+        content.append(label)
+        
+        sub_label = Gtk.Label(label="请稍候...")
+        sub_label.add_css_class("dim-label")
+        content.append(sub_label)
+        
+        # Spinner
         spinner = Gtk.Spinner()
         spinner.set_spinning(True)
         spinner.set_size_request(32, 32)
-        spinner.set_margin_top(10)
+        spinner.set_halign(Gtk.Align.CENTER)
         content.append(spinner)
         
         self.connecting_dialog = dialog
@@ -1301,15 +1494,92 @@ class InstallerPoC(Gtk.ApplicationWindow):
         else:
             friendly_msg = error_msg
         
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            modal=True,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text="连接失败"
-        )
-        dialog.format_secondary_text(friendly_msg)
-        dialog.connect("response", lambda d, r: d.close())
+        # Create error dialog
+        dialog = Gtk.Dialog(title="连接失败")
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+        dialog.set_default_size(350, 150)
+        
+        content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_spacing(15)
+        
+        # Error icon + title
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_box.set_halign(Gtk.Align.CENTER)
+        
+        error_icon = Gtk.Image.new_from_icon_name("dialog-error-symbolic")
+        error_icon.set_pixel_size(32)
+        title_box.append(error_icon)
+        
+        title_label = Gtk.Label(label="连接失败")
+        title_label.add_css_class("title-2")
+        title_box.append(title_label)
+        
+        content.append(title_box)
+        
+        # Error message
+        msg_label = Gtk.Label(label=friendly_msg)
+        msg_label.set_wrap(True)
+        msg_label.set_justify(Gtk.Justification.CENTER)
+        content.append(msg_label)
+        
+        # OK button
+        ok_btn = Gtk.Button(label="确定")
+        ok_btn.set_halign(Gtk.Align.CENTER)
+        ok_btn.set_size_request(100, 40)
+        ok_btn.add_css_class("suggested-action")
+        ok_btn.connect("clicked", lambda b: dialog.close())
+        content.append(ok_btn)
+        
+        dialog.present()
+    
+    def show_connection_success(self, ssid):
+        """Show connection success dialog"""
+        # Create success dialog
+        dialog = Gtk.Dialog(title="连接成功")
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+        dialog.set_default_size(350, 150)
+        
+        content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_spacing(15)
+        
+        # Success icon + title
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_box.set_halign(Gtk.Align.CENTER)
+        
+        success_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
+        success_icon.set_pixel_size(32)
+        title_box.append(success_icon)
+        
+        title_label = Gtk.Label(label="连接成功")
+        title_label.add_css_class("title-2")
+        title_box.append(title_label)
+        
+        content.append(title_box)
+        
+        # Success message
+        msg_label = Gtk.Label(label=f"已成功连接到 {ssid}")
+        msg_label.set_wrap(True)
+        msg_label.set_justify(Gtk.Justification.CENTER)
+        content.append(msg_label)
+        
+        # OK button
+        ok_btn = Gtk.Button(label="确定")
+        ok_btn.set_halign(Gtk.Align.CENTER)
+        ok_btn.set_size_request(100, 40)
+        ok_btn.add_css_class("suggested-action")
+        ok_btn.connect("clicked", lambda b: dialog.close())
+        content.append(ok_btn)
+        
         dialog.present()
     
     def create_test_bash_page(self):
