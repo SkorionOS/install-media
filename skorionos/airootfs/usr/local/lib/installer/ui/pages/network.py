@@ -8,137 +8,116 @@ from gi.repository import Gtk, GLib
 from ...config import config
 from ...network.manager import NetworkManager
 from ...network.dialogs import PasswordDialog
+from ..components.base import BasePage, UIComponents
+
+
+class NetworkPage(BasePage):
+    """Network connection page for WiFi and ethernet management."""
+    
+    def __init__(self, app):
+        super().__init__(app)
+        
+        # Initialize network manager if not exists
+        if not hasattr(app, 'nm'):
+            app.nm = NetworkManager()
+        
+        self.is_online = app.nm.is_online()
+        self.wifi_list = None
+    
+    def create_title(self) -> Gtk.Widget:
+        """Create title with icon."""
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))
+        title_box.set_halign(Gtk.Align.CENTER)
+        
+        icon = Gtk.Image.new_from_icon_name("network-wireless-symbolic")
+        icon.set_pixel_size(config.scaled(48))
+        title_box.append(icon)
+        
+        title = UIComponents.create_title("网络连接")
+        title_box.append(title)
+        
+        return title_box
+    
+    def populate_content(self, content_box: Gtk.Box):
+        """Populate content with network status and WiFi list."""
+        # Show success status if online
+        if self.is_online:
+            status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(10))
+            status_box.add_css_class("info-box")
+            status_box.add_css_class("success")
+            status_box.set_size_request(config.scaled(600), -1)
+            status_box.set_halign(Gtk.Align.CENTER)
+            
+            icon_label = _create_icon_label_box("radio-checked-symbolic", "网络已连接，可以继续安装")
+            status_box.append(icon_label)
+            
+            # Get connection info
+            conn_ssid = self.app.nm.get_connected_wifi_ssid()
+            if conn_ssid:
+                info_label = Gtk.Label(label=f"当前连接: {conn_ssid}")
+                info_label.set_wrap(True)
+                status_box.append(info_label)
+            
+            content_box.append(status_box)
+        
+        # WiFi list
+        self.wifi_list = Gtk.ListBox()
+        self.wifi_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.app.wifi_list = self.wifi_list
+        
+        # Scroll window
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(config.scaled(300))
+        scroll.set_max_content_height(config.scaled(300))
+        scroll.set_propagate_natural_height(False)
+        scroll.set_child(self.wifi_list)
+        
+        content_box.append(scroll)
+        
+        # Scan networks
+        _scan_networks(self.app)
+    
+    def populate_buttons(self, button_box: Gtk.Box):
+        """Populate button area with network actions."""
+        # Back button
+        back_btn = UIComponents.create_button("返回", "go-previous-symbolic")
+        back_btn.connect("clicked", lambda b: self.app.go_back())
+        button_box.append(back_btn)
+        
+        # Refresh button
+        refresh_btn = UIComponents.create_button("刷新", "view-refresh-symbolic")
+        refresh_btn.connect("clicked", lambda b: self.app.show_page(1, add_to_history=False))
+        button_box.append(refresh_btn)
+        
+        # Connect/Disconnect button
+        if self.is_online:
+            conn_btn = UIComponents.create_button("重新连接", "network-wireless-symbolic")
+            conn_btn.connect("clicked", lambda b: _on_wifi_connect(self.app))
+            button_box.append(conn_btn)
+            
+            # Disconnect button for currently connected WiFi
+            connected_ssid = self.app.nm.get_connected_wifi_ssid()
+            if connected_ssid:
+                disconnect_btn = UIComponents.create_button("断开", "network-wireless-offline-symbolic")
+                disconnect_btn.connect("clicked", lambda b: _on_wifi_disconnect(self.app, connected_ssid))
+                button_box.append(disconnect_btn)
+        else:
+            conn_btn = UIComponents.create_button("连接", "network-wireless-symbolic")
+            conn_btn.connect("clicked", lambda b: _on_wifi_connect(self.app))
+            button_box.append(conn_btn)
+        
+        # Skip/Continue button
+        skip_btn = UIComponents.create_button("继续" if self.is_online else "跳过", "go-next-symbolic")
+        skip_btn.add_css_class("suggested-action")
+        skip_btn.connect("clicked", lambda b: self.app.show_page(2))
+        button_box.append(skip_btn)
 
 
 def create_network_page(app):
-    """
-    Create full-featured network connection page
-    
-    Args:
-        app: Main application instance
-    
-    Returns:
-        Gtk.Box: Network page widget
-    """
-    # Initialize network manager if not exists
-    if not hasattr(app, 'nm'):
-        app.nm = NetworkManager()
-    
-    # Create page
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-    box.set_halign(Gtk.Align.FILL)
-    box.set_valign(Gtk.Align.FILL)
-    box.set_margin_start(config.scaled(50))
-    box.set_margin_end(config.scaled(50))
-    box.set_margin_top(config.scaled(20))
-    box.set_margin_bottom(config.scaled(20))
-    
-    # Title with icon
-    title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    title_box.set_halign(Gtk.Align.CENTER)
-    
-    network_icon = Gtk.Image.new_from_icon_name("network-wireless-symbolic")
-    network_icon.set_icon_size(Gtk.IconSize.LARGE)
-    network_icon.set_pixel_size(config.scaled(48))
-    title_box.append(network_icon)
-    
-    title = Gtk.Label()
-    title.set_markup('<span size="x-large" weight="bold">网络连接</span>')
-    title_box.append(title)
-    
-    box.append(title_box)
-    
-    # Check network status
-    is_online = app.nm.is_online()
-    
-    if is_online:
-        # Show success status
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        status_box.add_css_class("info-box")
-        status_box.add_css_class("success")
-        status_box.set_size_request(config.scaled(600), -1)
-        
-        icon_label = _create_icon_label_box("radio-checked-symbolic", "网络已连接，可以继续安装")
-        status_box.append(icon_label)
-        
-        # Get connection info
-        conn_ssid = app.nm.get_connected_wifi_ssid()
-        if conn_ssid:
-            info_label = Gtk.Label(label=f"当前连接: {conn_ssid}")
-            info_label.set_wrap(True)
-            status_box.append(info_label)
-        
-        box.append(status_box)
-    
-    # WiFi list
-    app.wifi_list = Gtk.ListBox()
-    app.wifi_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
-    
-    # Scroll window
-    scroll = Gtk.ScrolledWindow()
-    scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    scroll.set_min_content_height(config.scaled(300))
-    scroll.set_max_content_height(config.scaled(300))
-    scroll.set_propagate_natural_height(False)
-    scroll.set_child(app.wifi_list)
-    
-    box.append(scroll)
-    
-    # Scan networks
-    _scan_networks(app)
-    
-    # Navigation buttons
-    btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-    btn_box.set_halign(Gtk.Align.CENTER)
-    btn_box.set_margin_top(config.scaled(20))
-    
-    back_btn = Gtk.Button(label="返回")
-    back_btn.set_icon_name("go-previous-symbolic")
-    back_btn.add_css_class("nav-button")
-    back_btn.connect("clicked", lambda b: app.go_back())
-    btn_box.append(back_btn)
-    
-    # Refresh button
-    refresh_btn = Gtk.Button(label="刷新")
-    refresh_btn.set_icon_name("view-refresh-symbolic")
-    refresh_btn.add_css_class("nav-button")
-    refresh_btn.connect("clicked", lambda b: app.show_page(1, add_to_history=False))
-    btn_box.append(refresh_btn)
-    
-    # Connect/Disconnect button
-    if is_online:
-        conn_btn = Gtk.Button(label="重新连接")
-        conn_btn.set_icon_name("network-wireless-symbolic")
-        conn_btn.add_css_class("nav-button")
-        conn_btn.connect("clicked", lambda b: _on_wifi_connect(app))
-        btn_box.append(conn_btn)
-        
-        # Disconnect button for currently connected WiFi
-        connected_ssid = app.nm.get_connected_wifi_ssid()
-        if connected_ssid:
-            disconnect_btn = Gtk.Button(label="断开连接")
-            disconnect_btn.set_icon_name("network-wireless-offline-symbolic")
-            disconnect_btn.add_css_class("nav-button")
-            disconnect_btn.connect("clicked", lambda b: _on_wifi_disconnect(app, connected_ssid))
-            btn_box.append(disconnect_btn)
-    else:
-        conn_btn = Gtk.Button(label="连接")
-        conn_btn.set_icon_name("network-wireless-symbolic")
-        conn_btn.add_css_class("nav-button")
-        conn_btn.connect("clicked", lambda b: _on_wifi_connect(app))
-        btn_box.append(conn_btn)
-    
-    # Skip/Continue button
-    skip_btn = Gtk.Button(label="继续" if is_online else "跳过（继续）")
-    skip_btn.set_icon_name("go-next-symbolic")
-    skip_btn.add_css_class("nav-button")
-    skip_btn.add_css_class("suggested-action")
-    skip_btn.connect("clicked", lambda b: app.show_page(2))
-    btn_box.append(skip_btn)
-    
-    box.append(btn_box)
-    
-    return box
+    """Create the network page using the new page architecture."""
+    page = NetworkPage(app)
+    return page.create()
 
 
 def _scan_networks(app):
@@ -180,7 +159,7 @@ def _add_wifi_row(app, ap, ssid):
     row = Gtk.ListBoxRow()
     row.add_css_class("wifi-row")
     
-    hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))
     hbox.set_margin_top(config.scaled(10))
     hbox.set_margin_bottom(config.scaled(10))
     hbox.set_margin_start(config.scaled(10))
@@ -240,7 +219,7 @@ def _add_ethernet_row(app, device):
     row.set_sensitive(False)
     row.add_css_class("wifi-row")
     
-    hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))
     hbox.set_margin_top(config.scaled(10))
     hbox.set_margin_bottom(config.scaled(10))
     hbox.set_margin_start(config.scaled(10))
@@ -304,7 +283,7 @@ def _add_no_networks_row(app):
 
 def _create_icon_label_box(icon_name, text):
     """Create a box with icon and label"""
-    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(8))
     
     icon = Gtk.Image.new_from_icon_name(icon_name)
     icon.set_icon_size(Gtk.IconSize.NORMAL)
@@ -403,4 +382,3 @@ def _on_wifi_disconnect(app, ssid):
             print(f"[ERROR] Disconnect failed for {result_ssid}")
     
     app.nm.disconnect_wifi(ssid, on_disconnect_result)
-

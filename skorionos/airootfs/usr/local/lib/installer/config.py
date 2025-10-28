@@ -2,6 +2,7 @@
 Configuration module for the installer
 """
 import os
+import subprocess
 
 
 class Config:
@@ -20,9 +21,48 @@ class Config:
         # Version
         self.version = "2.1.1"
         
+        # Installation paths
+        self.mount_path = "/tmp/frzr_root"
+        self.log_file = "/tmp/frzr.log"
+        
+        # Disk requirements
+        self.min_disk_size = 55  # GB
+        
+        # Device information (for disk overrides)
+        self.device_vendor = self._read_file('/sys/devices/virtual/dmi/id/sys_vendor')
+        self.device_product = self._read_file('/sys/devices/virtual/dmi/id/product_name')
+        self.device_cpu = self._get_cpu_vendor()
+        
         print(f"[CONFIG] Screen: {self.screen_width}x{self.screen_height}")
         print(f"[CONFIG] GDK_SCALE: {self.gdk_scale}")
         print(f"[CONFIG] UI scale: {self.ui_scale:.2f}x")
+        print(f"[CONFIG] Device: {self.device_vendor} {self.device_product} ({self.device_cpu})")
+    
+    def _read_file(self, path):
+        """Read a file and return its content, or empty string on error"""
+        try:
+            with open(path, 'r') as f:
+                return f.read().strip()
+        except:
+            return ''
+    
+    def _get_cpu_vendor(self):
+        """Get CPU vendor from lscpu"""
+        try:
+            result = subprocess.run(
+                ['lscpu'],
+                capture_output=True,
+                text=True,
+                env={'LANG': 'en_US.UTF-8'}
+            )
+            for line in result.stdout.split('\n'):
+                if 'Vendor ID:' in line or 'Vendor' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) >= 2:
+                        return parts[1].strip()
+            return ''
+        except:
+            return ''
     
     def scaled(self, value):
         """Apply UI scale to a value"""

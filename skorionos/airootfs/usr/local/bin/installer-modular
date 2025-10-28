@@ -74,7 +74,7 @@ export INSTALLER_HEIGHT="$HEIGHT"
 echo "📐 Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
 
 export INNER_WIDTH=1280
-export INNER_HEIGHT=720
+export INNER_HEIGHT=$((HEIGHT * 1280 / WIDTH))
 echo "📐 Inner window size: ${INNER_WIDTH}x${INNER_HEIGHT}"
 
 # UI_SCALE can be set manually (default: 1.0)

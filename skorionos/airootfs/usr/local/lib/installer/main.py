@@ -11,6 +11,9 @@ from .config import config
 from .ui.styling import apply_styling
 from .ui.pages.network import create_network_page
 from .ui.pages.disk import create_disk_page
+from .ui.pages.mode import create_mode_page
+from .ui.pages.confirm import create_confirm_page
+from .ui.pages.bootstrap import create_bootstrap_page
 from .ui.pages.version import create_version_page
 from .ui.pages.install import create_install_page
 
@@ -64,7 +67,23 @@ class InstallerApp(Gtk.ApplicationWindow):
         return False
     
     def show_page(self, page_num, add_to_history=True):
-        """Show a specific page"""
+        """Show a specific page (accepts int or string name)"""
+        # Map string names to numbers
+        page_map = {
+            'welcome': 0,
+            'network': 1,
+            'disk': 2,
+            'mode': 3,
+            'confirm': 4,
+            'bootstrap': 5,
+            'version': 6,
+            'install': 7,
+        }
+        
+        # Convert string to number if needed
+        if isinstance(page_num, str):
+            page_num = page_map.get(page_num, page_num)
+        
         if add_to_history and self.current_page != page_num:
             self.page_history.append(self.current_page)
             print(f"[NAV] History: {self.page_history}")
@@ -74,10 +93,14 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Create page content
         pages = [
-            self.create_welcome_page,           # 0: Welcome
-            lambda: create_network_page(self),  # 1: Network
-            lambda: create_version_page(self),  # 2: Version selection
-            lambda: create_install_page(self),  # 3: Installation
+            self.create_welcome_page,            # 0: Welcome
+            lambda: create_network_page(self),   # 1: Network
+            lambda: create_disk_page(self),      # 2: Disk selection
+            lambda: create_mode_page(self),      # 3: Mode selection (NEW)
+            lambda: create_confirm_page(self),   # 4: Confirmation
+            lambda: create_bootstrap_page(self), # 5: Bootstrap (frzr-bootstrap)
+            lambda: create_version_page(self),   # 6: Version selection
+            lambda: create_install_page(self),   # 7: Installation
         ]
         
         if page_num < len(pages):
