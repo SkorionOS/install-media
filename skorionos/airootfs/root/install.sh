@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.1.0
+# Version: 2.1.1
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.1.0"
+VERSION="2.1.1"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -874,26 +874,57 @@ function grab_steam_bootstrap() {
 grab_steam_bootstrap
 
 if [ "${CHOICE}" != "local" ]; then
+  # Step 1: Select Channel (stable/testing/unstable)
   TEMP_FILE=$(mktemp)
-  if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本选择\Zn" --menu "选择系统版本" $MENU_HEIGHT $MENU_WIDTH 10 \
-    "stable:gnome"         "stable:gnome      稳定版 (GNOME) -- 默认" \
-    "testing:gnome"        "testing:gnome     测试版 (GNOME)" \
-    "unstable:gnome"       "unstable:gnome    不稳定版 (GNOME)" \
-    "stable:kde"           "stable:kde        稳定版 (KDE)" \
-    "testing:kde"          "testing:kde       测试版 (KDE)" \
-    "unstable:kde"         "unstable:kde      开发版 (KDE)" \
-    "stable:gnome-nv"      "stable:gnome-nv   稳定版 (GNOME NVIDIA)" \
-    "testing:gnome-nv"     "testing:gnome-nv  测试版 (GNOME NVIDIA)" \
-    "unstable:gnome-nv"    "unstable:gnome-nv 不稳定版 (GNOME NVIDIA)" \
-    "stable:kde-nv"        "stable:kde-nv     稳定版 (KDE NVIDIA)" \
-    "testing:kde-nv"       "testing:kde-nv    测试版 (KDE NVIDIA)" \
-    "unstable:kde-nv"      "unstable:kde-nv   不稳定版 (KDE NVIDIA)" \
+  if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 版本通道选择\Zn" \
+    --default-item "stable" \
+    --radiolist "请选择系统版本通道 (使用空格键选择)" $MENU_HEIGHT $MENU_WIDTH 3 \
+    "stable"   "稳定版 -- 推荐用于日常使用" ON \
+    "testing"  "测试版 -- 包含较新功能，可能有未知问题" OFF \
+    "unstable" "不稳定版 -- 开发版本，仅用于测试, 可能不稳定" OFF \
     2> $TEMP_FILE
   ); then
-    TARGET=$(cat $TEMP_FILE)
+    CHANNEL=$(cat $TEMP_FILE)
     rm $TEMP_FILE
   else
     cancel_install
+  fi
+
+  # Step 2: Select Desktop Environment (gnome/kde)
+  TEMP_FILE=$(mktemp)
+  if (dialog --colors --title "${TITLE_COLOR}$OS_NAME 桌面环境选择\Zn" \
+    --default-item "gnome" \
+    --radiolist "请选择桌面环境 (使用空格键选择)" $MENU_HEIGHT $MENU_WIDTH 2 \
+    "gnome" "GNOME 桌面 -- 默认推荐" ON \
+    "kde"   "KDE Plasma 桌面 (类似Steam Deck)" OFF \
+    2> $TEMP_FILE
+  ); then
+    DESKTOP=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    cancel_install
+  fi
+
+  # Step 3: Select NVIDIA driver option (yes/no)
+  TEMP_FILE=$(mktemp)
+  if (dialog --colors --title "${TITLE_COLOR}$OS_NAME NVIDIA 驱动选择\Zn" \
+    --default-item "no" \
+    --radiolist "是否包含 NVIDIA 驱动 (使用空格键选择)\n\n提示：NV 版本在标准版本基础上额外包含 NVIDIA 专有驱动" $MENU_HEIGHT $MENU_WIDTH 2 \
+    "no"  "标准版本 -- 仅包含开源驱动" ON \
+    "yes" "NV 版本 -- 额外包含 NVIDIA 专有驱动" OFF \
+    2> $TEMP_FILE
+  ); then
+    USE_NVIDIA=$(cat $TEMP_FILE)
+    rm $TEMP_FILE
+  else
+    cancel_install
+  fi
+
+  # Construct TARGET from selections
+  if [ "$USE_NVIDIA" = "yes" ]; then
+    TARGET="${CHANNEL}:${DESKTOP}-nv"
+  else
+    TARGET="${CHANNEL}:${DESKTOP}"
   fi
 fi
 
