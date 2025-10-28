@@ -27,6 +27,7 @@ AUR_PACKAGES="\
     aic8800d80-dkms \
     fpaste \
     frzr-sk \
+    gamescope-sk \
     inputplumber-bin \
     pikaur \
     rtl88x2bu-dkms-git \

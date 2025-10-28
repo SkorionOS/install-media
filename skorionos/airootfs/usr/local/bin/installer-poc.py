@@ -11,14 +11,30 @@ from gi.repository import Gtk, GLib, Gdk, NM
 import subprocess
 import os
 import sys
+import argparse
 
 class InstallerPoC(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
+        # Get window size from environment
+        window_width = int(os.environ.get('INSTALLER_WIDTH', '1280'))
+        window_height = int(os.environ.get('INSTALLER_HEIGHT', '800'))
+        gdk_scale = os.environ.get('GDK_SCALE', '1')
+        
+        # Calculate UI scale factor based on screen height (base: 800p)
+        # self.ui_scale = window_width / 1280
+        ui_scale = os.environ.get('UI_SCALE', '1')
+
+        self.ui_scale = float(ui_scale)
+        
+        print(f"[DISPLAY] GDK_SCALE: {gdk_scale}")
+        print(f"[DISPLAY] Window size: {window_width}x{window_height}")
+        print(f"[DISPLAY] UI scale factor: {self.ui_scale:.2f}x")
+
         # Window setup
-        self.set_default_size(1280, 800)
         self.set_title("SkorionOS Installer PoC")
+        self.set_default_size(window_width, window_height)
         self.add_css_class("installer-window")
         
         # Data
@@ -61,187 +77,232 @@ class InstallerPoC(Gtk.ApplicationWindow):
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
         
+        # Scaled font sizes
+        font_size = self.scaled(16)
+        title_size = self.scaled(32)
+        subtitle_size = self.scaled(16)
+        button_font_size = self.scaled(14)
+        nav_button_font = self.scaled(15)
+        
+        # Scaled layout sizes
+        button_min_width = self.scaled(200)
+        button_min_height = self.scaled(50)
+        small_button_height = self.scaled(36)
+        nav_button_height = self.scaled(44)
+        nav_button_min_width = self.scaled(120)
+        
+        # Scaled spacing
+        padding_small = self.scaled(6)
+        padding = self.scaled(10)
+        padding_medium = self.scaled(20)
+        padding_large = self.scaled(50)
+        spacing = self.scaled(10)
+        spacing_medium = self.scaled(24)
+        
+        # Scaled borders
+        border_radius_small = self.scaled(4)
+        border_radius = self.scaled(6)
+        border_radius_large = self.scaled(8)
+        
         css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(b"""
-            .installer-window {
+        css_provider.load_from_data(f"""
+            .installer-window {{
                 background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
                 color: #e0e0e0;
-            }
+            }}
             
-            .installer-window label {
+            .installer-window label {{
                 color: #e0e0e0;
-            }
+                font-size: {font_size}px;
+            }}
             
-            .installer-window image {
+            .installer-window image {{
                 color: #e0e0e0;
-            }
+                -gtk-icon-size: {self.scaled(16)}px;
+            }}
             
             /* Dialog styling */
-            dialog {
+            dialog {{
                 background: #2b2b2b;
                 color: #e0e0e0;
-            }
+            }}
             
-            dialog .dialog-content-area {
+            dialog .dialog-content-area {{
                 background: #2b2b2b;
-            }
+            }}
             
-            dialog label {
+            dialog label {{
                 color: #e0e0e0;
-            }
+                font-size: {font_size}px;
+            }}
             
-            dialog entry {
+            dialog entry {{
                 background: #3a3a3a;
                 color: white;
                 border: 1px solid #555;
-                border-radius: 6px;
-                padding: 10px;
-                font-size: 16px;
-            }
+                border-radius: {border_radius}px;
+                padding: {padding}px;
+                font-size: {font_size}px;
+            }}
             
-            .password-title {
-                font-size: 20px;
+            .password-title {{
+                font-size: {self.scaled(20)}px;
                 font-weight: bold;
                 color: #e0e0e0;
-            }
+            }}
             
             /* Dialog action area (bottom buttons) */
-            dialog .dialog-action-area {
-                padding: 20px;
-            }
+            dialog .dialog-action-area {{
+                padding: {padding_medium}px;
+            }}
             
-            dialog .dialog-action-area button {
-                min-height: 44px;
-                min-width: 120px;
-                margin-left: 8px;
-                margin-right: 8px;
-                padding: 10px 24px;
-                font-size: 15px;
-            }
+            dialog .dialog-action-area button {{
+                min-height: {nav_button_height}px;
+                min-width: {nav_button_min_width}px;
+                margin-left: {self.scaled(8)}px;
+                margin-right: {self.scaled(8)}px;
+                padding: {padding}px {spacing_medium}px;
+                font-size: {nav_button_font}px;
+            }}
             
-            dialog .dialog-action-area button:first-child {
+            dialog .dialog-action-area button:first-child {{
                 margin-left: 0;
-            }
+            }}
             
-            dialog .dialog-action-area button:last-child {
+            dialog .dialog-action-area button:last-child {{
                 margin-right: 0;
-            }
+            }}
             
-            .installer-title {
-                font-size: 32px;
+            .installer-title {{
+                font-size: {title_size}px;
                 font-weight: bold;
                 color: white;
-            }
+            }}
             
-            .installer-subtitle {
-                font-size: 16px;
+            .installer-subtitle {{
+                font-size: {subtitle_size}px;
                 color: #bbb;
-            }
+            }}
             
-            .installer-button {
-                min-width: 200px;
-                min-height: 50px;
-                font-size: 16px;
-                border-radius: 8px;
-            }
+            .installer-button {{
+                min-width: {button_min_width}px;
+                min-height: {button_min_height}px;
+                font-size: {font_size}px;
+                border-radius: {border_radius_large}px;
+                -gtk-icon-size: {self.scaled(24)}px;
+            }}
             
-            button {
+            .installer-button image {{
+                -gtk-icon-size: {self.scaled(24)}px;
+            }}
+            
+            button {{
                 background: rgba(255,255,255,0.15);
                 color: #e0e0e0;
                 border: 1px solid rgba(255,255,255,0.2);
-                border-radius: 6px;
-                padding: 6px 12px;
-                min-height: 36px;
-                font-size: 14px;
-            }
+                border-radius: {border_radius}px;
+                padding: {padding_small}px {self.scaled(12)}px;
+                min-height: {small_button_height}px;
+                font-size: {button_font_size}px;
+                -gtk-icon-size: {self.scaled(16)}px;
+            }}
             
-            button:hover {
+            button:hover {{
                 background: rgba(255,255,255,0.25);
                 border-color: rgba(255,255,255,0.3);
-            }
+            }}
             
-            button image {
+            button image {{
                 color: #e0e0e0;
-            }
+                -gtk-icon-size: {self.scaled(16)}px;
+            }}
             
-            button.suggested-action {
+            button.suggested-action {{
                 background: rgba(52, 152, 219, 0.8);
                 color: white;
                 border-color: rgba(52, 152, 219, 1);
-            }
+            }}
             
-            button.suggested-action:hover {
+            button.suggested-action:hover {{
                 background: rgba(52, 152, 219, 1);
-            }
+            }}
             
-            button.suggested-action image {
+            button.suggested-action image {{
                 color: white;
-            }
+            }}
             
             /* Larger nav buttons at page bottom */
-            button.nav-button {
-                min-height: 44px;
-                padding: 10px 24px;
-                font-size: 15px;
-            }
+            button.nav-button {{
+                min-height: {nav_button_height}px;
+                padding: {padding}px 24px;
+                font-size: {nav_button_font}px;
+                -gtk-icon-size: {self.scaled(20)}px;
+            }}
             
-            /* Virtual keyboard buttons */
-            .keyboard-key {
+            button.nav-button image {{
+                -gtk-icon-size: {self.scaled(20)}px;
+            }}
+            
+            /* Virtual keyboard buttons - size controlled by Python code */
+            .keyboard-key {{
                 background: #505050;
                 color: white;
                 border: 1px solid #707070;
-                border-radius: 4px;
-                min-width: 48px;
-                min-height: 48px;
-                font-size: 16px;
+                border-radius: {border_radius_small}px;
+                font-size: {font_size}px;
                 font-weight: bold;
                 padding: 0;
-            }
+            }}
             
-            .keyboard-key:hover {
+            .keyboard-key:hover {{
                 background: #606060;
                 border-color: #808080;
-            }
+            }}
             
-            .keyboard-key:active {
+            .keyboard-key:active {{
                 background: #404040;
-            }
+            }}
             
-            .page-container {
-                padding: 50px;
-            }
+            .page-container {{
+                padding: {padding_large}px;
+            }}
             
-            .info-box {
+            .info-box {{
                 background: rgba(255,255,255,0.05);
-                border-radius: 8px;
-                padding: 20px;
-                margin: 10px 0;
+                border-radius: {border_radius_large}px;
+                padding: {padding_medium}px;
+                margin: {padding}px 0;
                 color: #e0e0e0;
-            }
+            }}
             
-            .info-box label {
+            .info-box label {{
                 color: #e0e0e0;
-            }
+                font-size: {font_size}px;
+            }}
             
-            .wifi-row {
-                padding: 10px;
-                border-radius: 6px;
-            }
+            .wifi-row {{
+                padding: {padding}px;
+                border-radius: {border_radius}px;
+            }}
             
-            .wifi-row:hover {
+            .wifi-row:hover {{
                 background: rgba(255,255,255,0.1);
-            }
+            }}
             
-            .success {
+            .wifi-row image {{
+                -gtk-icon-size: {self.scaled(16)}px;
+            }}
+            
+            .success {{
                 background: rgba(0,255,0,0.1);
                 color: #0f0;
-            }
+            }}
             
-            .warning {
+            .warning {{
                 background: rgba(255,255,0,0.1);
                 color: #ff0;
-            }
-        """)
+            }}
+        """.encode())
         
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
@@ -271,6 +332,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
             return True
         
         return False
+    
+    def scaled(self, value):
+        """Apply UI scale to a value"""
+        return int(value * self.ui_scale)
     
     def create_icon_label_box(self, icon_name, text, icon_size=Gtk.IconSize.NORMAL):
         """Create a box with icon and label"""
@@ -342,13 +407,12 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Logo/Icon
         logo = Gtk.Image.new_from_icon_name("computer-symbolic")
         logo.set_icon_size(Gtk.IconSize.LARGE)
-        logo.set_pixel_size(128)
+        logo.set_pixel_size(self.scaled(128))
         box.append(logo)
         
         # Title
         title = Gtk.Label()
         title.set_markup('<span size="xx-large" weight="bold">SkorionOS 图形化安装器</span>')
-        title.add_css_class("installer-title")
         box.append(title)
         
         # Subtitle
@@ -365,7 +429,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Test info box
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         info_box.add_css_class("info-box")
-        info_box.set_size_request(600, -1)
+        info_box.set_size_request(self.scaled(600), -1)
         
         tests = [
             "• GTK4 窗口已创建",
@@ -387,22 +451,36 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         box.append(info_box)
         
-        # Button
-        btn = Gtk.Button(label="开始测试")
-        btn.set_icon_name("go-next-symbolic")
-        btn.add_css_class("installer-button")
-        btn.add_css_class("suggested-action")
-        btn.connect("clicked", lambda b: self.show_page(1))
-        box.append(btn)
+        # Buttons
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+        btn_box.set_halign(Gtk.Align.CENTER)
+        
+        start_btn = Gtk.Button(label="开始测试")
+        start_btn.set_icon_name("go-next-symbolic")
+        start_btn.add_css_class("installer-button")
+        start_btn.add_css_class("suggested-action")
+        start_btn.connect("clicked", lambda b: self.show_page(1))
+        btn_box.append(start_btn)
+        
+        exit_btn = Gtk.Button(label="退出")
+        exit_btn.set_icon_name("application-exit-symbolic")
+        exit_btn.add_css_class("installer-button")
+        exit_btn.connect("clicked", lambda b: self.close())
+        btn_box.append(exit_btn)
+        
+        box.append(btn_box)
         
         return box
     
     def create_network_page(self):
         """Page 1: Network Connection"""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        box.set_halign(Gtk.Align.CENTER)
-        box.set_valign(Gtk.Align.CENTER)
-        box.add_css_class("page-container")
+        box.set_halign(Gtk.Align.FILL)
+        box.set_valign(Gtk.Align.FILL)
+        box.set_margin_start(self.scaled(50))
+        box.set_margin_end(self.scaled(50))
+        box.set_margin_top(self.scaled(20))
+        box.set_margin_bottom(self.scaled(20))
         
         # Title with icon
         title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -410,7 +488,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         network_icon = Gtk.Image.new_from_icon_name("network-wireless-symbolic")
         network_icon.set_icon_size(Gtk.IconSize.LARGE)
-        network_icon.set_pixel_size(48)
+        network_icon.set_pixel_size(self.scaled(48))
         title_box.append(network_icon)
         
         title = Gtk.Label()
@@ -431,7 +509,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
             status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             status_box.add_css_class("info-box")
             status_box.add_css_class("success")
-            status_box.set_size_request(600, -1)
+            status_box.set_size_request(self.scaled(600), -1)
             
             connected_box = self.create_icon_label_box(
                 "radio-checked-symbolic",
@@ -444,7 +522,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Always show WiFi list for reselection
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
-        scroll.set_size_request(700, 300)
+        scroll.set_size_request(self.scaled(700), self.scaled(300))
         scroll.set_child(self.wifi_list)
         box.append(scroll)
         
@@ -454,7 +532,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Navigation buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         btn_box.set_halign(Gtk.Align.CENTER)
-        btn_box.set_margin_top(20)
+        btn_box.set_margin_top(self.scaled(20))
         
         back_btn = Gtk.Button(label="返回")
         back_btn.set_icon_name("go-previous-symbolic")
@@ -576,10 +654,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
         row.add_css_class("wifi-row")
         
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        hbox.set_margin_top(10)
-        hbox.set_margin_bottom(10)
-        hbox.set_margin_start(10)
-        hbox.set_margin_end(10)
+        hbox.set_margin_top(self.scaled(10))
+        hbox.set_margin_bottom(self.scaled(10))
+        hbox.set_margin_start(self.scaled(10))
+        hbox.set_margin_end(self.scaled(10))
         
         # Check if this network is currently connected
         is_connected = self.is_wifi_connected(ssid)
@@ -592,7 +670,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         else:
             # Empty placeholder to keep alignment
             placeholder = Gtk.Box()
-            placeholder.set_size_request(16, 16)  # Same size as icon
+            placeholder.set_size_request(self.scaled(16), self.scaled(16))
             hbox.append(placeholder)
         
         # Security icon
@@ -691,10 +769,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
         row.add_css_class("wifi-row")
         
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        hbox.set_margin_top(10)
-        hbox.set_margin_bottom(10)
-        hbox.set_margin_start(10)
-        hbox.set_margin_end(10)
+        hbox.set_margin_top(self.scaled(10))
+        hbox.set_margin_bottom(self.scaled(10))
+        hbox.set_margin_start(self.scaled(10))
+        hbox.set_margin_end(self.scaled(10))
         
         icon = Gtk.Image.new_from_icon_name("network-wired-symbolic")
         icon.set_icon_size(Gtk.IconSize.NORMAL)
@@ -722,8 +800,8 @@ class InstallerPoC(Gtk.ApplicationWindow):
             "dialog-warning-symbolic",
             "未检测到 WiFi 设备"
         )
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
+        box.set_margin_top(self.scaled(10))
+        box.set_margin_bottom(self.scaled(10))
         
         row.set_child(box)
         self.wifi_list.append(row)
@@ -737,8 +815,8 @@ class InstallerPoC(Gtk.ApplicationWindow):
             "dialog-error-symbolic",
             "NetworkManager 不可用"
         )
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
+        box.set_margin_top(self.scaled(10))
+        box.set_margin_bottom(self.scaled(10))
         
         row.set_child(box)
         self.wifi_list.append(row)
@@ -752,8 +830,8 @@ class InstallerPoC(Gtk.ApplicationWindow):
             "radio-checked-symbolic",
             "未找到可用网络，请刷新重试"
         )
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
+        box.set_margin_top(self.scaled(10))
+        box.set_margin_bottom(self.scaled(10))
         
         row.set_child(box)
         self.wifi_list.append(row)
@@ -845,27 +923,27 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         print(f"[INFO] Showing password dialog for: {ssid}")
         
-        # Create dialog (same 16:10 ratio as main window)
+        # Create dialog (scaled 16:10 ratio)
         dialog = Gtk.Dialog(title=f"连接到: {ssid}")
         dialog.set_transient_for(self)
         dialog.set_modal(True)
-        dialog.set_default_size(960, 600)  # 16:10 ratio
+        dialog.set_default_size(self.scaled(960), self.scaled(600))
         self.password_dialog = dialog
         
         # Content area
         content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_spacing(20)
+        content.set_margin_top(self.scaled(20))
+        content.set_margin_bottom(self.scaled(20))
+        content.set_margin_start(self.scaled(20))
+        content.set_margin_end(self.scaled(20))
+        content.set_spacing(self.scaled(20))
         
         # Network info with icon
         info_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         info_box.set_halign(Gtk.Align.CENTER)
         
         icon = Gtk.Image.new_from_icon_name("network-wireless-encrypted-symbolic")
-        icon.set_pixel_size(32)
+        icon.set_pixel_size(self.scaled(32))
         info_box.append(icon)
         
         ssid_label = Gtk.Label(label=ssid)
@@ -889,7 +967,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         self.password_visible = False
         toggle_btn = Gtk.Button()
         toggle_btn.set_icon_name("view-conceal-symbolic")
-        toggle_btn.set_size_request(45, 45)
+        toggle_btn.set_size_request(self.scaled(45), self.scaled(45))
         toggle_btn.set_tooltip_text("显示/隐藏密码")
         toggle_btn.connect("clicked", lambda b: self.toggle_password_visibility(entry, b))
         entry_box.append(toggle_btn)
@@ -906,7 +984,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         # Spinner for connecting state
         spinner = Gtk.Spinner()
-        spinner.set_size_request(32, 32)
+        spinner.set_size_request(self.scaled(32), self.scaled(32))
         spinner.set_halign(Gtk.Align.CENTER)
         spinner.set_visible(False)
         content.append(spinner)
@@ -922,12 +1000,12 @@ class InstallerPoC(Gtk.ApplicationWindow):
         connect_btn = dialog.add_button("连接", Gtk.ResponseType.OK)
         
         # Apply styling to buttons - make them wider
-        cancel_btn.set_size_request(150, 44)
-        cancel_btn.set_margin_end(8)
+        cancel_btn.set_size_request(self.scaled(150), self.scaled(44))
+        cancel_btn.set_margin_end(self.scaled(8))
         
-        connect_btn.set_size_request(150, 44)
-        connect_btn.set_margin_start(8)
-        connect_btn.set_margin_end(30)
+        connect_btn.set_size_request(self.scaled(150), self.scaled(44))
+        connect_btn.set_margin_start(self.scaled(8))
+        connect_btn.set_margin_end(self.scaled(30))
         connect_btn.add_css_class("suggested-action")
         
         # Store button references for later access
@@ -942,10 +1020,10 @@ class InstallerPoC(Gtk.ApplicationWindow):
     
     def create_virtual_keyboard(self, entry, dialog=None):
         """Create virtual keyboard for password input"""
-        # Keyboard button size configuration (easy to adjust)
-        self.key_size = 48  # Base key size (was 40)
-        self.key_height = 48  # Key height (was 40)
-        self.key_spacing = 4  # Spacing between keys
+        # Keyboard button size configuration with auto scaling
+        self.key_size = self.scaled(48)
+        self.key_height = self.scaled(48)
+        self.key_spacing = self.scaled(4)
         
         # Create a container for keyboard
         container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=self.key_spacing)
@@ -1448,14 +1526,14 @@ class InstallerPoC(Gtk.ApplicationWindow):
         dialog = Gtk.Dialog(title="连接中")
         dialog.set_transient_for(self)
         dialog.set_modal(True)
-        dialog.set_default_size(300, 150)
+        dialog.set_default_size(self.scaled(300), self.scaled(150))
         
         content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_spacing(15)
+        content.set_margin_top(self.scaled(20))
+        content.set_margin_bottom(self.scaled(20))
+        content.set_margin_start(self.scaled(20))
+        content.set_margin_end(self.scaled(20))
+        content.set_spacing(self.scaled(15))
         
         # Message
         label = Gtk.Label(label=f"正在连接到 {ssid}")
@@ -1469,7 +1547,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Spinner
         spinner = Gtk.Spinner()
         spinner.set_spinning(True)
-        spinner.set_size_request(32, 32)
+        spinner.set_size_request(self.scaled(32), self.scaled(32))
         spinner.set_halign(Gtk.Align.CENTER)
         content.append(spinner)
         
@@ -1498,21 +1576,21 @@ class InstallerPoC(Gtk.ApplicationWindow):
         dialog = Gtk.Dialog(title="连接失败")
         dialog.set_transient_for(self)
         dialog.set_modal(True)
-        dialog.set_default_size(350, 150)
+        dialog.set_default_size(self.scaled(350), self.scaled(150))
         
         content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_spacing(15)
+        content.set_margin_top(self.scaled(20))
+        content.set_margin_bottom(self.scaled(20))
+        content.set_margin_start(self.scaled(20))
+        content.set_margin_end(self.scaled(20))
+        content.set_spacing(self.scaled(15))
         
         # Error icon + title
         title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         title_box.set_halign(Gtk.Align.CENTER)
         
         error_icon = Gtk.Image.new_from_icon_name("dialog-error-symbolic")
-        error_icon.set_pixel_size(32)
+        error_icon.set_pixel_size(self.scaled(32))
         title_box.append(error_icon)
         
         title_label = Gtk.Label(label="连接失败")
@@ -1530,7 +1608,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # OK button
         ok_btn = Gtk.Button(label="确定")
         ok_btn.set_halign(Gtk.Align.CENTER)
-        ok_btn.set_size_request(100, 40)
+        ok_btn.set_size_request(self.scaled(100), self.scaled(40))
         ok_btn.add_css_class("suggested-action")
         ok_btn.connect("clicked", lambda b: dialog.close())
         content.append(ok_btn)
@@ -1543,21 +1621,21 @@ class InstallerPoC(Gtk.ApplicationWindow):
         dialog = Gtk.Dialog(title="连接成功")
         dialog.set_transient_for(self)
         dialog.set_modal(True)
-        dialog.set_default_size(350, 150)
+        dialog.set_default_size(self.scaled(350), self.scaled(150))
         
         content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(20)
-        content.set_margin_end(20)
-        content.set_spacing(15)
+        content.set_margin_top(self.scaled(20))
+        content.set_margin_bottom(self.scaled(20))
+        content.set_margin_start(self.scaled(20))
+        content.set_margin_end(self.scaled(20))
+        content.set_spacing(self.scaled(15))
         
         # Success icon + title
         title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         title_box.set_halign(Gtk.Align.CENTER)
         
         success_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
-        success_icon.set_pixel_size(32)
+        success_icon.set_pixel_size(self.scaled(32))
         title_box.append(success_icon)
         
         title_label = Gtk.Label(label="连接成功")
@@ -1575,7 +1653,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # OK button
         ok_btn = Gtk.Button(label="确定")
         ok_btn.set_halign(Gtk.Align.CENTER)
-        ok_btn.set_size_request(100, 40)
+        ok_btn.set_size_request(self.scaled(100), self.scaled(40))
         ok_btn.add_css_class("suggested-action")
         ok_btn.connect("clicked", lambda b: dialog.close())
         content.append(ok_btn)
@@ -1597,7 +1675,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Test results box
         results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         results_box.add_css_class("info-box")
-        results_box.set_size_request(700, -1)
+        results_box.set_size_request(self.scaled(700), -1)
         
         # Test 1: Get disks
         disks = self.test_get_disks()
@@ -1680,7 +1758,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         # Radio buttons test
         group_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
         group_box.add_css_class("info-box")
-        group_box.set_size_request(500, -1)
+        group_box.set_size_request(self.scaled(500), -1)
         
         section_label = Gtk.Label()
         section_label.set_markup('<span weight="bold">选择版本通道：</span>')
@@ -1744,7 +1822,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         
         success_icon = Gtk.Image.new_from_icon_name("radio-checked-symbolic")
         success_icon.set_icon_size(Gtk.IconSize.LARGE)
-        success_icon.set_pixel_size(64)
+        success_icon.set_pixel_size(self.scaled(64))
         title_box.append(success_icon)
         
         title = Gtk.Label()
@@ -1757,7 +1835,7 @@ class InstallerPoC(Gtk.ApplicationWindow):
         results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         results_box.add_css_class("info-box")
         results_box.add_css_class("success")
-        results_box.set_size_request(600, -1)
+        results_box.set_size_request(self.scaled(600), -1)
         
         results = [
             "• GTK4 图形界面正常",
@@ -1874,6 +1952,7 @@ if __name__ == '__main__':
     print("="*50)
     print("SkorionOS Graphical Installer - PoC")
     print("="*50)
+    print("Using GTK native DPI scaling")
     print()
     
     app = InstallerApp()

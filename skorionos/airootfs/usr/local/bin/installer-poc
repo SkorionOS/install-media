@@ -47,6 +47,28 @@ WIDTH=${WIDTH:-1280}
 HEIGHT=${HEIGHT:-800}
 
 echo "✅ Detected resolution: ${WIDTH}x${HEIGHT}"
+
+# Set GTK DPI scaling based on resolution
+# Use GDK_DPI_SCALE instead of GDK_SCALE to avoid window size issues
+if [ "$HEIGHT" -ge 1440 ]; then
+    export GDK_SCALE=2
+    export UI_SCALE=1
+elif [ "$HEIGHT" -ge 1080 ]; then
+    export GDK_SCALE=1
+    # export UI_SCALE=1.5
+else
+    export GDK_SCALE=1
+    export UI_SCALE=1
+fi
+
+# GDK_SCALE is optional, set it manually for testing combined with CSS scaling
+# export GDK_SCALE=2
+
+# Pass actual resolution to Python app (UI will auto-scale via CSS)
+export INSTALLER_WIDTH="$WIDTH"
+export INSTALLER_HEIGHT="$HEIGHT"
+echo "📐 Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
+
 echo "🚀 Starting gamescope..."
 echo ""
 
@@ -61,6 +83,8 @@ echo ""
     echo "Installer PoC Log - $(date)"
     echo "=========================================="
     echo "Resolution: ${WIDTH}x${HEIGHT}"
+    echo "GDK_SCALE: $GDK_SCALE"
+    echo "GDK_DPI_SCALE: $GDK_DPI_SCALE"
     echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
     echo "TTY: $(tty)"
     echo ""
@@ -68,7 +92,10 @@ echo ""
     gamescope \
       -W "$WIDTH" \
       -H "$HEIGHT" \
+      -w "$WIDTH" \
+      -h "$HEIGHT" \
       -f \
+      -F fsr \
       --force-grab-cursor \
       --expose-wayland \
       -- python3 /usr/local/bin/installer-poc.py "$@" 2>&1
