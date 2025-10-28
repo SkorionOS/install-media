@@ -9,6 +9,92 @@ INSTALL_SCRIPT="$HOME/install.sh"
 SCRIPT_URL="https://github.com/3003n/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
 SCRIPT_URL_FALLBACK="https://gitee.com/honjow/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
 
+# ===== Controller Support (InputPlumber) =====
+function setup_controller_support() {
+    echo "Setting up controller support..."
+    
+    # Load xpad kernel module for Xbox controllers
+    modprobe xpad &> /dev/null
+    
+    # Start InputPlumber service
+    if ! systemctl is-active --quiet inputplumber; then
+        echo "Starting InputPlumber service..."
+        systemctl start inputplumber &> /dev/null
+        
+        # Wait for InputPlumber to be ready (max 10 seconds)
+        local max_wait=10
+        local waited=0
+        while [ $waited -lt $max_wait ]; do
+            if busctl status org.shadowblip.InputPlumber &> /dev/null; then
+                echo "InputPlumber service is ready"
+                break
+            fi
+            sleep 1
+            waited=$((waited + 1))
+        done
+        
+        if [ $waited -ge $max_wait ]; then
+            echo "Warning: InputPlumber service did not start in time"
+            return 1
+        fi
+    else
+        echo "InputPlumber service already running"
+    fi
+    
+    # Enable management of all gamepad devices
+    echo "Enabling all gamepad devices..."
+    if busctl set-property org.shadowblip.InputPlumber \
+        /org/shadowblip/InputPlumber/Manager \
+        org.shadowblip.InputManager \
+        ManageAllDevices b 1 &> /dev/null; then
+        echo "All gamepad devices enabled"
+    else
+        echo "Warning: Failed to enable all gamepad devices"
+    fi
+    
+    # Wait a bit for devices to be detected
+    sleep 2
+    
+    # Load gamepad profile (keyboard emulation for text UI) on all CompositeDevices
+    echo "Loading gamepad profile on all devices..."
+    
+    # Get list of all CompositeDevices
+    local devices=$(busctl tree org.shadowblip.InputPlumber 2>/dev/null | grep CompositeDevice | awk '{print $NF}')
+    local loaded_count=0
+    
+    for device in $devices; do
+        echo "  Loading profile on $device..."
+        local max_retry=3
+        local retry=0
+        
+        while [ $retry -lt $max_retry ]; do
+            if busctl call org.shadowblip.InputPlumber \
+                "$device" \
+                org.shadowblip.Input.CompositeDevice \
+                LoadProfilePath "s" /root/gamepad_profile.yaml &> /dev/null; then
+                echo "  ✓ Profile loaded on $device"
+                loaded_count=$((loaded_count + 1))
+                break
+            fi
+            retry=$((retry + 1))
+            [ $retry -lt $max_retry ] && sleep 1
+        done
+        
+        if [ $retry -ge $max_retry ]; then
+            echo "  ✗ Failed to load profile on $device"
+        fi
+    done
+    
+    if [ $loaded_count -gt 0 ]; then
+        echo "Gamepad profile loaded on $loaded_count device(s)"
+        return 0
+    else
+        echo "Warning: Failed to load gamepad profile on any device"
+        echo "Controllers may still work with native support in graphical mode"
+        return 1
+    fi
+}
+
 function check_and_update_install_script() {
     local current_version=""
     local remote_version=""
@@ -97,13 +183,14 @@ function version_greater() {
     [ "$(printf '%s\n' "$ver1" "$ver2" | sort -V | tail -1)" = "$ver1" ] && [ "$ver1" != "$ver2" ]
 }
 
-poll_gamepad &
-
 copy_system_configs
 
 check_internet_connection
 
 check_and_update_install_script
+
+# ===== Setup controller support before selecting installer =====
+setup_controller_support
 
 # ===== Select installer mode =====
 INSTALLER_MODE=""

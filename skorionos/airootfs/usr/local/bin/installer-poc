@@ -33,6 +33,10 @@ export XDG_RUNTIME_DIR=/tmp/runtime-root
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
+# Setup SDL for controller support
+export SDL_JOYSTICK_DEVICE=/dev/input/event*
+export SDL_GAMECONTROLLERCONFIG_FILE=/etc/SDL_GameControllerDB.txt
+
 # Detect resolution
 RESOLUTION=$(cat /sys/class/drm/card*/modes 2>/dev/null | head -1)
 WIDTH=${RESOLUTION%x*}
@@ -66,6 +70,7 @@ echo ""
       -H "$HEIGHT" \
       -f \
       --force-grab-cursor \
+      --expose-wayland \
       -- python3 /usr/local/bin/installer-poc.py "$@" 2>&1
     
     EXIT_CODE=$?

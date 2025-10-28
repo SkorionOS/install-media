@@ -71,7 +71,18 @@ mapping:
     target_events:
       - keyboard: KeyRight
 
-  # Buttons
+  # Right analog stick (Mouse movement)
+  - name: Right Stick Mouse
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+    target_events:
+      - mouse:
+          motion:
+            speed_pps: 800
+
+  # Face Buttons
   - name: A Button
     source_event:
       gamepad:
@@ -96,3 +107,65 @@ mapping:
         button: North
     target_events:
       - keyboard: KeySpace
+
+  # Shoulder Buttons (Mouse clicks)
+  - name: RB Button
+    source_event:
+      gamepad:
+        button: RightBumper
+    target_events:
+      - mouse:
+          button: Left
+  - name: LB Button
+    source_event:
+      gamepad:
+        button: LeftBumper
+    target_events:
+      - mouse:
+          button: Right
+
+  # Triggers
+  - name: RT Trigger
+    source_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
+          deadzone: 0.2
+    target_events:
+      - keyboard: KeyPageDown
+  - name: LT Trigger
+    source_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+          deadzone: 0.2
+    target_events:
+      - keyboard: KeyPageUp
+
+  # Special Buttons
+  - name: Start Button
+    source_event:
+      gamepad:
+        button: Start
+    target_events:
+      - keyboard: KeyEnter
+  - name: Select Button
+    source_event:
+      gamepad:
+        button: Select
+    target_events:
+      - keyboard: KeyTab
+
+  # Stick Clicks
+  - name: Left Stick Click
+    source_event:
+      gamepad:
+        button: LeftStick
+    target_events:
+      - keyboard: KeyHome
+  - name: Right Stick Click
+    source_event:
+      gamepad:
+        button: RightStick
+    target_events:
+      - keyboard: KeyEnd
