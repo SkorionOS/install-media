@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.1.1
+# Version: 2.1.2
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -17,7 +17,7 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.1.1"
+VERSION="2.1.2"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -728,23 +728,47 @@ fi
 
 if [ -z "$SELECTED_FRZR_FILE" ] && (ls -1 /dev/disk/by-label | grep -q FRZR_UPDATE); then
   TEMP_FILE=$(mktemp)
-  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装SkorionOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
-    "local" "使用本地媒介行安装." \
-    "online" "在线获取最新系统镜像." \
-    2> $TEMP_FILE
-  ); then
-    CHOICE=$(cat $TEMP_FILE)
-    rm $TEMP_FILE
+  
+  # 如果是离线模式，只显示本地安装选项
+  if [ "$OFFLINE_MODE" = "true" ]; then
+    if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "离线模式：仅支持本地镜像安装" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
+      "local" "使用本地媒介行安装." \
+      2> $TEMP_FILE
+    ); then
+      CHOICE=$(cat $TEMP_FILE)
+      rm $TEMP_FILE
+    else
+      cancel_install
+    fi
   else
-    cancel_install
+    # 在线模式，显示所有选项
+    if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --menu "你想如何安装SkorionOS ?" $MSGBOX_HEIGHT $MENU_WIDTH 10 \
+      "local" "使用本地媒介行安装." \
+      "online" "在线获取最新系统镜像." \
+      2> $TEMP_FILE
+    ); then
+      CHOICE=$(cat $TEMP_FILE)
+      rm $TEMP_FILE
+    else
+      cancel_install
+    fi
   fi
 fi
 
 if [[ -z "$SELECTED_FRZR_FILE" && -z "$CHOICE" ]]; then
-  if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --yes-button "在线安装" --no-button "退出安装" --yesno "未找到任何本地安装文件，是否继续使用在线安装方式?" $MSGBOX_HEIGHT $MENU_WIDTH); then
-    CHOICE="online"
-  else
+  # 如果是离线模式且没有本地文件，无法继续
+  if [ "$OFFLINE_MODE" = "true" ]; then
+    dialog --colors --title "${ERROR_COLOR}无法继续\Zn" \
+      --msgbox "离线模式下未找到任何本地安装文件。\n\n请插入包含安装镜像的 USB 设备（标签：FRZR_UPDATE），或重启后连接网络进行在线安装。" \
+      $MSGBOX_HEIGHT $MENU_WIDTH
     cancel_install
+  else
+    # 在线模式，可以使用在线安装
+    if (dialog --colors --title "${TITLE_COLOR}安装方式\Zn" --yes-button "在线安装" --no-button "退出安装" --yesno "未找到任何本地安装文件，是否继续使用在线安装方式?" $MSGBOX_HEIGHT $MENU_WIDTH); then
+      CHOICE="online"
+    else
+      cancel_install
+    fi
   fi
 fi
 

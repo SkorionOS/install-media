@@ -2,18 +2,53 @@
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091
 
 function check_internet_connection() {
-  while ! (curl -Ls --http1.1 https://www.baidu.com | grep '<html' >/dev/null); do
-    dialog --colors --title "${TITLE_COLOR}$OS_NAME 安装\Zn" \
-      --yes-button "网络配置" \
-      --no-button "退出安装" \
-      --yesno "未检测到互联网连接。请使用网络配置工具激活网络，然后选择 <退出> 以退出工具并继续。" \
-      $MSGBOX_HEIGHT $MSGBOX_WIDTH
-
-    if [ $? -ne 0 ]; then
+  # 检查是否已有网络连接
+  if curl -Ls --http1.1 --connect-timeout 5 https://www.baidu.com | grep '<html' >/dev/null 2>&1; then
+    echo "网络连接正常"
+    export OFFLINE_MODE=false
+    return 0
+  fi
+  
+  # 没有网络连接，询问用户
+  while true; do
+    TEMP_FILE=$(mktemp)
+    
+    if (dialog --colors --title "${TITLE_COLOR}网络检测\Zn" \
+      --menu "未检测到互联网连接\n\n请选择操作：" 15 60 3 \
+      "config" "网络配置 -- 设置网络连接" \
+      "skip"   "跳过 -- 使用离线安装（仅限本地镜像）" \
+      "exit"   "退出 -- 退出安装程序" \
+      2> $TEMP_FILE
+    ); then
+      CHOICE=$(cat $TEMP_FILE)
+      rm $TEMP_FILE
+      
+      case "$CHOICE" in
+        config)
+          nmtui-connect
+          # 重新检查网络
+          if curl -Ls --http1.1 --connect-timeout 5 https://www.baidu.com | grep '<html' >/dev/null 2>&1; then
+            echo "网络连接成功"
+            export OFFLINE_MODE=false
+            return 0
+          fi
+          # 网络仍然不可用，继续循环
+          ;;
+        skip)
+          echo "跳过网络连接，进入离线模式"
+          export OFFLINE_MODE=true
+          return 0
+          ;;
+        exit)
+          echo "用户选择退出安装"
+          exit 1
+          ;;
+      esac
+    else
+      # 用户按了 ESC 或取消，默认退出
+      echo "用户取消，退出安装"
       exit 1
     fi
-
-    nmtui-connect
   done
 }
 

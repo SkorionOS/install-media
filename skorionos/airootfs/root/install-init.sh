@@ -185,10 +185,6 @@ function version_greater() {
 
 copy_system_configs
 
-check_internet_connection
-
-check_and_update_install_script
-
 # ===== Setup controller support before selecting installer =====
 setup_controller_support
 
@@ -198,15 +194,15 @@ INSTALLER_MODE=""
 # Check if graphical installer is available
 if command -v gamescope &> /dev/null && \
    command -v python3 &> /dev/null && \
-   python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null && \
-   [ -f /usr/local/bin/installer-poc ]; then
+   python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1')" 2>/dev/null && \
+   [ -f /usr/local/bin/installer-modular ]; then
   
   TEMP_FILE=$(mktemp)
   if (dialog --colors --title "\Z1SkorionOS 安装器\Zn" \
-    --default-item "text" \
+    --default-item "modular" \
     --menu "请选择安装器模式" 15 70 2 \
-    "text" "文本安装器 -- 默认，稳定可靠" \
-    "poc"  "图形化安装器 -- PoC 测试版，验证新界面" \
+    "modular" "图形化安装器 -- 现代界面，支持手柄" \
+    "text"    "文本安装器 -- 传统模式，稳定可靠" \
     2> $TEMP_FILE
   ); then
     INSTALLER_MODE=$(cat $TEMP_FILE)
@@ -223,13 +219,24 @@ fi
 
 # Launch installer based on selection
 case "$INSTALLER_MODE" in
-  poc)
+  modular)
     clear
-    echo "启动图形化安装器 PoC..."
-    exec /usr/local/bin/installer-poc
+    echo "启动图形化安装器..."
+    exec /usr/local/bin/installer-modular
     ;;
   text|*)
-    # Default text mode
+    # Text mode: check internet and update script first
+    check_internet_connection  # 这里会设置 OFFLINE_MODE 环境变量
+    
+    # 只在在线模式下更新脚本
+    if [ "$OFFLINE_MODE" != "true" ]; then
+      check_and_update_install_script
+    else
+      echo "离线模式，跳过脚本更新"
+      sleep 2
+    fi
+    
+    # Launch text installer
     eval "$INSTALL_SCRIPT"
     ;;
 esac

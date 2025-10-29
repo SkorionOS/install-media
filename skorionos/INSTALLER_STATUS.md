@@ -378,10 +378,55 @@ pages = [
 
 ---
 
-## 🚀 运行方式
+## 🚀 启动流程
+
+### Live CD 自动启动流程
+
+```
+系统启动
+  ↓
+getty 自动登录 root
+  ↓
+.zshrc 执行
+  ↓
+install-init.sh
+  ↓
+copy_system_configs (复制已有系统配置)
+  ↓
+setup_controller_support (配置手柄支持)
+  ↓
+显示安装器选择器
+  ├─ "modular" → 图形化安装器 (默认)
+  │   └─ 直接启动 /usr/local/bin/installer-modular
+  │
+  └─ "text" → 文本安装器
+      ↓
+      check_internet_connection (检查网络)
+      ├─ 有网络 → OFFLINE_MODE=false
+      ├─ 无网络 → 显示菜单：
+      │   ├─ "网络配置" → nmtui-connect
+      │   ├─ "跳过" → OFFLINE_MODE=true (离线模式)
+      │   └─ "退出" → exit
+      ↓
+      check_and_update_install_script (仅在线模式)
+      ↓
+      启动 install.sh
+```
+
+### 文本安装器离线模式支持
+
+- ✅ **网络检测优化**：用户可选择跳过网络配置，进入离线模式
+- ✅ **离线安装限制**：
+  - 离线模式下只能使用本地镜像安装（USB 设备，标签 `FRZR_UPDATE`）
+  - 不显示在线安装选项
+  - 如果没有本地镜像，提示用户插入 USB 或重启联网
+- ✅ **智能脚本更新**：离线模式下跳过 `install.sh` 的在线更新
+
+### 图形化安装器运行方式
 
 ```bash
-# 启动图形化安装器
+# 从 Live CD 启动（自动）
+# 或手动启动图形化安装器
 /usr/local/bin/installer-modular
 
 # 查看日志
