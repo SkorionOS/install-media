@@ -189,7 +189,7 @@ class ModePage(BasePage):
         
         # If dual boot, configure it first
         if mode == 'dual':
-            from .disk_new import _configure_dual_boot
+            from .disk import _configure_dual_boot
             _configure_dual_boot(self.app)
         else:
             # Go to confirm page

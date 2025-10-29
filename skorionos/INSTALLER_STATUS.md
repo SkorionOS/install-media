@@ -1,8 +1,8 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-10-29 (第八次更新)
+> 最后更新: 2025-10-29 (第九次更新)
 > 
-> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项、统一日志系统、UI布局优化、智能回退机制、网络检测、离线模式
+> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项、统一日志系统、UI布局优化、智能回退机制、网络检测、离线模式、多系统安装
 
 ---
 
@@ -45,12 +45,13 @@
         ├── network.py         # 1. 网络连接
         ├── disk.py            # 2. 磁盘选择
         ├── mode.py            # 3. 安装模式
-        ├── confirm.py         # 4. 确认操作
-        ├── bootstrap.py       # 5. 磁盘初始化（ExecutionPage）
-        ├── version.py         # 6. 版本选择（含安装方式选择 🆕）
-        ├── advanced.py        # 7. 高级选项（固件/CDN/Debug 🆕）
-        ├── install.py         # 8. 系统安装（ExecutionPage，支持本地安装 🆕）
-        └── complete.py        # 9. 完成页面（SUCCESS/CANCELLED/FAILED）
+        ├── partition_adjust.py # 4. 分区调整（多系统安装专用，三列布局 🆕）
+        ├── confirm.py         # 5. 确认操作
+        ├── bootstrap.py       # 6. 磁盘初始化（ExecutionPage）
+        ├── version.py         # 7. 版本选择（含安装方式选择 🆕）
+        ├── advanced.py        # 8. 高级选项（固件/CDN/Debug 🆕）
+        ├── install.py         # 9. 系统安装（ExecutionPage，支持本地安装 🆕）
+        └── complete.py        # 10. 完成页面（SUCCESS/CANCELLED/FAILED）
 ```
 
 ---
@@ -59,25 +60,28 @@
 
 ```
 0. 欢迎页 (Welcome) - 内置在 main.py
-   ├─→ [退出] → 8. Complete 页 (CANCELLED)
+   ├─→ [退出] → 10. Complete 页 (CANCELLED)
    └─→ 1. 网络页 (Network)
        └─→ 2. 磁盘选择页 (Disk)
            └─→ 3. 安装模式页 (Mode) - 检测现有安装，选择 repair/fresh/dual
-               ├─→ [退出] → 8. Complete 页 (CANCELLED)
-               └─→ 4. 确认页 (Confirm) - 显示操作摘要
-                   ├─→ [退出] → 8. Complete 页 (CANCELLED)
-                   └─→ 5. Bootstrap 页 (Bootstrap) - 执行 frzr-bootstrap，扫描本地文件 🆕
-                       ├─→ [失败/退出] → 8. Complete 页 (CANCELLED/FAILED)
-                       └─→ 6. 版本选择页 (Version) - 选择安装方式（在线/本地）+ 配置 🆕
-                           ├─→ [退出] → 9. Complete 页 (CANCELLED)
-                           ├─→ [启用高级选项] → 7. 高级选项页 (Advanced) 🆕
-                           │   ├─→ [退出] → 9. Complete 页 (CANCELLED)
-                           │   └─→ 8. 安装页 (Install)
-                           └─→ [不启用高级选项] → 8. 安装页 (Install) - 执行 frzr-deploy（在线或本地文件） 🆕
-                               ├─→ [成功] → 9. Complete 页 (SUCCESS) ✅
-                               └─→ [失败/退出] → 9. Complete 页 (FAILED/CANCELLED)
+               ├─→ [退出] → 10. Complete 页 (CANCELLED)
+               ├─→ [多系统安装 & 空间不足] → 4. 分区调整页 (PartitionAdjust) 🆕
+               │   ├─→ [返回] → 2. 磁盘选择页
+               │   └─→ [继续] → 5. 确认页 (Confirm) - 显示分区操作摘要
+               └─→ [其他模式] → 5. 确认页 (Confirm) - 显示操作摘要
+                   ├─→ [退出] → 10. Complete 页 (CANCELLED)
+                   └─→ 6. Bootstrap 页 (Bootstrap) - 执行 frzr-bootstrap，扫描本地文件 🆕
+                       ├─→ [失败/退出] → 10. Complete 页 (CANCELLED/FAILED)
+                       └─→ 7. 版本选择页 (Version) - 选择安装方式（在线/本地）+ 配置 🆕
+                           ├─→ [退出] → 10. Complete 页 (CANCELLED)
+                           ├─→ [启用高级选项] → 8. 高级选项页 (Advanced) 🆕
+                           │   ├─→ [退出] → 10. Complete 页 (CANCELLED)
+                           │   └─→ 9. 安装页 (Install)
+                           └─→ [不启用高级选项] → 9. 安装页 (Install) - 执行 frzr-deploy（在线或本地文件） 🆕
+                               ├─→ [成功] → 10. Complete 页 (SUCCESS) ✅
+                               └─→ [失败/退出] → 10. Complete 页 (FAILED/CANCELLED)
 
-8. Complete 页面 (完成页面)
+10. Complete 页面 (完成页面)
    - SUCCESS: 重启 / 打开命令行 / 关机
    - CANCELLED: 重新安装 / 打开命令行 / 关机
    - FAILED: 重新安装 / 打开命令行 / 关机
@@ -275,6 +279,95 @@ else:
 | 挂载管理 | 智能保持 | 智能保持 | ✅ 一致 |
 | 文件信息 | 显示设备/大小 | 显示设备/大小 | ✅ 一致 |
 | 清理机制 | trap EXIT | atexit + Complete | ✅ 一致 |
+
+### 多系统安装与分区调整 🆕
+
+#### PartitionAdjustPage（分区调整页面）
+
+**触发条件**：多系统安装时磁盘空闲空间不足（< 55GB）
+
+**三列水平布局设计**：
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│  分区列表（左）   │  操作选择（中）   │  空间大小（右）   │
+│  ● /dev/sda3    │  ● 缩小分区      │  ● 60GB         │
+│  ○ /dev/sda4    │  ○ 删除整个分区   │  ○ 100GB        │
+│  ○ /dev/sda5    │                 │  ○ 200GB        │
+│  [ScrolledWin]  │                 │                 │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+**功能特性**：
+- ✅ **三列独立滚动**：分区列表支持滚动，操作和大小固定显示
+- ✅ **全行可点击**：所有选项使用 `UIComponents.create_selection_button()`
+- ✅ **智能联动**：选择"删除分区"时自动禁用大小选择
+- ✅ **单选按钮组**：替代 ComboBox，更直观的视觉反馈
+- ✅ **空间优化**：水平布局充分利用屏幕宽度，减少垂直高度
+
+**交互逻辑**：
+```python
+# 收集用户选择
+partition = app.selected_partition  # 例如: /dev/sda3
+operation = app.partition_operation  # 'shrink' 或 'delete_entire_partition'
+size_gb = app.shrink_size_gb  # 60, 100, 200 (仅 shrink 时有效)
+
+# 传递给 frzr-bootstrap（非交互模式）
+env = {
+    'FRZR_NONINTERACTIVE': '1',
+    'FRZR_SHRINK_PARTITION': partition if operation == 'shrink' else '',
+    'FRZR_SHRINK_SIZE': str(size_gb) if operation == 'shrink' else '',
+    'FRZR_DELETE_PARTITION': partition if operation == 'delete_entire_partition' else ''
+}
+```
+
+#### frzr-bootstrap 非交互模式增强 🆕
+
+**修改的 whiptail 确认点**：
+
+1️⃣ **删除分区确认**（shrink_selected_partition, line 676）：
+```bash
+if [ "$IS_NONINTERACTIVE" = true ]; then
+    echo "[NONINTERACTIVE] Skipping delete partition confirmation for: $partition"
+else
+    whiptail --yesno "*** 最终确认 - 不可逆操作 ***" ...
+fi
+```
+
+2️⃣ **缩小分区确认**（shrink_selected_partition, line 711）：
+```bash
+if [ "$IS_NONINTERACTIVE" = true ]; then
+    echo "[NONINTERACTIVE] Skipping shrink partition confirmation: $partition, releasing: $display_size"
+else
+    whiptail --yesno "确认缩小分区?" ...
+fi
+```
+
+3️⃣ **多空闲空间选择**（select_free_space, line 439）：
+```bash
+if [ "$IS_NONINTERACTIVE" = true ]; then
+    echo "[NONINTERACTIVE] Multiple free spaces found, auto-selecting first one"
+    selected="${usable_spaces[0]}"  # 自动选择最大的
+else
+    whiptail --menu "选择要使用的空闲空间:" ...
+fi
+```
+
+**完全非交互执行流程**：
+```
+图形界面选择分区参数 → 传递环境变量 → frzr-bootstrap 自动执行
+                                          ↓
+                    检测到 IS_NONINTERACTIVE=true
+                                          ↓
+                    跳过所有 whiptail 确认
+                                          ↓
+                    自动执行分区操作（缩小/删除）
+                                          ↓
+                    自动选择空闲空间
+                                          ↓
+                    创建 SkorionOS 分区
+                                          ↓
+                    继续安装流程
+```
 
 ### 设备适配 (Device Quirks)
 - ✅ **自动检测设备型号**（基于 DMI 信息）
@@ -648,6 +741,16 @@ else:
 ---
 
 ## 🐛 已修复问题
+
+### 2025-10-29 (第九次更新)
+- ✅ **多系统安装导入错误** → 修复 `mode.py` 中的 `from .disk_new` 错误导入（改为 `from .disk`）
+- ✅ **磁盘空间不足使用 Dialog 弹窗** → 创建 `PartitionAdjustPage` 统一页面风格
+- ✅ **分区调整页面垂直排列空间利用率低** → 重构为三列水平布局（分区列表/操作选择/空间大小）
+- ✅ **分区操作列表不可点击** → 使用 `UIComponents.create_selection_button()` 实现全行可选
+- ✅ **分区大小使用 ComboBox 选择不直观** → 改为单选按钮组（60GB/100GB/200GB）
+- ✅ **多系统安装流程卡在确认对话框** → `frzr-bootstrap` 非交互模式跳过所有 `whiptail` 对话框
+- ✅ **分区缩小和删除需要手动确认** → 非交互模式自动执行，基于图形界面传递的参数
+- ✅ **多个空闲空间需要手动选择** → 非交互模式自动选择第一个（最大的）空闲空间
 
 ### 2025-10-29 (第八次更新)
 - ✅ **离线环境仍可选择在线安装** → 版本页面检测网络状态，离线时禁用"在线安装"选项

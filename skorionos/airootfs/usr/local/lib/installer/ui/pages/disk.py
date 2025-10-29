@@ -406,9 +406,9 @@ def _configure_dual_boot(app):
         app.dual_mode = 'auto'
         app.show_page('confirm')
     else:
-        # No sufficient free space - show partition adjustment dialog
-        print(f"[DISK] No sufficient free space, showing partition adjustment dialog")
-        _show_partition_adjustment_dialog(app)
+        # No sufficient free space - go to partition adjustment page
+        print(f"[DISK] No sufficient free space, going to partition adjustment page")
+        app.show_page('partition_adjust')
 
 
 def _show_partition_adjustment_dialog(app):

@@ -18,6 +18,7 @@ from .ui.components.base import UIComponents
 from .ui.pages.network import create_network_page
 from .ui.pages.disk import create_disk_page
 from .ui.pages.mode import create_mode_page
+from .ui.pages.partition_adjust import create_partition_adjust_page
 from .ui.pages.confirm import create_confirm_page
 from .ui.pages.bootstrap import create_bootstrap_page
 from .ui.pages.version import create_version_page
@@ -287,12 +288,13 @@ class InstallerApp(Gtk.ApplicationWindow):
             'network': 1,
             'disk': 2,
             'mode': 3,
-            'confirm': 4,
-            'bootstrap': 5,
-            'version': 6,
-            'advanced': 7,   # Advanced options (NEW)
-            'install': 8,    # Moved from 7 to 8
-            'complete': 9,   # Moved from 8 to 9
+            'partition_adjust': 4,  # Partition adjustment for dual boot
+            'confirm': 5,
+            'bootstrap': 6,
+            'version': 7,
+            'advanced': 8,
+            'install': 9,
+            'complete': 10,
         }
         
         # Convert string to number if needed
@@ -308,16 +310,17 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Create page content
         pages = [
-            self.create_welcome_page,                   # 0: Welcome
-            lambda: create_network_page(self),          # 1: Network
-            lambda: create_disk_page(self),             # 2: Disk selection
-            lambda: create_mode_page(self),             # 3: Mode selection
-            lambda: create_confirm_page(self),          # 4: Confirmation
-            lambda: create_bootstrap_page(self),        # 5: Bootstrap (frzr-bootstrap)
-            lambda: create_version_page(self),          # 6: Version selection
-            lambda: create_advanced_options_page(self), # 7: Advanced options (NEW)
-            lambda: create_install_page(self),          # 8: Installation
-            lambda: self.create_complete_page(),        # 9: Complete
+            self.create_welcome_page,                       # 0: Welcome
+            lambda: create_network_page(self),              # 1: Network
+            lambda: create_disk_page(self),                 # 2: Disk selection
+            lambda: create_mode_page(self),                 # 3: Mode selection
+            lambda: create_partition_adjust_page(self),     # 4: Partition adjustment (dual boot)
+            lambda: create_confirm_page(self),              # 5: Confirmation
+            lambda: create_bootstrap_page(self),            # 6: Bootstrap (frzr-bootstrap)
+            lambda: create_version_page(self),              # 7: Version selection
+            lambda: create_advanced_options_page(self),     # 8: Advanced options
+            lambda: create_install_page(self),              # 9: Installation
+            lambda: self.create_complete_page(),            # 10: Complete
         ]
         
         if page_num < len(pages):
