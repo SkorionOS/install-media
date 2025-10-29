@@ -18,6 +18,7 @@ from .ui.pages.confirm import create_confirm_page
 from .ui.pages.bootstrap import create_bootstrap_page
 from .ui.pages.version import create_version_page
 from .ui.pages.install import create_install_page
+from .ui.pages.complete import CompletePage
 
 
 class StatusBar:
@@ -260,6 +261,7 @@ class InstallerApp(Gtk.ApplicationWindow):
             'bootstrap': 5,
             'version': 6,
             'install': 7,
+            'complete': 8,
         }
         
         # Convert string to number if needed
@@ -283,6 +285,7 @@ class InstallerApp(Gtk.ApplicationWindow):
             lambda: create_bootstrap_page(self), # 5: Bootstrap (frzr-bootstrap)
             lambda: create_version_page(self),   # 6: Version selection
             lambda: create_install_page(self),   # 7: Installation
+            lambda: self.create_complete_page(), # 8: Complete
         ]
         
         if page_num < len(pages):
@@ -364,9 +367,9 @@ class InstallerApp(Gtk.ApplicationWindow):
         # Buttons (using standard button box and nav-button style)
         btn_box = UIComponents.create_button_box(spacing=20, homogeneous=True)
         
-        # Exit button (left side)
-        exit_btn = UIComponents.create_button("退出", "application-exit-symbolic")
-        exit_btn.connect("clicked", lambda b: self.close())
+        # Exit to shell button (left side)
+        exit_btn = UIComponents.create_button("打开命令行", "utilities-terminal-symbolic")
+        exit_btn.connect("clicked", lambda b: sys.exit(0))
         btn_box.append(exit_btn)
         
         # Start button (right side, primary action)
@@ -378,6 +381,31 @@ class InstallerApp(Gtk.ApplicationWindow):
         box.append(btn_box)
         
         return box
+    
+    def create_complete_page(self):
+        """Create the complete page (reused instance)"""
+        if not hasattr(self, '_complete_page_instance'):
+            self._complete_page_instance = CompletePage(self)
+        return self._complete_page_instance.create()
+    
+    def show_complete_page(self, status: str, summary: str = "", details: str = ""):
+        """
+        Show the complete page with specific status.
+        
+        Args:
+            status: CompletePage.STATUS_SUCCESS, STATUS_CANCELLED, or STATUS_FAILED
+            summary: Brief summary message
+            details: Detailed information (optional)
+        """
+        # Store complete page state
+        if not hasattr(self, '_complete_page_instance'):
+            self._complete_page_instance = CompletePage(self)
+        
+        # Set status before showing page
+        self._complete_page_instance.set_status(status, summary, details)
+        
+        # Show complete page (don't add to history - terminal page)
+        self.show_page('complete', add_to_history=False)
     
     def get_device_info(self):
         """Get device information"""

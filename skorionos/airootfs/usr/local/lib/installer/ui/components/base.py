@@ -376,9 +376,14 @@ class ExecutionPage(BasePage):
         pass
     
     def on_exit_clicked(self, button):
-        """Handle exit button click - close the application."""
-        import sys
-        sys.exit(0)
+        """Handle exit button click - go to complete page with CANCELLED status."""
+        from ..pages.complete import CompletePage
+        print(f"[{self.__class__.__name__}] User requested exit")
+        self.app.show_complete_page(
+            CompletePage.STATUS_CANCELLED,
+            "安装已取消",
+            f"您在{self.get_title_text()}页面选择了退出安装"
+        )
     
     def on_start_clicked(self, button):
         """Handle start button click - override to implement execution start."""

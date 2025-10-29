@@ -1,6 +1,6 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-01-28
+> 最后更新: 2025-01-29
 
 ---
 
@@ -21,7 +21,8 @@
 │
 ├── backend/                    # 后端工具模块
 │   ├── disk_utils.py          # 磁盘检测和操作
-│   └── install_utils.py       # 安装后处理（Steam、post_install）
+│   ├── install_utils.py       # 安装后处理（Steam、post_install）
+│   └── log_utils.py           # 日志清理和上传（fpaste）
 │
 ├── network/                    # 网络管理模块
 │   ├── manager.py             # NetworkManager 封装
@@ -39,7 +40,8 @@
         ├── confirm.py         # 4. 确认操作
         ├── bootstrap.py       # 5. 磁盘初始化（ExecutionPage）
         ├── version.py         # 6. 版本选择
-        └── install.py         # 7. 系统安装（ExecutionPage）
+        ├── install.py         # 7. 系统安装（ExecutionPage）
+        └── complete.py        # 8. 完成页面（SUCCESS/CANCELLED/FAILED）
 ```
 
 ---
@@ -48,14 +50,26 @@
 
 ```
 0. 欢迎页 (Welcome) - 内置在 main.py
+   ├─→ [退出] → 8. Complete 页 (CANCELLED)
    └─→ 1. 网络页 (Network)
        └─→ 2. 磁盘选择页 (Disk)
            └─→ 3. 安装模式页 (Mode) - 检测现有安装，选择 repair/fresh/dual
+               ├─→ [退出] → 8. Complete 页 (CANCELLED)
                └─→ 4. 确认页 (Confirm) - 显示操作摘要
+                   ├─→ [退出] → 8. Complete 页 (CANCELLED)
                    └─→ 5. Bootstrap 页 (Bootstrap) - 执行 frzr-bootstrap
+                       ├─→ [失败/退出] → 8. Complete 页 (CANCELLED/FAILED)
                        └─→ 6. 版本选择页 (Version) - 选择通道/桌面/NVIDIA
+                           ├─→ [退出] → 8. Complete 页 (CANCELLED)
                            └─→ 7. 安装页 (Install) - 执行 frzr-deploy
-                               └─→ ❌ Complete 页 (缺失！)
+                               ├─→ [成功] → 8. Complete 页 (SUCCESS) ✅
+                               └─→ [失败/退出] → 8. Complete 页 (FAILED/CANCELLED)
+
+8. Complete 页面 (完成页面)
+   - SUCCESS: 重启 / 打开命令行 / 关机
+   - CANCELLED: 重新安装 / 打开命令行 / 关机
+   - FAILED: 重新安装 / 打开命令行 / 关机
+   - ✅ 自动上传日志到 fpaste，显示 URL
 ```
 
 ---
@@ -79,6 +93,12 @@
 - ✅ **Bootstrap 页面**: frzr-bootstrap 执行、实时日志、错误处理
 - ✅ **Version 页面**: 通道/桌面/NVIDIA 选择
 - ✅ **Install 页面**: frzr-deploy 执行、进度显示、日志输出
+- ✅ **Complete 页面**: 统一的结束页面
+  - 三种状态：SUCCESS（成功）/ CANCELLED（取消）/ FAILED（失败）
+  - 自动异步上传日志到 fpaste（后台线程）
+  - 实时显示上传状态和 URL
+  - 不同状态显示不同的操作按钮
+  - 所有"退出"按钮都跳转到此页面，而非直接退出到 TTY
 
 ### 后端功能（代码已实现）
 - ✅ **disk_utils.py**:
@@ -93,6 +113,11 @@
 - ✅ **install_utils.py**:
   - `grab_steam_bootstrap()` - 获取 Steam 引导文件
   - `post_install()` - 后安装优化（Steam 配置）
+
+- ✅ **log_utils.py**:
+  - `cleanup_log()` - 清理日志中的 ANSI 转义码
+  - `upload_log_to_fpaste()` - 上传日志到 fpaste（带超时）
+  - `AsyncLogUploader` - 异步上传器（后台线程 + 回调）
 
 ### 设备适配 (Device Quirks)
 - ✅ **自动检测设备型号**（基于 DMI 信息）
@@ -164,19 +189,14 @@
 ## ❌ 缺失功能（阻塞性）
 
 ### 🔴 严重问题
-1. **Complete 页面不存在**
-   - `install.py` 第213行调用 `show_page('complete')`
-   - 但 `main.py` 没有注册此页面
-   - **后果**: 安装成功后报错，用户无法重启
-
-2. **install.py 缺少后安装步骤**
+1. **install.py 缺少后安装步骤**
    - ❌ 未调用 `grab_steam_bootstrap()`（代码已在 install_utils.py）
    - ❌ 未调用 `post_install()`（代码已在 install_utils.py）
    - ❌ 未复制网络配置到安装系统
    - ❌ 未验证启动配置
    - **后果**: Steam 启动需要额外配置，网络配置丢失
 
-3. **disk.py 未使用安全检查函数**
+2. **disk.py 未使用安全检查函数**
    - ✅ 函数已实现（`is_disk_external`, `is_disk_smaller_than`）
    - ❌ 但 UI 未调用，不会警告用户
    - **后果**: 可能安装到外部磁盘或太小的磁盘
@@ -187,23 +207,7 @@
 
 ### 必须立即修复（第一优先级）
 
-#### 1. 创建 Complete 页面
-```python
-# 文件: ui/pages/complete.py
-class CompletePage(BasePage):
-    """Installation complete page with reboot options."""
-    
-    def populate_content(self, content_box):
-        # 显示成功信息
-        # 显示安装日志路径
-    
-    def populate_buttons(self, button_box):
-        # 重启按钮 -> subprocess.run(['reboot'])
-        # 关机按钮 -> subprocess.run(['poweroff'])
-        # 退出按钮 -> sys.exit(0)
-```
-
-#### 2. 修复 install.py 的 execute() 函数
+#### 1. 修复 install.py 的 execute() 函数
 ```python
 def execute(self):
     # ... 现有的 frzr-deploy 代码 ...
@@ -246,7 +250,7 @@ def _verify_boot_config(self):
         self.append_log("⚠️  警告: 启动配置文件缺失\n")
 ```
 
-#### 3. 在 disk.py 添加安全检查
+#### 2. 在 disk.py 添加安全检查
 ```python
 def _on_disk_selected(app, disk_name):
     """Handle disk selection with safety checks."""
@@ -277,23 +281,6 @@ def _on_disk_selected(app, disk_name):
         # ... 处理用户选择
 ```
 
-#### 4. 在 main.py 注册 complete 页面
-```python
-from .ui.pages.complete import create_complete_page
-
-# 在 show_page() 的 page_map 中添加:
-page_map = {
-    # ...
-    'complete': 8,
-}
-
-# 在 pages 列表中添加:
-pages = [
-    # ... 现有页面 ...
-    lambda: create_complete_page(self),  # 8: Complete
-]
-```
-
 ---
 
 ## 🟡 可选改进（第二优先级）
@@ -301,7 +288,6 @@ pages = [
 ### 功能增强
 - [ ] 本地安装文件扫描（scan_frzr_update_files）
 - [ ] 高级选项 UI（固件覆盖、CDN、Debug）
-- [ ] 日志上传到 fpaste
 - [ ] 帮助页面/对话框
 
 ### 体验优化
@@ -435,6 +421,106 @@ tail -f /tmp/installer-modular.log
 # 自定义缩放
 UI_SCALE=2.0 /usr/local/bin/installer-modular
 ```
+
+### 日志系统
+
+#### 统一日志路径
+所有安装阶段的日志都写入同一个文件：`/tmp/frzr.log`
+
+- ✅ **Launcher 阶段**：`installer-modular` 环境信息和 gamescope 启动 → `/tmp/frzr.log`
+- ✅ **Bootstrap 阶段**：`frzr-bootstrap` 输出 → `/tmp/frzr.log`（追加模式）
+- ✅ **Install 阶段**：`frzr-deploy` 输出 → `/tmp/frzr.log`（追加模式）
+- ✅ **后安装步骤**：Steam bootstrap、post_install → `/tmp/frzr.log`（追加模式）
+
+**双重日志保存**：
+- `/tmp/installer-modular.log` - launcher 专用日志（便于单独查看环境信息）
+- `/tmp/frzr.log` - 统一的完整日志（包含 launcher + bootstrap + install + post_install）
+
+#### 自动日志上传（fpaste）
+在 Complete 页面，安装器会自动：
+
+1. **检查日志文件**：如果日志文件不存在（如用户在欢迎页直接退出），显示"暂无日志文件"，不进行上传
+2. **清理日志**：移除 ANSI 转义码、多余空格、脚本标记
+3. **异步上传**：后台线程上传到 fpaste，不阻塞 UI
+4. **实时反馈**：
+   - 无日志：显示 "暂无日志文件（未执行安装操作）"
+   - 上传中：显示 "正在上传日志..."
+   - 成功：显示 fpaste URL（可复制）
+   - 失败：提示手动上传命令
+
+**实现细节**：
+- 文件：`backend/log_utils.py`
+- 类：`AsyncLogUploader`（支持回调）
+- 超时：10 秒
+- 线程安全：使用 `GLib.idle_add` 更新 GTK UI
+- 日志检查：在 `populate_content()` 中使用 `os.path.exists()` 检查文件存在性
+
+### 退出按钮行为
+
+所有页面的"退出"按钮**不再直接退出到 TTY**，而是跳转到 Complete 页面（CANCELLED 状态）：
+
+| 页面 | 退出按钮行为 |
+|------|--------------|
+| 欢迎页 | → Complete (CANCELLED) |
+| 模式选择 | → Complete (CANCELLED) |
+| 确认页 | → Complete (CANCELLED) |
+| 版本选择 | → Complete (CANCELLED) |
+| Bootstrap（失败） | → Complete (CANCELLED/FAILED) |
+| Install（失败） | → Complete (FAILED) |
+
+在 Complete 页面，用户可以选择：
+- **重新安装**：重启安装器
+- **打开命令行**：退出到 TTY（真正的退出）
+- **关机** / **重启**：系统操作
+
+这种设计确保：
+1. 用户不会意外退出到 TTY
+2. 日志始终能上传（即使取消安装）
+3. 所有退出路径统一、清晰
+
+---
+
+## 🐛 最近修复
+
+### 2025-01-29 修复
+
+#### 问题 1：日志未统一
+**现象**：`installer-modular` 的日志输出到 `/tmp/installer-modular.log`，与安装器内部日志分离，不便于排查问题。
+
+**修复**：
+- 修改 `installer-modular` 脚本
+- 添加 `UNIFIED_LOG="/tmp/frzr.log"`
+- 使用 `tee -a` 同时输出到两个文件：
+  ```bash
+  } 2>&1 | tee "$LOGFILE" | tee -a "$UNIFIED_LOG"
+  ```
+
+**结果**：所有日志（launcher + installer）都追加到 `/tmp/frzr.log`，同时保留 `/tmp/installer-modular.log` 便于单独查看环境信息。
+
+#### 问题 2：Complete 页面按钮不显示
+**现象**：用户退出到 Complete 页面后，页面下方没有任何按钮，无法进行任何操作。
+
+**原因**：
+1. `CompletePage` 定义了 `create_nav_buttons()` 方法，但 `BasePage` 调用的是 `populate_buttons()`
+2. 页面首次通过 `create()` 创建时，调用空的 `populate_buttons()`，导致没有按钮
+3. 只有调用 `set_status()` 后才会调用 `create_nav_buttons()`
+
+**修复**：
+- 将 `create_nav_buttons()` 改名为 `populate_buttons()`（重写基类方法）
+- 在 `populate_buttons()` 开头添加 `if self.status is None` 处理默认按钮
+- 修改 `set_status()` 调用 `populate_buttons()` 而不是 `create_nav_buttons()`
+
+**结果**：页面首次创建时也能正确显示按钮。
+
+#### 问题 3：日志不存在时提示不友好
+**现象**：用户在欢迎页直接点"退出"，Complete 页面立即显示"日志上传失败"，但实际上是因为日志文件还不存在。
+
+**修复**：
+- 在 `populate_content()` 中添加 `os.path.exists()` 检查
+- 如果日志文件不存在，显示"暂无日志文件（未执行安装操作）"
+- 跳过日志上传流程
+
+**结果**：用户体验更友好，信息更准确。
 
 ---
 

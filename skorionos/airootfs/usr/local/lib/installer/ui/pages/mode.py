@@ -119,9 +119,9 @@ class ModePage(BasePage):
         back_btn.connect("clicked", lambda b: self.app.go_back())
         button_box.append(back_btn)
         
-        # Exit button (closes the app)
+        # Exit button (go to complete page - cancelled)
         exit_btn = UIComponents.create_button("退出", "application-exit-symbolic")
-        exit_btn.connect("clicked", lambda b: self.app.close())
+        exit_btn.connect("clicked", lambda b: self._on_exit())
         button_box.append(exit_btn)
         
         # Continue button
@@ -157,6 +157,16 @@ class ModePage(BasePage):
             btn.set_active(True)
         
         return btn
+    
+    def _on_exit(self):
+        """Handle exit button - go to complete page with CANCELLED status."""
+        from .complete import CompletePage
+        print("[MODE] User requested exit")
+        self.app.show_complete_page(
+            CompletePage.STATUS_CANCELLED,
+            "安装已取消",
+            "您在模式选择页面选择了退出安装"
+        )
     
     def _on_continue(self):
         """Handle continue button click."""

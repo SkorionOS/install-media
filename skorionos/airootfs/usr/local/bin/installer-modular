@@ -122,7 +122,8 @@ echo ""
 
 # Log file for debugging
 LOGFILE="/tmp/installer-modular.log"
-echo "📝 Logging to: $LOGFILE"
+UNIFIED_LOG="/tmp/frzr.log"  # 统一日志文件
+echo "📝 Logging to: $LOGFILE (and $UNIFIED_LOG)"
 echo ""
 
 INNER_WIDTH=""
@@ -171,5 +172,5 @@ GAMESCOPE_CMD="gamescope \
     echo "Exit code: $EXIT_CODE"
     echo "=========================================="
     exit $EXIT_CODE
-} | tee "$LOGFILE"
+} 2>&1 | tee "$LOGFILE" | tee -a "$UNIFIED_LOG"
 

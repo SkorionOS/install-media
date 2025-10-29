@@ -104,9 +104,9 @@ class VersionPage(BasePage):
         back_btn.connect("clicked", lambda b: self.app.go_back())
         button_box.append(back_btn)
         
-        # Exit button (closes the app)
+        # Exit button (go to complete page - cancelled)
         exit_btn = UIComponents.create_button("退出", "application-exit-symbolic")
-        exit_btn.connect("clicked", lambda b: self.app.close())
+        exit_btn.connect("clicked", lambda b: self._on_exit())
         button_box.append(exit_btn)
         
         # Continue button
@@ -209,6 +209,16 @@ class VersionPage(BasePage):
             return f"{channel}:{desktop}-nv"
         else:
             return f"{channel}:{desktop}"
+    
+    def _on_exit(self):
+        """Handle exit button - go to complete page with CANCELLED status."""
+        from .complete import CompletePage
+        print("[VERSION] User requested exit")
+        self.app.show_complete_page(
+            CompletePage.STATUS_CANCELLED,
+            "安装已取消",
+            "您在版本选择页面选择了退出安装"
+        )
     
     def _on_continue(self):
         """Handle continue button."""

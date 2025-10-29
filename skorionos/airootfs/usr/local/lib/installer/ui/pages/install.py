@@ -80,12 +80,14 @@ class InstallPage(ExecutionPage):
             desktop = getattr(self.app, 'selected_desktop', 'steamos')
             nvidia = getattr(self.app, 'nvidia_driver', False)
             
-            # Initialize log file
-            os.makedirs(os.path.dirname(config.log_file), exist_ok=True)
-            log_path = os.path.join(os.path.dirname(config.log_file), 'install.log')
+            # Use unified log file (append mode, bootstrap already wrote to it)
+            log_path = config.log_file
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
             
-            with open(log_path, 'w') as f:
-                f.write("=== Installation started ===\n")
+            with open(log_path, 'a') as f:
+                f.write(f"\n{'='*60}\n")
+                f.write("=== frzr-deploy started ===\n")
+                f.write(f"{'='*60}\n")
                 f.write(f"Version: {version}\n")
                 f.write(f"Desktop: {desktop}\n")
                 f.write(f"NVIDIA: {nvidia}\n\n")
@@ -172,18 +174,29 @@ class InstallPage(ExecutionPage):
             GLib.idle_add(self.update_progress, 0.9, "配置中")
     
     def on_execution_success(self):
-        """Called when installation completes successfully."""
-        super().on_execution_success()
+        """Called when installation completes successfully - go to complete page."""
+        from .complete import CompletePage
         
-        # Update custom success message
+        # Update success message in log first
         GLib.idle_add(self._update_success_message)
+        
+        # Go to complete page with SUCCESS status
+        def show_success():
+            self.app.show_complete_page(
+                CompletePage.STATUS_SUCCESS,
+                "SkorionOS 已成功安装到您的设备",
+                "请选择下一步操作"
+            )
+            return False
+        
+        # Delay slightly to let log update finish
+        GLib.timeout_add(500, show_success)
     
     def _update_success_message(self):
         """Update success message in log."""
         self.append_log(f"\n{'='*60}\n")
         self.append_log("系统安装成功完成！\n")
         self.append_log(f"{'='*60}\n")
-        self.append_log("\n点击下方「继续」按钮完成安装\n")
         return False
     
     def on_execution_error(self, error_msg: str):
