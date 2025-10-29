@@ -540,8 +540,10 @@ class InstallerApp(Gtk.ApplicationWindow):
         try:
             width = os.environ.get('SCREEN_WIDTH', config.screen_width)
             height = os.environ.get('SCREEN_HEIGHT', config.screen_height)
-            ui_scale = os.environ.get('UI_SCALE', '1.0')
-            info_list.append(("video-display-symbolic", f"屏幕: {width}x{height} (缩放 {ui_scale}x)"))
+            ui_scale = float(os.environ.get('UI_SCALE', '1.0'))
+            gdk_scale = float(os.environ.get('GDK_SCALE', '1.0'))
+            total_scale = ui_scale * gdk_scale
+            info_list.append(("video-display-symbolic", f"屏幕: {width}x{height} (缩放 {total_scale}x)"))
         except Exception as e:
             logger.debug(f"Could not read screen info: {e}")
         
@@ -571,7 +573,22 @@ class InstallerApplication(Gtk.Application):
 def main():
     """Main entry point"""
     print("[INFO] Starting SkorionOS Installer...")
-    app = InstallerApplication()
+    
+    # Mark that installer has started (for failure detection)
+    try:
+        with open("/tmp/installer_started", "w") as f:
+            f.write("1")
+    except:
+        pass
+    
+    # Register success marker for normal exit
+    def mark_normal_exit():
+        """Mark normal exit (success or user cancelled)"""
+        try:
+            with open("/tmp/installer_success", "w") as f:
+                f.write("1")
+        except:
+            pass
     
     # Register cleanup function for local file manager
     def cleanup_local_files():
@@ -580,8 +597,10 @@ def main():
             print("[INFO] Cleaning up local file mounts...")
             app.local_file_manager.cleanup()
     
+    atexit.register(mark_normal_exit)
     atexit.register(cleanup_local_files)
     
+    app = InstallerApplication()
     return app.run(sys.argv)
 
 

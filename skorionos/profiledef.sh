@@ -28,5 +28,5 @@ file_permissions=(
   ["/usr/local/bin/installer-poc"]="0:0:755"
   ["/usr/local/bin/installer-poc.py"]="0:0:755"
   ["/usr/local/bin/installer-modular"]="0:0:755"
-  ["/usr/local/bin/installer-poc-modular"]="0:0:755"
+  ["/usr/local/bin/installer"]="0:0:755"
 )

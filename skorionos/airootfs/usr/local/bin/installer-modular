@@ -136,7 +136,7 @@ export GDK_SCALE
 echo "   UI scale: ${UI_SCALE}"
 
 echo ""
-echo "Starting gamescope..."
+echo "Starting gamescope with socket detection..."
 echo ""
 
 # Log file for debugging
@@ -164,7 +164,21 @@ GAMESCOPE_CMD="gamescope \
 [ -n "$GAMESCOPE_TAP_DRAG_LOCK" ] && gamescope_has_option "--drag-lock" && GAMESCOPE_CMD+=" --drag-lock"
 [ -n "$GAMESCOPE_NATURAL_SCROLL" ] && gamescope_has_option "--natural-scrolling" && GAMESCOPE_CMD+=" --natural-scrolling $GAMESCOPE_NATURAL_SCROLL"
 
-# Launch gamescope + installer (with logging)
+# Setup socket for gamescope startup detection
+tmpdir="$([[ -n ${XDG_RUNTIME_DIR+x} ]] && mktemp -p "$XDG_RUNTIME_DIR" -d -t installer-gamescope.XXXXXXX)"
+socket="${tmpdir:+$tmpdir/startup.socket}"
+
+if [[ -z $tmpdir || -z ${XDG_RUNTIME_DIR+x} ]]; then
+    echo "ERROR: Failed to create runtime directory for socket" >&2
+    exit 1
+fi
+
+mkfifo -- "$socket"
+GAMESCOPE_CMD+=" -R $socket"
+
+echo "Socket created at: $socket"
+
+# Launch with logging and socket detection
 {
     echo "=========================================="
     echo "Installer Modular Log - $(date)"
@@ -173,6 +187,7 @@ GAMESCOPE_CMD="gamescope \
     echo "INSTALLER_WIDTH: $INSTALLER_WIDTH"
     echo "INSTALLER_HEIGHT: $INSTALLER_HEIGHT"
     echo "UI_SCALE: ${UI_SCALE:-1.0}"
+    echo "GDK_SCALE: ${GDK_SCALE:-1}"
     echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
     echo "TTY: $(tty)"
     echo "Device: $(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
@@ -182,6 +197,7 @@ GAMESCOPE_CMD="gamescope \
     [ -n "$GAMESCOPE_TAP_TO_CLICK" ] && echo "Tap to Click: $GAMESCOPE_TAP_TO_CLICK"
     [ -n "$GAMESCOPE_TAP_DRAG_LOCK" ] && echo "Tap Drag Lock: $GAMESCOPE_TAP_DRAG_LOCK"
     [ -n "$GAMESCOPE_NATURAL_SCROLL" ] && echo "Natural Scroll: $GAMESCOPE_NATURAL_SCROLL"
+    echo "Socket: $socket"
     echo ""
     echo "Gamescope command:"
     echo "$GAMESCOPE_CMD"
@@ -202,13 +218,41 @@ GAMESCOPE_CMD="gamescope \
     # GTK will try Wayland first, then fallback if needed
     # The "Wayland compositor does not provide..." warning is harmless
     
-    $GAMESCOPE_CMD -- python3 /usr/local/bin/installer-poc-modular "$@" 2>&1
+    # Start gamescope in background
+    $GAMESCOPE_CMD -- python3 /usr/local/bin/installer "$@" 2>&1 &
+    gamescope_pid=$!
     
-    EXIT_CODE=$?
+    echo "Gamescope started with PID: $gamescope_pid"
+    echo "Waiting for socket response (timeout: 15s)..."
+    
+    # Check socket (15 second timeout)
+    if read -r -t 15 response_x_display response_wl_display <> "$socket"; then
+        export DISPLAY="$response_x_display"
+        export GAMESCOPE_WAYLAND_DISPLAY="$response_wl_display"
+        echo "✅ Gamescope started successfully"
+        echo "   DISPLAY=$DISPLAY"
+        echo "   GAMESCOPE_WAYLAND_DISPLAY=$GAMESCOPE_WAYLAND_DISPLAY"
+        echo ""
+        
+        # Wait for gamescope to finish
+        wait $gamescope_pid
+        EXIT_CODE=$?
+    else
+        echo "❌ Gamescope failed to start within 15 seconds"
+        echo "   Killing gamescope process..."
+        kill -9 $gamescope_pid 2>/dev/null
+        wait $gamescope_pid 2>/dev/null
+        EXIT_CODE=1
+    fi
+    
     echo ""
     echo "=========================================="
     echo "Exit code: $EXIT_CODE"
     echo "=========================================="
+    
+    # Cleanup socket
+    rm -rf "$tmpdir" 2>/dev/null
+    
     exit $EXIT_CODE
 } 2>&1 | tee "$LOGFILE" | tee -a "$UNIFIED_LOG"
 

@@ -188,55 +188,119 @@ copy_system_configs
 # ===== Setup controller support before selecting installer =====
 setup_controller_support
 
-# ===== Select installer mode =====
-INSTALLER_MODE=""
+# ===== Graphical Installer with Smart Fallback =====
+FAILURE_TRACKER="/tmp/installer-failures"
+MIN_RUN_DURATION=15  # 如果运行<15秒，认为是启动失败
+MAX_FAILURES=2       # 失败2次后自动降级到文本安装器
 
-# Check if graphical installer is available
-if command -v gamescope &> /dev/null && \
-   command -v python3 &> /dev/null && \
-   python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1')" 2>/dev/null && \
-   [ -f /usr/local/bin/installer-modular ]; then
-  
-  TEMP_FILE=$(mktemp)
-  if (dialog --colors --title "\Z1SkorionOS 安装器\Zn" \
-    --default-item "modular" \
-    --menu "请选择安装器模式" 15 70 2 \
-    "modular" "图形化安装器 -- 现代界面，支持手柄" \
-    "text"    "文本安装器 -- 传统模式，稳定可靠" \
-    2> $TEMP_FILE
-  ); then
-    INSTALLER_MODE=$(cat $TEMP_FILE)
-    rm $TEMP_FILE
-  else
-    # User cancelled, default to text mode
-    INSTALLER_MODE="text"
-    rm $TEMP_FILE
-  fi
-else
-  # Graphical installer not available, use text mode
-  INSTALLER_MODE="text"
+# 检查启动参数是否强制文本模式
+if grep -q "installer=text" /proc/cmdline; then
+    echo "检测到启动参数 installer=text，使用文本安装器"
+    check_internet_connection
+    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
+    eval "$INSTALL_SCRIPT"
+    exit 0
 fi
 
-# Launch installer based on selection
-case "$INSTALLER_MODE" in
-  modular)
-    clear
-    echo "启动图形化安装器..."
-    exec /usr/local/bin/installer-modular
-    ;;
-  text|*)
-    # Text mode: check internet and update script first
-    check_internet_connection  # 这里会设置 OFFLINE_MODE 环境变量
-    
-    # 只在在线模式下更新脚本
-    if [ "$OFFLINE_MODE" != "true" ]; then
-      check_and_update_install_script
-    else
-      echo "离线模式，跳过脚本更新"
-      sleep 2
-    fi
-    
-    # Launch text installer
+# 检查图形安装器是否可用
+if ! command -v gamescope &> /dev/null || \
+   ! command -v python3 &> /dev/null || \
+   ! python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1')" 2>/dev/null || \
+   ! [ -f /usr/local/bin/installer-modular ]; then
+    echo "图形安装器不可用，使用文本安装器"
+    check_internet_connection
+    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
     eval "$INSTALL_SCRIPT"
-    ;;
-esac
+    exit 0
+fi
+
+# 检查失败次数
+failure_count=0
+[ -f "$FAILURE_TRACKER" ] && failure_count=$(wc -l < "$FAILURE_TRACKER")
+
+# 达到失败阈值，自动降级
+if [ "$failure_count" -ge "$MAX_FAILURES" ]; then
+    echo "=========================================="
+    echo "图形安装器已失败 ${failure_count} 次，自动降级到文本安装器"
+    echo "=========================================="
+    sleep 2
+    rm -f "$FAILURE_TRACKER"
+    check_internet_connection
+    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
+    eval "$INSTALL_SCRIPT"
+    exit 0
+fi
+
+# 启动图形安装器
+clear
+echo "=========================================="
+echo "启动图形化安装器 (尝试 $((failure_count + 1))/$((MAX_FAILURES + 1)))"
+echo "=========================================="
+
+# 清理旧的状态文件
+rm -f /tmp/installer_success /tmp/installer_started
+
+START_TIME=$SECONDS
+/usr/local/bin/installer-modular "$@"
+EXIT_CODE=$?
+RUN_DURATION=$((SECONDS - START_TIME))
+
+echo "图形安装器退出: 退出码=$EXIT_CODE, 运行时长=${RUN_DURATION}秒" >> /tmp/installer-launch.log
+
+# 判断是否失败（多重检测）
+IS_FAILURE=false
+FAILURE_REASON=""
+
+# 检查1: 状态文件（精确判断）
+if [ -f /tmp/installer_started ]; then
+    # Python 已启动
+    if [ ! -f /tmp/installer_success ]; then
+        # 启动了但没有标记成功 = 崩溃或异常
+        IS_FAILURE=true
+        FAILURE_REASON="启动后崩溃或异常退出（已启动但未正常结束）"
+    fi
+else
+    # Python 未启动 = Socket 失败或 Gamescope 崩溃
+    if [ "$EXIT_CODE" -ne 0 ]; then
+        IS_FAILURE=true
+        FAILURE_REASON="启动失败（Socket 超时或 Gamescope 崩溃）"
+    fi
+fi
+
+# 检查2: 运行时长（兜底检查，防止状态文件未创建）
+if [ "$IS_FAILURE" = false ] && [ "$RUN_DURATION" -lt "$MIN_RUN_DURATION" ] && [ "$EXIT_CODE" -ne 0 ]; then
+    IS_FAILURE=true
+    FAILURE_REASON="快速异常退出（运行时长<${MIN_RUN_DURATION}秒，退出码=$EXIT_CODE）"
+fi
+
+# 处理失败
+if [ "$IS_FAILURE" = true ]; then
+    echo "failure at $(date)" >> "$FAILURE_TRACKER"
+    new_count=$(wc -l < "$FAILURE_TRACKER")
+    
+    echo "检测到失败: $FAILURE_REASON" >> /tmp/installer-launch.log
+    echo "失败次数: ${new_count}/${MAX_FAILURES}" >> /tmp/installer-launch.log
+    
+    if [ "$new_count" -ge "$MAX_FAILURES" ]; then
+        # 达到阈值，自动降级到文本安装器
+        clear
+        echo "=========================================="
+        echo "图形安装器多次失败，切换到文本安装器"
+        echo "=========================================="
+        sleep 2
+        rm -f "$FAILURE_TRACKER"
+        check_internet_connection
+        [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
+        eval "$INSTALL_SCRIPT"
+    else
+        # 还有重试机会，自动重试
+        sleep 2
+        exec "$0" "$@"  # 递归调用自己
+    fi
+else
+    # 正常退出（成功或用户主动）
+    rm -f "$FAILURE_TRACKER"
+fi
+
+# 清理状态文件
+rm -f /tmp/installer_success /tmp/installer_started

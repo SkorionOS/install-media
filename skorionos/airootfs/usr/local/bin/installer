@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SkorionOS Graphical Installer (Modular)
-Entry point for the modular version
+SkorionOS Graphical Installer
+Main entry point for the GTK4-based installer
 """
 import sys
 import os
