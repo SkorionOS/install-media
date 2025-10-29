@@ -78,13 +78,14 @@ class InstallPage(ExecutionPage):
     def execute(self):
         """Execute the actual installation process."""
         try:
-            # Check install mode
-            install_mode = getattr(self.app, 'version_selections', {}).get('install_mode', 'online')
+            # Get version selections
+            version_selections = getattr(self.app, 'version_selections', {})
+            install_mode = version_selections.get('install_mode', 'online')
             
-            # Get installation parameters
-            version = getattr(self.app, 'selected_version', 'stable')
-            desktop = getattr(self.app, 'selected_desktop', 'steamos')
-            nvidia = getattr(self.app, 'nvidia_driver', False)
+            # Get installation parameters from version_selections
+            channel = version_selections.get('channel', 'stable')      # stable/testing/unstable
+            desktop = version_selections.get('desktop', 'gnome')       # gnome/kde
+            nvidia = version_selections.get('nvidia', False)           # True/False
             
             # Use unified log file (append mode, bootstrap already wrote to it)
             log_path = config.log_file
@@ -97,16 +98,16 @@ class InstallPage(ExecutionPage):
                 f.write(f"{'='*60}\n")
                 f.write(f"Install mode: {install_mode}\n")
                 if install_mode == 'local':
-                    local_file = self.app.version_selections.get('local_file')
+                    local_file = version_selections.get('local_file')
                     f.write(f"Local file: {local_file}\n\n")
                 else:
-                    f.write(f"Version: {version}\n")
+                    f.write(f"Channel: {channel}\n")
                     f.write(f"Desktop: {desktop}\n")
                     f.write(f"NVIDIA: {nvidia}\n\n")
             
             # Update status based on mode
             if install_mode == 'local':
-                local_file = self.app.version_selections.get('local_file')
+                local_file = version_selections.get('local_file')
                 if not local_file or not os.path.exists(local_file):
                     raise Exception(f"本地镜像文件不存在: {local_file}")
                 
@@ -122,7 +123,7 @@ class InstallPage(ExecutionPage):
             self._apply_advanced_options()
             
             # Build install command
-            cmd = self._build_install_command(version, desktop, nvidia)
+            cmd = self._build_install_command(version_selections)
             
             GLib.idle_add(self.append_log, f"=== Executing: {' '.join(cmd)} ===\n\n")
             
@@ -166,39 +167,41 @@ class InstallPage(ExecutionPage):
         except Exception as e:
             self.on_execution_error(f"安装错误: {str(e)}")
     
-    def _build_install_command(self, version, desktop, nvidia):
-        """Build the installation command based on user selections."""
-        # Check install mode
-        install_mode = getattr(self.app, 'version_selections', {}).get('install_mode', 'online')
+    def _build_install_command(self, selections):
+        """
+        Build the installation command based on user selections.
+        
+        Format matches install.sh:
+        - Local: frzr-deploy /path/to/file.img.tar.zst
+        - Online: frzr-deploy "3003n/skorionos:channel:desktop[-nv]"
+        
+        Examples:
+        - frzr-deploy "3003n/skorionos:stable:gnome"
+        - frzr-deploy "3003n/skorionos:testing:kde-nv"
+        """
+        install_mode = selections.get('install_mode', 'online')
         
         if install_mode == 'local':
             # Local installation - use local file
-            local_file = self.app.version_selections.get('local_file')
+            local_file = selections.get('local_file')
             if not local_file or not os.path.exists(local_file):
                 raise Exception(f"本地镜像文件不存在: {local_file}")
             
             return ['frzr-deploy', local_file]
         else:
-            # Online installation - build command with version/desktop/nvidia
-            cmd = ['frzr-deploy']
+            # Online installation - build TARGET string
+            channel = selections.get('channel', 'stable')     # stable/testing/unstable
+            desktop = selections.get('desktop', 'gnome')      # gnome/kde
+            nvidia = selections.get('nvidia', False)          # True/False
             
-            # Add version parameter
-            if version == 'stable':
-                cmd.append('skorionos/stable')
-            elif version == 'beta':
-                cmd.append('skorionos/beta')
-            elif version == 'nightly':
-                cmd.append('skorionos/nightly')
-            
-            # Add desktop parameter
-            if desktop != 'steamos':
-                cmd.extend(['--desktop', desktop])
-            
-            # Add NVIDIA driver flag
+            # Build TARGET: channel:desktop or channel:desktop-nv
             if nvidia:
-                cmd.append('--nvidia')
+                target = f"{channel}:{desktop}-nv"
+            else:
+                target = f"{channel}:{desktop}"
             
-            return cmd
+            # Build full command: frzr-deploy "3003n/skorionos:TARGET"
+            return ['frzr-deploy', f'3003n/skorionos:{target}']
     
     def _update_progress_from_output(self, line):
         """Update progress bar based on installation output."""

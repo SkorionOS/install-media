@@ -139,8 +139,8 @@ class ConfirmPage(BasePage):
         
         # Confirmation question (centered)
         confirm_label = Gtk.Label()
-        confirm_label.set_markup('<span size="small">您是否要继续？</span>')
-        confirm_label.set_justify(Gtk.Justification.CENTER)
+        confirm_label.set_markup('<span size="large">您是否要继续？</span>')
+        confirm_label.set_justify(Gtk.Justification.CENTER) 
         confirm_label.set_margin_top(config.scaled(10))
         content_box.append(confirm_label)
     

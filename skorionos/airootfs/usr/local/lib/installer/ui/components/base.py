@@ -189,14 +189,20 @@ class BasePage:
         if title:
             self._page_box.append(title)
         
-        # Content area (middle, expandable)
+        # Content area in ScrolledWindow (prevent content from expanding window)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)
+        scrolled.set_propagate_natural_height(True)  # Don't let content expand window height
+        scrolled.set_propagate_natural_width(False)  # Don't let content expand window width
+        
         self._content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(15))
-        self._content_box.set_vexpand(True)
-        self._content_box.set_valign(Gtk.Align.FILL)
         self._content_box.set_margin_start(config.scaled(40))
         self._content_box.set_margin_end(config.scaled(40))
         self.populate_content(self._content_box)
-        self._page_box.append(self._content_box)
+        
+        scrolled.set_child(self._content_box)
+        self._page_box.append(scrolled)
         
         # Button box (bottom)
         self._button_box = UIComponents.create_button_box()

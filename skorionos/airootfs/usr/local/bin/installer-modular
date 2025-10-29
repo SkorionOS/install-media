@@ -187,6 +187,17 @@ GAMESCOPE_CMD="gamescope \
     echo "$GAMESCOPE_CMD"
     echo ""
     
+    # Clean up XKB cache and stale sockets to prevent startup failures
+    echo "Cleaning up XKB cache and stale sockets..."
+    rm -rf /var/lib/xkb/* 2>/dev/null || true
+    mkdir -p /var/lib/xkb 2>/dev/null || true
+    chmod 755 /var/lib/xkb 2>/dev/null || true
+    rm -f /tmp/.X11-unix/X* 2>/dev/null || true
+    rm -f "${XDG_RUNTIME_DIR}/wayland-"* 2>/dev/null || true
+    rm -f "${XDG_RUNTIME_DIR}/.X11-unix/"* 2>/dev/null || true
+    echo "Cleanup complete"
+    echo ""
+    
     # Note: Not setting GDK_BACKEND=wayland to allow GTK auto-detection
     # GTK will try Wayland first, then fallback if needed
     # The "Wayland compositor does not provide..." warning is harmless

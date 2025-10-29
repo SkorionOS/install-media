@@ -1,8 +1,8 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-01-30 (第五次更新)
+> 最后更新: 2025-10-29 (第六次更新)
 > 
-> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项、统一日志系统
+> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项、统一日志系统、UI布局优化
 
 ---
 
@@ -419,7 +419,50 @@ else:
 
 ## 🔄 更新历史
 
-### 最近完成（2025-01-30 第四次更新）🆕
+### 最近完成（2025-10-29 第六次更新）🆕
+
+1. ✅ **版本信息传递修复**
+   - 修复 `install.py` 错误读取旧的 `selected_version/selected_desktop/nvidia_driver` 属性
+   - 正确从 `version_selections` 字典读取参数：
+     - `channel` (stable/testing/unstable) ← 原来错误读 `version`
+     - `desktop` (gnome/kde) ← 原来错误读 `selected_desktop`
+     - `nvidia` (True/False) ← 原来错误读 `nvidia_driver`
+   - 修复命令构建逻辑，匹配 `install.sh` 格式：
+     - **正确格式**：`frzr-deploy "3003n/skorionos:channel:desktop[-nv]"`
+     - **示例**：`frzr-deploy "3003n/skorionos:stable:gnome-nv"`
+     - **原来错误**：`frzr-deploy skorionos/beta --desktop gnome --nvidia`
+   - 添加详细文档注释说明格式和示例
+
+2. ✅ **Version 页面 UI 重构**
+   - 移除"安装方式"的 info-box 边框（改为扁平样式）
+   - 整合顶部元素（安装方式 + 当前配置 + 高级选项）为一个区域
+   - 统一字体大小（移除 `size="large"`）
+   - 缩小上下边距和元素间距（更紧凑布局）
+   - 信息层级更清晰（控制区无边框，选择区有 info-box）
+
+3. ✅ **单选框显示修复**
+   - 发现 GTK4 设计逻辑：单个选项显示方形复选框，多个选项才显示圆形单选框
+   - 实施方案2：总是显示两个选项保证视觉一致性
+     - "安装方式"：在线安装 + 本地安装（无本地文件时禁用并显示提示）
+     - "磁盘选择"：单磁盘时自动选中
+   - 移除错误的 CSS hack（`border-radius: 50%`），让 GTK 主题自动处理
+
+4. ✅ **XKB/Xwayland 启动失败修复**
+   - 在 `installer-modular` 启动前清理 XKB 缓存：`rm -rf /var/lib/xkb/*`
+   - 清理 stale sockets：`/tmp/.X11-unix/*`, `${XDG_RUNTIME_DIR}/wayland-*`
+   - 确保目录权限：`mkdir -p /var/lib/xkb && chmod 755 /var/lib/xkb`
+   - 解决概率性 UI 启动失败问题
+
+5. ✅ **Live ISO 空间配置**
+   - 添加 `cow_spacesize=4G` 到 EFI 和 Syslinux 引导选项
+   - 明确指定 tmpfs 覆盖层大小，避免空间不足
+
+6. ✅ **Complete 页面图标修复**
+   - 修复成功图标加载失败（`emblem-ok-symbolic` 不存在于 Adwaita 主题）
+   - 改用 `object-select-symbolic` (勾选图标)
+   - 更符合 GTK4/Adwaita 的图标命名规范
+
+### 最近完成（2025-01-30 第四次更新）
 
 1. ✅ **统一日志系统改造**
    - 创建 `logger.py` 模块（`InstallerLogger` 类）
@@ -479,6 +522,15 @@ else:
 ---
 
 ## 🐛 已修复问题
+
+### 2025-10-29 (第六次更新)
+- ✅ 版本信息未正确传递给 frzr-deploy → 修复参数读取逻辑，构建正确的 TARGET 字符串
+- ✅ 命令格式不匹配 install.sh → 改为 `frzr-deploy "3003n/skorionos:channel:desktop[-nv]"` 格式
+- ✅ Version 页面布局混乱 → 重构为顶部控制区 + 底部选择区，层次清晰
+- ✅ 单选框显示为方形 → 总是显示多个选项，让 GTK 自动渲染圆形单选框
+- ✅ UI 启动概率性失败 → 清理 XKB 缓存和 stale sockets
+- ✅ Live ISO 空间不足 → 配置 `cow_spacesize=4G`
+- ✅ 成功页面图标加载失败 → 使用 `object-select-symbolic` 替代不存在的 `emblem-ok-symbolic`
 
 ### 2025-01-30 (第四次更新)
 - ✅ 日志系统不统一 → 创建 logger.py（结构化日志、异常跟踪）

@@ -4,3 +4,4 @@ skorionos/extra_pkg/
 skorionos/work/
 skorionos/pacman.conf
 *.pyc
+__pycache__/

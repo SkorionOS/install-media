@@ -46,6 +46,10 @@ class DiskPage(BasePage):
     
     def populate_content(self, content_box: Gtk.Box):
         """Populate content with disk selection UI."""
+        # Reset selection state
+        self.app.selected_disk = None
+        self.app.selected_disk_desc = None
+        
         # Info text
         info = Gtk.Label()
         info.set_markup('<span>请选择要安装 SkorionOS 的磁盘</span>')
@@ -156,7 +160,7 @@ def _show_disk_list(app, disks):
     app.available_disks = {}
     first_button = None
     
-    for disk_info in disks:
+    for i, disk_info in enumerate(disks):
         row = Gtk.ListBoxRow()
         
         # Use unified selection button component
@@ -171,6 +175,10 @@ def _show_disk_list(app, disks):
         
         if first_button is None:
             first_button = btn
+        
+        # Auto-select if only one disk
+        if len(disks) == 1:
+            btn.set_active(True)
         
         row.set_child(btn)
         list_box.append(row)

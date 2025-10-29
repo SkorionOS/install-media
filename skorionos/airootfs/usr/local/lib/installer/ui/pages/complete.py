@@ -150,7 +150,7 @@ class CompletePage(BasePage):
     def _get_status_icon(self) -> str:
         """Get icon name based on status."""
         if self.status == self.STATUS_SUCCESS:
-            return "emblem-ok-symbolic"
+            return "object-select-symbolic"  # ✓ checkmark icon (emblem-ok-symbolic not available in Adwaita)
         elif self.status == self.STATUS_CANCELLED:
             return "process-stop-symbolic"
         elif self.status == self.STATUS_FAILED:

@@ -210,7 +210,8 @@ class InstallerApp(Gtk.ApplicationWindow):
         # Window setup
         self.set_title("SkorionOS Installer PoC")
         self.set_default_size(config.screen_width, config.screen_height)
-        self.set_resizable(False)  # Force fixed size to maintain aspect ratio
+        self.set_size_request(config.screen_width, config.screen_height)  # Force minimum/maximum size
+        self.set_resizable(False)  # Prevent user resizing
         
         # Navigation state
         self.current_page = 0

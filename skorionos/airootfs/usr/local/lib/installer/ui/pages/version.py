@@ -44,77 +44,87 @@ class VersionPage(BasePage):
     
     def populate_content(self, content_box: Gtk.Box):
         """Populate the content area with selection sections."""
-        # Step 1: Install mode selection (always visible)
-        install_mode_section = self._create_install_mode_section()
-        content_box.append(install_mode_section)
+        # Top section: Install mode + Config + Advanced options (no info-box, compact)
+        top_section = self._create_top_section()
+        content_box.append(top_section)
         
-        # Step 2: Dynamic content container
+        # Dynamic content container (version selection)
         self.dynamic_content_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=config.scaled(15)
+            spacing=config.scaled(10)
         )
-        self.dynamic_content_box.set_margin_top(config.scaled(15))
+        self.dynamic_content_box.set_margin_top(config.scaled(8))
         content_box.append(self.dynamic_content_box)
         
-        # Step 3: Fill dynamic content based on current mode
+        # Fill dynamic content based on current mode
         self._update_dynamic_content()
-        
-        # Step 4: Configuration display
-        config_display_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
-        config_display_box.set_halign(Gtk.Align.CENTER)
-        config_display_box.set_margin_top(config.scaled(10))
-        
-        self.config_label = Gtk.Label()
-        target = self._build_target(self.app.version_selections)
-        self.config_label.set_markup(f'<span size="large">当前配置: <b>{target}</b></span>')
-        config_display_box.append(self.config_label)
-        
-        content_box.append(config_display_box)
-        
-        # Step 5: Advanced options toggle
-        advanced_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
-        advanced_box.set_halign(Gtk.Align.CENTER)
-        advanced_box.set_margin_top(config.scaled(15))
-        
-        self.advanced_check = Gtk.CheckButton(label="启用高级选项")
-        self.advanced_check.set_active(self.app.use_advanced_options)
-        self.advanced_check.connect("toggled", self._on_advanced_toggled)
-        
-        advanced_box.append(self.advanced_check)
-        content_box.append(advanced_box)
     
-    def _create_install_mode_section(self):
-        """Create install mode selection section."""
+    def _create_top_section(self):
+        """Create top section with install mode, config, and advanced options (no info-box)."""
         # Check if local files are available
         has_local_files = (
             hasattr(self.app, 'local_frzr_files') 
             and len(self.app.local_frzr_files) > 0
         )
         
-        # Build options
+        # Container (no info-box styling)
+        container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
+        container.set_halign(Gtk.Align.CENTER)
+        
+        # Row 1: Install mode
+        mode_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(15))
+        
+        # Title
+        title = Gtk.Label()
+        title.set_markup('<span weight="bold">安装方式</span>')
+        title.set_xalign(0)
+        title.set_size_request(config.scaled(100), -1)
+        mode_row.append(title)
+        
+        # Buttons
+        buttons_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(30))
+        
+        # Online option
+        online_btn = Gtk.CheckButton(label="在线安装")
+        online_btn.set_active(self.app.version_selections['install_mode'] == 'online')
+        online_btn.connect("toggled", lambda b: self._on_install_mode_changed('online') if b.get_active() else None)
+        buttons_box.append(online_btn)
+        
+        first_btn = online_btn
+        
+        # Local option (always show, but disabled if no local files)
+        local_btn = Gtk.CheckButton(label="本地安装")
+        local_btn.set_group(first_btn)
         if has_local_files:
-            options = [
-                ('online', '在线安装', f'下载最新系统镜像'),
-                ('local', '本地安装', f'使用 USB 镜像 ({len(self.app.local_frzr_files)} 个可用)')
-            ]
+            local_btn.set_active(self.app.version_selections['install_mode'] == 'local')
+            local_btn.connect("toggled", lambda b: self._on_install_mode_changed('local') if b.get_active() else None)
         else:
-            options = [
-                ('online', '在线安装', '下载最新系统镜像')
-            ]
+            local_btn.set_sensitive(False)
+            local_btn.set_tooltip_text("没有检测到本地安装文件")
+        buttons_box.append(local_btn)
         
-        # Create section
-        section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(10))
-        section_box.set_halign(Gtk.Align.CENTER)
+        mode_row.append(buttons_box)
+        container.append(mode_row)
         
-        section = self._create_compact_section(
-            "安装方式",
-            options,
-            self.app.version_selections.get('install_mode', 'online'),
-            lambda value: self._on_install_mode_changed(value)
-        )
-        section_box.append(section)
+        # Row 2: Current config + Advanced options
+        config_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(30))
+        config_row.set_halign(Gtk.Align.CENTER)
         
-        return section_box
+        # Current configuration label
+        self.config_label = Gtk.Label()
+        target = self._build_target(self.app.version_selections)
+        self.config_label.set_markup(f'当前配置: <b>{target}</b>')
+        config_row.append(self.config_label)
+        
+        # Advanced options checkbox
+        self.advanced_check = Gtk.CheckButton(label="启用高级选项")
+        self.advanced_check.set_active(self.app.use_advanced_options)
+        self.advanced_check.connect("toggled", self._on_advanced_toggled)
+        config_row.append(self.advanced_check)
+        
+        container.append(config_row)
+        
+        return container
     
     def _on_install_mode_changed(self, mode):
         """Handle install mode change."""
@@ -142,8 +152,8 @@ class VersionPage(BasePage):
     
     def _show_online_options(self):
         """Show online installation options (channel, desktop, NVIDIA)."""
-        # Selection container - horizontal layout
-        selection_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(15))
+        # Selection container - horizontal layout (reduced spacing)
+        selection_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))  # 15 → 10
         selection_box.set_halign(Gtk.Align.CENTER)
         
         # Section 1: Channel selection
@@ -272,9 +282,7 @@ class VersionPage(BasePage):
         """Update configuration display label."""
         if self.config_label:
             target = self._build_target(self.app.version_selections)
-            self.config_label.set_markup(
-                f'<span size="large">当前配置: <b>{target}</b></span>'
-            )
+            self.config_label.set_markup(f'当前配置: <b>{target}</b>')
     
     def populate_buttons(self, button_box: Gtk.Box):
         """Populate the button area."""
@@ -296,7 +304,7 @@ class VersionPage(BasePage):
     
     def _create_compact_section(self, title, options, current_value, on_change_callback):
         """
-        Create a compact selection section (card style).
+        Create a compact selection section (card style) using unified components.
         
         Args:
             title: Section title
@@ -307,8 +315,8 @@ class VersionPage(BasePage):
         Returns:
             Gtk.Box: Selection section widget
         """
-        # Card container
-        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
+        # Card container (reduced spacing)
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))  # 8 → 5
         section.add_css_class("info-box")
         section.set_size_request(config.scaled(220), -1)
         
@@ -318,42 +326,25 @@ class VersionPage(BasePage):
         title_label.set_xalign(0.5)
         section.append(title_label)
         
-        # Separator
+        # Separator (reduced margins)
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(config.scaled(5))
-        separator.set_margin_bottom(config.scaled(5))
+        separator.set_margin_top(config.scaled(3))  # 5 → 3
+        separator.set_margin_bottom(config.scaled(3))  # 5 → 3
         section.append(separator)
         
-        # Radio buttons with compact descriptions
+        # Radio buttons using unified component
         first_btn = None
         for value, label, description in options:
-            # Radio button
+            # Use unified UIComponents.create_selection_button for consistent styling
+            btn = UIComponents.create_selection_button(
+                group=first_btn,
+                title=label,
+                description=description,
+                orientation=Gtk.Orientation.VERTICAL
+            )
+            
             if first_btn is None:
-                btn = Gtk.CheckButton()
                 first_btn = btn
-            else:
-                btn = Gtk.CheckButton()
-                btn.set_group(first_btn)
-            
-            # Content inside button
-            content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(2))
-            
-            # Label
-            label_widget = Gtk.Label(label=label)
-            label_widget.set_xalign(0)
-            content_box.append(label_widget)
-            
-            # Description
-            desc_label = Gtk.Label(label=description)
-            desc_label.set_xalign(0)
-            desc_label.set_margin_start(config.scaled(15))
-            desc_label.set_wrap(True)
-            desc_label.set_max_width_chars(20)
-            desc_label.add_css_class("dim-label")
-            desc_label.set_markup(f'<span size="small" foreground="#888">{description}</span>')
-            content_box.append(desc_label)
-            
-            btn.set_child(content_box)
             
             # Set active if current value
             if value == current_value:
