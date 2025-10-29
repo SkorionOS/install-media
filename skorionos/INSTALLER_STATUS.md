@@ -1,4 +1,4 @@
-# SkorionOS 图形化安装器
+# SkorionOS 图形化安装器 - 当前状态
 
 > 最后更新: 2025-01-30 (第三次更新)
 > 
@@ -6,9 +6,7 @@
 
 ---
 
-## 📦 项目概览
-
-### 项目结构
+## 📦 项目结构
 
 ```
 /usr/local/bin/
@@ -19,114 +17,155 @@
 └── device-quirks              # 设备适配脚本（屏幕方向、输出优先级）
 
 /usr/local/lib/installer/
-├── config.py                  # 全局配置（缩放、路径、Steam URL）
-├── main.py                    # 主窗口和页面导航
-├── backend/                   # 后端工具
-│   ├── disk_utils.py          # 磁盘检测、分区扫描
-│   ├── install_utils.py       # 安装辅助（Steam、网络配置）
+├── __init__.py
+├── config.py                   # 全局配置（缩放、路径、Steam URL）
+├── main.py                     # 主窗口和页面导航
+│
+├── backend/                    # 后端工具模块
+│   ├── disk_utils.py          # 磁盘检测和操作
+│   ├── install_utils.py       # 安装后处理（Steam、post_install）
 │   ├── local_file_manager.py  # 本地文件扫描与挂载管理 🆕
-│   └── log_utils.py           # 日志处理、fpaste 上传
-├── network/                   # 网络管理（NetworkManager 封装）
-└── ui/                        # UI 组件（pages/, components/, styling.py）
-```
-
-### 安装流程
-
-```
-欢迎页 → 网络配置 → 磁盘选择 → 模式选择 → 确认操作 
-      → 磁盘初始化 → 版本选择 → 系统安装 → 完成页面
+│   └── log_utils.py           # 日志清理和上传（fpaste）
+│
+├── network/                    # 网络管理模块
+│   ├── manager.py             # NetworkManager 封装
+│   └── dialogs.py             # 网络对话框
+│
+└── ui/                         # UI 组件模块
+    ├── styling.py             # CSS 样式
+    ├── keyboard.py            # 虚拟键盘
+    ├── components/
+    │   └── base.py            # BasePage、ExecutionPage、UIComponents
+    └── pages/                 # 页面组件
+        ├── network.py         # 1. 网络连接
+        ├── disk.py            # 2. 磁盘选择
+        ├── mode.py            # 3. 安装模式
+        ├── confirm.py         # 4. 确认操作
+        ├── bootstrap.py       # 5. 磁盘初始化（ExecutionPage）
+        ├── version.py         # 6. 版本选择（含安装方式选择 🆕）
+        ├── install.py         # 7. 系统安装（ExecutionPage，支持本地安装 🆕）
+        └── complete.py        # 8. 完成页面（SUCCESS/CANCELLED/FAILED）
 ```
 
 ---
 
-## 🎯 功能状态
+## 🔄 页面流程
 
-### ✅ 已完成功能
+```
+0. 欢迎页 (Welcome) - 内置在 main.py
+   ├─→ [退出] → 8. Complete 页 (CANCELLED)
+   └─→ 1. 网络页 (Network)
+       └─→ 2. 磁盘选择页 (Disk)
+           └─→ 3. 安装模式页 (Mode) - 检测现有安装，选择 repair/fresh/dual
+               ├─→ [退出] → 8. Complete 页 (CANCELLED)
+               └─→ 4. 确认页 (Confirm) - 显示操作摘要
+                   ├─→ [退出] → 8. Complete 页 (CANCELLED)
+                   └─→ 5. Bootstrap 页 (Bootstrap) - 执行 frzr-bootstrap，扫描本地文件 🆕
+                       ├─→ [失败/退出] → 8. Complete 页 (CANCELLED/FAILED)
+                       └─→ 6. 版本选择页 (Version) - 选择安装方式（在线/本地）+ 配置 🆕
+                           ├─→ [退出] → 8. Complete 页 (CANCELLED)
+                           └─→ 7. 安装页 (Install) - 执行 frzr-deploy（在线或本地文件） 🆕
+                               ├─→ [成功] → 8. Complete 页 (SUCCESS) ✅
+                               └─→ [失败/退出] → 8. Complete 页 (FAILED/CANCELLED)
 
-#### 核心安装流程
-- [x] 网络连接（WiFi 扫描、密码输入、虚拟键盘）
-- [x] 磁盘选择（自动扫描、磁盘类型显示 `[内置]/[USB]/[SD卡]`）
-- [x] 安装模式（Repair/Fresh/Dual 三种模式）
-- [x] 磁盘初始化（frzr-bootstrap + 实时日志）
-- [x] 版本选择（通道/桌面/NVIDIA）
-- [x] **安装方式选择**（在线/本地 🆕）
-- [x] **在线安装**（frzr-deploy + 进度显示 + 后安装配置）
-- [x] **本地安装**（USB 镜像 + 智能挂载管理 🆕）
-- [x] 完成页面（SUCCESS/CANCELLED/FAILED 三种状态）
-
-#### 后端功能
-- [x] 磁盘工具（检测、分区、安全检查）
-- [x] **LocalFileManager**（本地文件扫描 + 挂载生命周期管理 🆕）
-- [x] Steam bootstrap 下载（urllib + 进度 + 断点续传）
-- [x] 网络配置复制（WiFi 自动保留）
-- [x] post_install 优化（Steam 自动配置）
-- [x] 日志上传（fpaste + 异步）
-
-#### UI/UX
-- [x] 响应式缩放（UI_SCALE 支持小数、自动 DPI）
-- [x] 设备适配（20+ 设备屏幕方向、输出优先级）
-- [x] 手柄支持（ESC 返回）
-- [x] 状态栏（电池、时间、主题切换）
-- [x] 统一组件（BasePage、ExecutionPage、UIComponents）
-- [x] overrides 文件支持（自定义磁盘名称）
-
-### ⏳ 待实现功能
-
-#### 高级选项 UI
-- [ ] 固件覆盖选项（`--disable-kernel-upgrade`）
-- [ ] CDN 选择
-- [ ] Debug 模式
-- [ ] 自定义安装路径
-
-#### 用户体验
-- [ ] 帮助系统/FAQ
-- [ ] 更精确的 frzr-deploy 进度解析
-- [ ] 安装时间估算
-
-### 🧪 待测试功能
-
-1. [ ] 完整安装流程（repair/fresh/dual 三种模式）
-2. [ ] Steam bootstrap 下载（删除本地文件测试）
-3. [ ] 断点续传（中断后继续下载）
-4. [ ] 安全检查对话框（小磁盘、外部磁盘）
-5. [ ] 网络配置复制（安装后 WiFi 保留）
-6. [ ] Steam 首次启动（无需额外配置）
+8. Complete 页面 (完成页面)
+   - SUCCESS: 重启 / 打开命令行 / 关机
+   - CANCELLED: 重新安装 / 打开命令行 / 关机
+   - FAILED: 重新安装 / 打开命令行 / 关机
+   - ✅ 自动上传日志到 fpaste，显示 URL
+   - ✅ 自动清理临时挂载（本地安装） 🆕
+```
 
 ---
 
-## 🔧 技术细节
+## ✅ 已实现功能
 
-### 架构设计
+### 核心架构
+- ✅ 模块化架构 (15个文件，清晰职责)
+- ✅ BasePage/ExecutionPage 基类（统一UI）
+- ✅ UIComponents 组件工厂
+- ✅ 页面导航系统（支持字符串名称）
+- ✅ CSS 自适应缩放
+- ✅ 键盘/手柄输入支持（ESC 返回）
+- ✅ **设备适配系统**（自动检测屏幕方向和输出优先级）
 
-#### 模块化
-- 14 个文件，每个 < 600 行
-- 清晰的职责分离（backend/network/ui）
-- 独立的配置文件（config.py）
+### 页面功能
+- ✅ **Network 页面**: WiFi 扫描、连接、密码输入、虚拟键盘
+- ✅ **Disk 页面**: 磁盘扫描、现有安装检测、后台线程扫描、磁盘描述显示 `[内置]/[USB]/[SD卡]`
+- ✅ **Mode 页面**: repair/fresh/dual 模式选择
+- ✅ **Confirm 页面**: 操作摘要显示
+- ✅ **Bootstrap 页面**: frzr-bootstrap 执行、实时日志、错误处理、**Steam bootstrap 下载进度显示**、**本地文件扫描** 🆕
+- ✅ **Version 页面**: **安装方式选择（在线/本地）** 🆕、通道/桌面/NVIDIA 选择、**本地文件列表显示** 🆕
+- ✅ **Install 页面**: frzr-deploy 执行、**支持本地文件安装** 🆕、进度显示、日志输出、**后安装配置**
+- ✅ **Complete 页面**: 统一的结束页面、**自动清理临时挂载** 🆕
+  - 三种状态：SUCCESS（成功）/ CANCELLED（取消）/ FAILED（失败）
+  - 自动异步上传日志到 fpaste（后台线程）
+  - 实时显示上传状态和 URL
+  - 不同状态显示不同的操作按钮
+  - 所有"退出"按钮都跳转到此页面，而非直接退出到 TTY
 
-#### 组件复用
-- **BasePage**: 所有页面的基类（标题、内容、按钮）
-- **ExecutionPage**: 执行类页面的基类（状态、进度条、日志）
-- **UIComponents**: 统一 UI 元素工厂
+### 后端功能（代码已实现）
+- ✅ **disk_utils.py**:
+  - `get_boot_disk()` - 获取启动盘
+  - `is_disk_external()` - 检测外部磁盘
+  - `is_disk_smaller_than()` - 检查磁盘大小
+  - `list_available_disks()` - 列出可用磁盘
+  - `check_existing_frzr_installation()` - 检测现有安装
+  - `check_free_space()` - 检测空闲空间
+  - `list_shrinkable_partitions()` - 列出可缩小分区
+  - `get_disk_human_description()` - 获取磁盘描述（类型、厂商、型号、大小）
+  - `get_disk_model_override()` - 读取 /root/overrides 自定义磁盘名称
+  
+- ✅ **local_file_manager.py** 🆕:
+  - `LocalFileManager` - 本地文件扫描与挂载生命周期管理
+  - `scan_files()` - 扫描所有支持分区的 FRZR_UPDATE 文件
+  - `_get_or_mount()` - 智能挂载（已挂载直接用，未挂载临时挂载）
+  - `_scan_partition()` - 扫描分区中的文件（支持 4 种格式）
+  - `cleanup()` - 清理临时挂载
+  - **完全对齐文本安装器的扫描逻辑**
+  - **智能挂载管理**：不干预已有挂载，只清理自己创建的挂载
+  - **延迟清理策略**：保持挂载到安装完成
+  - **双重清理保障**：atexit + Complete 页面
 
-#### 配置集中管理
-```python
-# config.py
-self.mount_path = "/tmp/frzr_root"
-self.log_file = "/tmp/frzr.log"
-self.min_disk_size = 55  # GB
-self.steam_package_url = "https://..."
-self.steam_packages_dir = "/root/packages"
-```
+- ✅ **install_utils.py**:
+  - `grab_steam_bootstrap()` - 获取 Steam 引导文件（基础版，无进度报告）
+  - `grab_steam_bootstrap_with_progress()` - 获取 Steam 引导文件（带进度回调）
+    - **使用 Python urllib 替代 curl**（更精确的进度，更好的错误处理）
+    - 支持本地文件优先（`/root/packages/`）
+    - 自动下载 Steam 包（精确显示文件大小）
+    - 实时进度报告（基于字节数，每 5% 更新）
+    - **支持断点续传**（使用 HTTP Range 头）
+    - 后台线程执行，不阻塞 UI
+  - `_download_file_with_progress()` - 通用文件下载函数（带进度）
+    - Python urllib 原生实现
+    - 支持断点续传
+    - 精确的字节级进度计算
+    - 文件大小验证
+  - `copy_network_config()` - 复制网络配置到安装系统
+  - `post_install()` - 后安装优化
+    - 遍历所有 btrfs 部署子卷
+    - 修改 Steam 会话文件（添加 -nobootstrapupdate 等参数）
+    - 修改 steamos-update 脚本（防止运行时更新）
+    - 处理 /source 文件（删除扩展名）
+    - 设置子卷读写/只读状态
+  - `_modify_steam_session()` - 修改 Steam 会话文件
+  - `_modify_steamos_update()` - 修改 steamos-update 脚本
+
+- ✅ **log_utils.py**:
+  - `cleanup_log()` - 清理日志中的 ANSI 转义码
+  - `upload_log_to_fpaste()` - 上传日志到 fpaste（带超时）
+  - `AsyncLogUploader` - 异步上传器（后台线程 + 回调）
 
 ### 本地安装系统（LocalFileManager）🆕
 
 **完全对齐文本安装器的扫描逻辑**：
 
 #### 扫描策略
-- 扫描所有支持的分区（ntfs/ext4/vfat/exfat/btrfs）
-- 查找每个分区的 `FRZR_UPDATE/` 文件夹
-- 文件名匹配：`^(chimeraos|skorionos)-.*(\.img\.tar\.xz|\.xz|\.zst|\.skosys)$`
-- 显示设备名、文件大小、完整路径
+- ✅ 扫描所有支持的分区（ntfs/ext4/vfat/exfat/btrfs）
+- ✅ 扫描所有设备类型（part/dm/crypt/lvm）
+- ✅ 查找每个分区的 `FRZR_UPDATE/` 文件夹
+- ✅ 文件名匹配（正则）：`^(chimeraos|skorionos)-.*(\.img\.tar\.xz|\.xz|\.zst|\.skosys)$`
+- ✅ 显示设备名、文件大小、完整路径
 
 #### 挂载生命周期管理
 ```python
@@ -144,10 +183,11 @@ else:
 ```
 
 #### Version 页面动态 UI
-- 检测本地文件可用性
-- 动态显示"在线/本地"选择
-- 本地模式：显示文件列表（设备、大小、选择）
-- 在线模式：显示通道/桌面/NVIDIA 选择
+- ✅ 检测本地文件可用性
+- ✅ 动态显示"安装方式"选择（在线/本地）
+- ✅ 本地模式：显示文件列表（设备名、文件名、大小、选择）
+- ✅ 在线模式：显示通道/桌面/NVIDIA 选择
+- ✅ 智能 UI 切换（根据用户选择）
 
 #### Install 页面适配
 ```python
@@ -157,67 +197,203 @@ else:
     cmd = ['frzr-deploy', 'skorionos/stable', '--desktop', 'gnome']
 ```
 
-### 下载系统（urllib）
+#### 与文本安装器的对比
+| 特性 | 文本安装器 | 图形安装器 | 状态 |
+|-----|----------|----------|------|
+| 扫描范围 | 所有支持的分区 | 所有支持的分区 | ✅ 一致 |
+| 文件格式 | 4种 | 4种 | ✅ 一致 |
+| 文件名验证 | 正则匹配 | 正则匹配 | ✅ 一致 |
+| 挂载管理 | 智能保持 | 智能保持 | ✅ 一致 |
+| 文件信息 | 显示设备/大小 | 显示设备/大小 | ✅ 一致 |
+| 清理机制 | trap EXIT | atexit + Complete | ✅ 一致 |
 
-**使用 Python urllib 替代 curl**：
-- 原生 Python，无需外部命令
-- 精确的字节级进度计算
-- 显示精确文件大小和百分比
-- **支持断点续传**（HTTP Range 头）
-- 更好的错误处理（HTTPError、URLError、TimeoutError）
-- 文件大小验证（Content-Length）
+### 设备适配 (Device Quirks)
+- ✅ **自动检测设备型号**（基于 DMI 信息）
+- ✅ **屏幕方向适配**：
+  - 左旋转 (left): OXP、AYANEO、AYN、Legion Go、ZOTAC 等
+  - 右旋转 (right): GPD Win 系列
+  - 正常 (normal): Steam Deck、ROG Ally、GPD Win 4/Max 2 等
+- ✅ **自动宽高交换**：left/right 旋转时自动交换分辨率（如 1280x800 → 800x1280）
+- ✅ **输出优先级**：
+  - 默认: `*,eDP-1`
+  - GPD 设备: `*,DSI-1`
+  - AYANEO FLIP DS: `*,eDP-1,eDP-2`（优先顶部屏幕）
+- ✅ **Shader 旋转**：GPD Win 2 等不支持硬件旋转的设备
+- ✅ **支持 20+ 设备型号**（OXP、AOKZOE、AYANEO、AYN、GPD、Steam Deck、ROG Ally、Legion Go、Minisforum、ZOTAC、MSI）
 
-### 设备适配
-
-**自动检测 20+ 设备型号**：
-- 屏幕方向（left/right/normal）
-- 自动宽高交换（90/270 度旋转）
-- 输出优先级（eDP-1/DSI-1）
-- Shader 旋转（不支持硬件旋转的设备）
-
-支持品牌：OXP、AOKZOE、AYANEO、AYN、GPD、Steam Deck、ROG Ally、Legion Go、Minisforum、ZOTAC、MSI
+### UI 改进
+- ✅ 统一的错误处理（显示错误、返回/重试/退出按钮）
+- ✅ 自动滚动日志视图
+- ✅ 状态持久化（防止页面重新执行）
+- ✅ Loading spinner 动画
+- ✅ 居中对齐和边距优化
+- ✅ **去除所有 emoji**：改用纯文本标记（`[成功]`、`[警告]`、`[失败]`、`[ERROR]` 等）
+  - 更好的日志可读性和兼容性
+  - 统一的状态标记格式
 
 ### UI 缩放系统
+- ✅ **UI_SCALE 支持**：支持小数缩放（1.0, 1.5, 2.0 等）
+- ✅ **自动 DPI 缩放**：通过 `gtk-xft-dpi` 设置，文字大小随 UI_SCALE 同步缩放
+- ✅ **布局缩放**：通过 `config.scaled()` 缩放按钮、图标、间距、边距等
+- ✅ **单选框/复选框缩放**：通过 CSS 设置 `min-width/min-height` 和 `-gtk-icon-size` 缩放圆点
+- ✅ **分辨率适配**：根据屏幕高度自动调整 UI_SCALE (≥1440p: 2x, ≥1080p: 1x)
+- 🔧 **工作原理**：
+  - `gtk-xft-dpi`：控制所有文字渲染大小（Label、TextView、Button 文字等）
+  - `config.scaled()`：控制 widget 尺寸、padding、margins、图标大小
+  - CSS 规则：控制单选框圆点、滚动条等 GTK 内置元素
+  - 三者配合确保整体 UI 协调缩放，不会出现"按钮变大文字不变"的问题
 
-**三位一体缩放**：
-1. `gtk-xft-dpi` - 控制所有文字渲染大小
-2. `config.scaled()` - 控制 widget 尺寸、padding、margins
-3. CSS 规则 - 控制单选框圆点、滚动条等内置元素
+### UI 组件统一
+- ✅ **统一选择按钮组件**：`UIComponents.create_selection_button()` 用于所有选择列表
+  - 磁盘选择、模式选择都使用同一组件
+  - 统一的边距（10px start/end, 8px top/bottom）
+  - 统一的标题粗体、描述灰色样式
+- ✅ **统一边框样式**：所有选择列表使用 `info-box` CSS 类
+  - 磁盘选择、模式选择、版本选择、网络列表
+  - 统一的圆角边框（8px，随 UI_SCALE 缩放）
+  - 统一的内边距（20px）和外边距（10px 上下）
+- ✅ **滚动优化**：边框固定，内容滚动
+  - 网络页面：容器边框固定，WiFi 列表在内部滚动
+  - 圆角处理：第一行/最后一行添加圆角，避免覆盖边框圆角
+  - 高亮效果：保留 GTK 主题的 hover/selected 背景色
 
-**自动适配**：
-- ≥1440p: UI_SCALE=2.0
-- ≥1080p: UI_SCALE=1.0
-- 支持小数缩放（1.5, 2.5 等）
+### ExecutionPage 进度组件
+- ✅ **标准化的进度显示组件**：
+  - `self.status_label` - 大标题状态标签（支持 markup）
+  - `self.progress_bar` - 进度条（0.0-1.0）
+  - `self.log_view` - 滚动日志视图
+- ✅ **标准化的更新方法**：
+  - `update_status(text, markup=True)` - 更新状态标签
+  - `update_progress(fraction, text="")` - 更新进度条
+  - `append_log(text)` - 追加日志（自动滚动）
+- ✅ **Bootstrap/Install 页面应用**：
+  - Steam bootstrap 下载使用进度回调
+  - 本地文件扫描显示结果
+  - 实时更新状态、进度条、日志（显示 MB 和百分比）
+  - 后台线程 + `GLib.idle_add` 确保线程安全
 
-### 日志系统
+### 下载系统（urllib）
+- ✅ **使用 Python urllib 替代 curl**：
+  - 原生 Python 支持，无需外部命令
+  - 精确的字节级进度计算（不是解析文本输出）
+  - 显示精确文件大小（MB）和下载进度（%）
+  - **支持断点续传**：检测部分下载，使用 HTTP Range 头继续下载
+  - 更好的错误处理：HTTPError、URLError、TimeoutError
+  - 文件大小验证：下载后比对 Content-Length
+- ✅ **配置集中管理**（config.py）：
+  ```python
+  self.steam_package_url = "https://..."
+  self.steam_package_filename = "steam-jupiter-stable.pkg.tar.zst"
+  self.steam_bootstrap_filename = "bootstraplinux_ubuntu12_32.tar.xz"
+  self.steam_packages_dir = "/root/packages"
+  self.mount_path = "/tmp/frzr_root"
+  self.log_file = "/tmp/frzr.log"
+  self.min_disk_size = 55  # GB
+  ```
+  - 易于维护和更新
+  - 避免硬编码
 
-#### 统一日志路径
-所有阶段日志写入 `/tmp/frzr.log`：
-- Launcher（installer-modular 环境信息）
-- Bootstrap（frzr-bootstrap 输出）
-- Install（frzr-deploy 输出）
-- Post-install（Steam bootstrap、post_install）
+### 状态栏
+- ✅ **顶部状态栏**：显示系统状态信息，固定在所有页面顶部
+  - **电池信息**（左侧）：
+    - 电量百分比和状态（充电中/已充满）
+    - GTK 图标根据电量和状态自动变化
+    - 台式机/虚拟机显示"AC 电源"
+    - 每分钟自动更新
+  - **日期时间**（中间靠右）：
+    - 格式：`YYYY-MM-DD HH:MM`
+    - 每秒自动更新
+  - **主题切换按钮**（最右侧）：
+    - 暗色模式：显示太阳图标 ☀️（点击切换到亮色）
+    - 亮色模式：显示月亮图标 🌙（点击切换到暗色）
+    - 默认暗色模式启动
+    - 使用 libadwaita StyleManager 实现主题切换
+    - 扁平按钮样式，hover 时显示半透明背景
+  - **样式**：淡色半透明背景，底部分隔线
 
-#### 自动上传（fpaste）
-- 检查日志存在性
-- 清理 ANSI 转义码
-- 异步上传（后台线程 + 回调）
-- 实时显示 URL（可复制）
-- 超时 10 秒
+### 后安装流程（post_install）
+- ✅ **遍历部署子卷**：
+  - 列出所有 btrfs 子卷
+  - 查找 `deployments/chimeraos` 和 `deployments/skorionos`
+  - 对每个部署子卷执行优化
+  
+- ✅ **修改 Steam 会话文件**（`_modify_steam_session()`）：
+  - 文件位置：`usr/share/gamescope-session-plus/sessions.d/steam`
+  - 添加参数：`-nobootstrapupdate -skipinitialbootstrap`
+  - 添加 loginusers.vdf 检查逻辑
+  - 目的：防止 Steam 每次启动都重新下载引导文件
+  
+- ✅ **修改 steamos-update 脚本**（`_modify_steamos_update()`）：
+  - 文件位置：`usr/bin/steamos-update`
+  - 添加进程检查：`ps -ef | grep "nobootstrapupdate" && exit 0`
+  - 目的：防止 Steam 运行时执行系统更新
+  
+- ✅ **设置子卷读写状态**：
+  - 修改前：设置为可写（`ro false`）
+  - 修改后：设置为只读（`ro true`）
+  - 使用 btrfs property 命令
+  
+- ✅ **处理 /source 文件**：
+  - 删除文件扩展名（例如 `.img`）
+  - 确保 frzr-deploy 正确识别源
 
-### 系统依赖
-
-**核心**：gamescope、gtk4、libadwaita、python-gobject
-
-**图形**：mesa、vulkan-icd-loader、wayland、adwaita-icon-theme
-
-**网络**：libnm
-
-**字体**：wqy-microhei
+### 统一日志系统
+- ✅ **单一日志文件**：所有阶段写入 `/tmp/frzr.log`
+  - Launcher（installer-modular 环境信息）
+  - Bootstrap（frzr-bootstrap 输出）
+  - Install（frzr-deploy 输出）
+  - Post-install（Steam bootstrap、post_install、验证）
+- ✅ **自动清理**：删除 ANSI 转义码、空行、过长空格
+- ✅ **自动上传**：Complete 页面异步上传到 fpaste，显示 URL
 
 ---
 
-## 📝 更新历史
+## ❌ 缺失功能（阻塞性）
+
+**无** - 所有核心功能已实现，包括本地安装 🎉
+
+---
+
+## ⚠️ 待实现功能（非阻塞）
+
+### 高级选项 UI
+- [ ] 固件覆盖选项（`--disable-kernel-upgrade`）
+- [ ] CDN 选择
+- [ ] Debug 模式
+- [ ] 自定义安装路径
+
+### 用户体验
+- [ ] 帮助系统/FAQ
+- [ ] 更精确的 frzr-deploy 进度解析（目前基于关键词）
+- [ ] 安装时间估算
+
+---
+
+## 🧪 待测试功能
+
+### 核心流程测试
+1. [ ] 完整安装流程（repair/fresh/dual 三种模式）
+2. [ ] 本地安装流程（有本地文件/无本地文件）
+3. [ ] 多个 USB 设备同时插入（文件选择）
+4. [ ] 断点续传（Steam bootstrap 下载中断后继续）
+
+### 安全检查测试
+5. [ ] 小磁盘警告（< 55GB）
+6. [ ] 外部磁盘警告
+7. [ ] 磁盘空间不足（dual 模式）
+
+### 后安装测试
+8. [ ] 网络配置复制（安装后 WiFi 保留）
+9. [ ] Steam 首次启动（无需额外配置）
+10. [ ] post_install 脚本修改（Steam 会话、steamos-update）
+
+### 清理机制测试
+11. [ ] 临时挂载清理（本地安装完成后）
+12. [ ] 异常退出清理（Ctrl+C、断电等）
+
+---
+
+## 🔄 更新历史
 
 ### 最近完成（2025-01-30 第三次更新）🆕
 
@@ -239,39 +415,60 @@ else:
 6. ✅ 后安装步骤（网络配置、Steam、验证）
 7. ✅ 安全检查（磁盘大小、外部磁盘警告）
 
-### 下一步 TODO
+### 最近完成（2025-01-29 第一次更新）
 
-#### 优先级：高
-- [ ] **全面测试**
-  - repair/fresh/dual 模式完整流程
-  - 本地安装流程（有/无本地文件）
-  - 断点续传（中断后继续下载）
-  - 安全检查对话框
+1. ✅ Complete 页面重写（按钮问题修复）
+2. ✅ 日志统一到 /tmp/frzr.log
+3. ✅ 日志上传到 fpaste（异步）
+4. ✅ 状态栏实现（电池、时间、主题切换）
+5. ✅ libadwaita 集成（主题切换）
+6. ✅ 磁盘描述显示（[内置]/[USB]/[SD卡]）
+7. ✅ overrides 文件支持
 
-#### 优先级：中
-- [ ] 添加高级选项 UI
-- [ ] 改进进度解析精确度
-- [ ] 帮助系统/FAQ
+---
 
-#### 优先级：低
-- [ ] 安装时间估算
+## 🐛 已修复问题
 
-### 已修复问题
-
-#### 2025-01-30 (第三次更新)
+### 2025-01-30 (第三次更新)
 - ✅ 本地安装功能不完整 → 完全实现（扫描、选择、安装、清理）
 - ✅ 与文本安装器扫描逻辑不一致 → 完全对齐（4 种格式、智能挂载）
 - ✅ 挂载管理缺失 → LocalFileManager（生命周期管理、自动清理）
 
-#### 2025-01-30 (第二次更新)
+### 2025-01-30 (第二次更新)
 - ✅ Steam bootstrap 下载无进度 → urllib + 实时进度
 - ✅ 日志使用 emoji → 纯文本标记
 - ✅ 配置硬编码 → config.py 集中管理
 
-#### 2025-01-29
+### 2025-01-29
 - ✅ 日志未统一 → 统一写入 /tmp/frzr.log
 - ✅ Complete 页面按钮不显示 → 重写 populate_buttons()
 - ✅ 日志不存在提示不友好 → 添加文件检查
+- ✅ 主题切换无效 → 使用 libadwaita StyleManager
+- ✅ 主题切换按钮太高 → CSS 优化
+- ✅ Welcome 页按钮样式不统一 → UIComponents 统一创建
+- ✅ 重新安装导致缩放异常 → 改为重置状态而非重启进程
+
+---
+
+## 📊 系统依赖
+
+### 核心依赖
+- `gamescope` - Wayland compositor
+- `gtk4` - GTK 4 toolkit
+- `libadwaita` - Adwaita widgets & theme support
+- `python-gobject` - Python GTK bindings
+
+### 图形依赖
+- `mesa`
+- `vulkan-icd-loader`
+- `wayland`
+- `adwaita-icon-theme`
+
+### 网络依赖
+- `libnm` - NetworkManager library
+
+### 字体依赖
+- `wqy-microhei` - 中文字体
 
 ---
 
