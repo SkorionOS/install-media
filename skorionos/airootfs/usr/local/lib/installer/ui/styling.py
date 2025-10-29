@@ -140,6 +140,12 @@ def apply_styling(scaled_func):
             background: alpha(@success_color, 0.1);
         }}
         
+        /* Status bar styling */
+        .status-bar {{
+            background: alpha(currentColor, 0.03);
+            padding: {padding}px {padding_medium}px;
+        }}
+        
         /* Virtual keyboard styling */
         .keyboard-key {{
             min-width: {scaled_func(40)}px;

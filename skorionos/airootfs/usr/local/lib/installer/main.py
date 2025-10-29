@@ -18,6 +18,123 @@ from .ui.pages.version import create_version_page
 from .ui.pages.install import create_install_page
 
 
+class StatusBar:
+    """Top status bar showing battery and time information"""
+    
+    def __init__(self):
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.box.add_css_class("status-bar")
+        self.box.set_spacing(config.scaled(20))
+        
+        # Battery info (left side) - icon + label
+        battery_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(8))
+        self.battery_icon = Gtk.Image()
+        self.battery_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        battery_box.append(self.battery_icon)
+        
+        self.battery_label = Gtk.Label()
+        battery_box.append(self.battery_label)
+        
+        self.box.append(battery_box)
+        
+        # Spacer
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        self.box.append(spacer)
+        
+        # Time info (right side) - icon + label
+        time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(8))
+        time_icon = Gtk.Image.new_from_icon_name("preferences-system-time-symbolic")
+        time_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        time_box.append(time_icon)
+        
+        self.time_label = Gtk.Label()
+        time_box.append(self.time_label)
+        
+        self.box.append(time_box)
+        
+        # Update immediately
+        self.update_battery()
+        self.update_time()
+        
+        # Schedule updates
+        GLib.timeout_add_seconds(60, self.update_battery)  # Every minute
+        GLib.timeout_add_seconds(1, self.update_time)      # Every second
+    
+    def update_battery(self):
+        """Update battery information"""
+        try:
+            import glob
+            battery_paths = glob.glob('/sys/class/power_supply/BAT*')
+            
+            if not battery_paths:
+                # Desktop/VM - AC power
+                self.battery_icon.set_from_icon_name("ac-adapter-symbolic")
+                self.battery_label.set_text("AC 电源")
+                return True
+            
+            bat = battery_paths[0]
+            
+            # Read capacity
+            with open(f"{bat}/capacity") as f:
+                capacity = int(f.read().strip())
+            
+            # Read status
+            with open(f"{bat}/status") as f:
+                status = f.read().strip()
+            
+            # Choose icon based on status and capacity
+            if status == "Charging":
+                icon_name = "battery-level-{}-charging-symbolic".format(
+                    self._get_battery_level(capacity)
+                )
+                status_text = "充电中"
+            elif status == "Full":
+                icon_name = "battery-level-100-charged-symbolic"
+                status_text = "已充满"
+            else:  # Discharging or Unknown
+                icon_name = "battery-level-{}-symbolic".format(
+                    self._get_battery_level(capacity)
+                )
+                status_text = ""
+            
+            self.battery_icon.set_from_icon_name(icon_name)
+            
+            text = f"{capacity}%"
+            if status_text:
+                text += f" {status_text}"
+            self.battery_label.set_text(text)
+            
+        except Exception as e:
+            self.battery_icon.set_from_icon_name("battery-missing-symbolic")
+            self.battery_label.set_text("--")
+        
+        return True  # Continue timer
+    
+    def _get_battery_level(self, capacity):
+        """Get battery level icon suffix based on capacity"""
+        if capacity >= 90:
+            return "100"
+        elif capacity >= 70:
+            return "80"
+        elif capacity >= 50:
+            return "60"
+        elif capacity >= 30:
+            return "40"
+        elif capacity >= 10:
+            return "20"
+        else:
+            return "10"
+    
+    def update_time(self):
+        """Update time display"""
+        from datetime import datetime
+        now = datetime.now()
+        time_str = now.strftime("%Y-%m-%d %H:%M")
+        self.time_label.set_text(time_str)
+        return True  # Continue timer
+
+
 class InstallerApp(Gtk.ApplicationWindow):
     """Main installer window with page navigation"""
     
@@ -44,6 +161,26 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Apply CSS styling
         apply_styling(config.scaled)
+        
+        # Create main container with status bar
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        
+        # Add status bar at top
+        self.status_bar = StatusBar()
+        main_box.append(self.status_bar.box)
+        
+        # Add separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        main_box.append(separator)
+        
+        # Create page container with top margin
+        self.page_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.page_container.set_vexpand(True)
+        self.page_container.set_margin_top(config.scaled(20))
+        main_box.append(self.page_container)
+        
+        # Set main container as window child
+        self.set_child(main_box)
         
         # Show first page (no history for initial page)
         self.show_page(0, add_to_history=False)
@@ -104,8 +241,14 @@ class InstallerApp(Gtk.ApplicationWindow):
         ]
         
         if page_num < len(pages):
+            # Remove old page content
+            child = self.page_container.get_first_child()
+            if child:
+                self.page_container.remove(child)
+            
+            # Add new page content
             page_content = pages[page_num]()
-            self.set_child(page_content)
+            self.page_container.append(page_content)
         else:
             print(f"[ERROR] Page {page_num} does not exist")
     
