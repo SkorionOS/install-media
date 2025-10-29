@@ -10,6 +10,7 @@ import sys
 
 from .config import config
 from .ui.styling import apply_styling
+from .ui.components.base import UIComponents
 from .ui.pages.network import create_network_page
 from .ui.pages.disk import create_disk_page
 from .ui.pages.mode import create_mode_page
@@ -360,22 +361,19 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         box.append(info_box)
         
-        # Buttons
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=15)
-        btn_box.set_halign(Gtk.Align.CENTER)
+        # Buttons (using standard button box and nav-button style)
+        btn_box = UIComponents.create_button_box(spacing=20, homogeneous=True)
         
-        start_btn = Gtk.Button(label="开始安装")
-        start_btn.set_icon_name("go-next-symbolic")
-        start_btn.add_css_class("installer-button")
+        # Exit button (left side)
+        exit_btn = UIComponents.create_button("退出", "application-exit-symbolic")
+        exit_btn.connect("clicked", lambda b: self.close())
+        btn_box.append(exit_btn)
+        
+        # Start button (right side, primary action)
+        start_btn = UIComponents.create_button("开始安装", "go-next-symbolic")
         start_btn.add_css_class("suggested-action")
         start_btn.connect("clicked", lambda b: self.show_page(1))
         btn_box.append(start_btn)
-        
-        exit_btn = Gtk.Button(label="退出")
-        exit_btn.set_icon_name("application-exit-symbolic")
-        exit_btn.add_css_class("installer-button")
-        exit_btn.connect("clicked", lambda b: self.close())
-        btn_box.append(exit_btn)
         
         box.append(btn_box)
         

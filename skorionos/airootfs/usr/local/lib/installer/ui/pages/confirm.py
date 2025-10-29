@@ -151,10 +151,10 @@ class ConfirmPage(BasePage):
         back_btn.connect("clicked", lambda b: self.app.go_back())
         button_box.append(back_btn)
         
-        # Cancel button (closes the app)
-        cancel_btn = UIComponents.create_button("取消", "process-stop-symbolic")
-        cancel_btn.connect("clicked", lambda b: self.app.close())
-        button_box.append(cancel_btn)
+        # Exit button (closes the app)
+        exit_btn = UIComponents.create_button("退出", "application-exit-symbolic")
+        exit_btn.connect("clicked", lambda b: self.app.close())
+        button_box.append(exit_btn)
         
         # Continue button
         continue_btn = UIComponents.create_button("继续", "go-next-symbolic")

@@ -85,6 +85,7 @@ class UIComponents:
         
         if icon_name:
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(8))
+            box.set_halign(Gtk.Align.CENTER)  # Center the content horizontally
             icon = Gtk.Image.new_from_icon_name(icon_name)
             label_widget = Gtk.Label(label=label)
             box.append(icon)
