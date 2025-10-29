@@ -5,6 +5,9 @@
 SYS_ID="$(cat /sys/class/dmi/id/product_name 2>/dev/null)"
 CPU_VENDOR="$(cat /proc/cpuinfo | grep vendor_id | head -n 1 | cut -d : -f 2 | xargs)"
 
+WIDTH=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 1 )
+HEIGHT=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 2 )
+
 # Default values
 ORIENTATION=""
 OUTPUT_CONNECTOR="*,eDP-1"
@@ -114,7 +117,11 @@ fi
 
 # GPD Win 4 (Normal orientation)
 if [[ ":G1618-04:" =~ ":$SYS_ID:" ]]; then
-  ORIENTATION="normal"
+  if [ "$HEIGHT" -eq 1920 ]; then
+    ORIENTATION="right"
+  else
+    ORIENTATION="normal"
+  fi
 fi
 
 # GPD Win Max 2 (Normal orientation)
@@ -126,11 +133,14 @@ fi
 WINMINI_LIST="G1617-01:G1617-02"
 if [[ ":$WINMINI_LIST:" =~ ":$SYS_ID:" ]]; then
   # Detect screen orientation by checking for vertical resolution
-  if xrandr --prop 2>/dev/null | grep -q "1080x1920"; then
+  if [ "$HEIGHT" -eq 1920 ]; then
     ORIENTATION="right"
   else
     ORIENTATION="normal"
   fi
+  GAMESCOPE_TAP_TO_CLICK=1
+  GAMESCOPE_TAP_DRAG_LOCK=1
+  GAMESCOPE_NATURAL_SCROLL=touchpad
 fi
 
 # ============================================================================
@@ -208,3 +218,6 @@ export ORIENTATION
 export OUTPUT_CONNECTOR
 export USE_ROTATION_SHADER
 
+export GAMESCOPE_TAP_TO_CLICK
+export GAMESCOPE_TAP_DRAG_LOCK
+export GAMESCOPE_NATURAL_SCROLL

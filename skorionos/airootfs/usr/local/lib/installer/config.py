@@ -3,6 +3,9 @@ Configuration module for the installer
 """
 import os
 import subprocess
+from .logger import get_logger
+
+logger = get_logger('config')
 
 
 class Config:
@@ -51,7 +54,11 @@ class Config:
         try:
             with open(path, 'r') as f:
                 return f.read().strip()
-        except:
+        except FileNotFoundError:
+            logger.debug(f"File not found: {path}")
+            return ''
+        except Exception as e:
+            logger.warning(f"Could not read {path}: {e}")
             return ''
     
     def _get_cpu_vendor(self):
@@ -69,7 +76,11 @@ class Config:
                     if len(parts) >= 2:
                         return parts[1].strip()
             return ''
-        except:
+        except FileNotFoundError:
+            logger.warning("lscpu command not found")
+            return ''
+        except Exception as e:
+            logger.warning(f"Could not get CPU vendor: {e}")
             return ''
     
     def scaled(self, value):

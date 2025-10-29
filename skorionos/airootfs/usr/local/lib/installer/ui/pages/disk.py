@@ -17,6 +17,9 @@ from ...backend.disk_utils import (
     is_disk_external
 )
 from ..components.base import BasePage, UIComponents
+from ...logger import get_logger
+
+logger = get_logger('disk')
 
 
 class DiskPage(BasePage):
@@ -116,6 +119,7 @@ def _scan_and_populate_disks_thread(app):
         GLib.idle_add(_update_disk_list, app, disks)
         
     except Exception as e:
+        logger.exception(f"[DISK] Error scanning disks: {e}")
         print(f"[DISK] Error scanning disks: {e}")
         GLib.idle_add(_show_error, app, f"扫描磁盘失败: {str(e)}")
 

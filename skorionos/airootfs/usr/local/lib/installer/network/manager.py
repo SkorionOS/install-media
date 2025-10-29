@@ -4,6 +4,9 @@ NetworkManager wrapper for network operations
 import gi
 gi.require_version('NM', '1.0')
 from gi.repository import NM, GLib
+from ..logger import get_logger
+
+logger = get_logger('network')
 
 
 class NetworkManager:
@@ -15,7 +18,7 @@ class NetworkManager:
             self.client = NM.Client.new(None)
             print("[NM] NetworkManager client initialized")
         except Exception as e:
-            print(f"[NM] Failed to initialize: {e}")
+            logger.exception(f"[NM] Failed to initialize: {e}")
             self.client = None
     
     def is_available(self):
@@ -47,7 +50,7 @@ class NetworkManager:
         try:
             wifi_device.request_scan_async(None, None, None)
         except Exception as e:
-            print(f"[NM] WiFi scan request failed: {e}")
+            logger.exception(f"[NM] WiFi scan request failed: {e}")
         
         # Get access points
         access_points = wifi_device.get_access_points()
@@ -74,7 +77,7 @@ class NetworkManager:
             try:
                 ssid = NM.utils_ssid_to_utf8(ssid_bytes.get_data())
             except Exception as e:
-                print(f"[NM] Invalid SSID encoding: {e}")
+                logger.exception(f"[NM] Invalid SSID encoding: {e}")
                 ssid = f"<Hidden Network {len(seen_ssids) + 1}>"
             
             if ssid in seen_ssids:
@@ -139,10 +142,10 @@ class NetworkManager:
                                     try:
                                         active_ssid = active_ssid_bytes.get_data().decode('utf-8')
                                         return active_ssid
-                                    except:
-                                        pass
+                                    except Exception as e:
+                                        logger.debug(f"Decode error: {e}")
         except Exception as e:
-            print(f"[NM] Failed to get connected WiFi: {e}")
+            logger.exception(f"[NM] Failed to get connected WiFi: {e}")
         
         return None
     
@@ -287,8 +290,8 @@ class NetworkManager:
                                     if active_ssid == ssid:
                                         target_conn = conn
                                         break
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.debug(f"Decode error: {e}")
         
         if not target_conn:
             print(f"[NM] No active connection found for: {ssid}")
@@ -303,7 +306,7 @@ class NetworkManager:
                 print(f"[NM] Disconnect result: {success}")
                 callback(success, ssid)
             except Exception as e:
-                print(f"[NM] Disconnect error: {e}")
+                logger.exception(f"[NM] Disconnect error: {e}")
                 callback(False, ssid)
         
         self.client.deactivate_connection_async(

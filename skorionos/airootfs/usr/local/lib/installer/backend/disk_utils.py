@@ -6,6 +6,9 @@ Implements disk selection logic from the original install.sh script.
 import subprocess
 import re
 import os
+from ..logger import get_logger
+
+logger = get_logger('disk')
 
 
 def get_boot_disk():
@@ -85,7 +88,7 @@ def get_boot_disk():
         return boot_disk
         
     except Exception as e:
-        print(f"Error getting boot disk: {e}")
+        logger.exception(f"Error getting boot disk: {e}")
         return None
 
 
@@ -115,7 +118,7 @@ def is_disk_external(disk_name):
         return False
         
     except Exception as e:
-        print(f"Error checking if disk is external: {e}")
+        logger.exception(f"Error checking if disk is external: {e}")
         return False
 
 
@@ -159,7 +162,7 @@ def is_disk_smaller_than(disk_name, min_size_gb):
         return True
         
     except Exception as e:
-        print(f"Error checking disk size: {e}")
+        logger.exception(f"Error checking disk size: {e}")
         return True
 
 
@@ -191,7 +194,7 @@ def get_disk_model_override(disk_name, device_vendor, device_product, device_cpu
                         return parts[1].strip()
         return None
     except Exception as e:
-        print(f"Error reading overrides file: {e}")
+        logger.exception(f"Error reading overrides file: {e}")
         return None
 
 
@@ -296,7 +299,7 @@ def get_disk_human_description(disk_name, device_vendor='', device_product='', d
         return description
         
     except Exception as e:
-        print(f"Error getting disk description: {e}")
+        logger.exception(f"Error getting disk description: {e}")
         return None
 
 
@@ -352,7 +355,7 @@ def list_available_disks(device_vendor='', device_product='', device_cpu=''):
         return disks
         
     except Exception as e:
-        print(f"Error listing disks: {e}")
+        logger.exception(f"Error listing disks: {e}")
         return []
 
 
@@ -391,7 +394,7 @@ def check_existing_frzr_installation(disk):
             return 'none'  # New disk
             
     except Exception as e:
-        print(f"Error checking frzr installation: {e}")
+        logger.exception(f"Error checking frzr installation: {e}")
         return 'none'
 
 
@@ -447,7 +450,7 @@ def check_free_space(disk):
         return free_spaces
         
     except Exception as e:
-        print(f"Error checking free space: {e}")
+        logger.exception(f"Error checking free space: {e}")
         return []
 
 
@@ -499,6 +502,6 @@ def list_shrinkable_partitions(disk):
         return partitions
         
     except Exception as e:
-        print(f"Error listing partitions: {e}")
+        logger.exception(f"Error listing partitions: {e}")
         return []
 

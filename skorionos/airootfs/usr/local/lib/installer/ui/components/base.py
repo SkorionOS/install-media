@@ -248,6 +248,9 @@ class ExecutionPage(BasePage):
     def __init__(self, app):
         super().__init__(app)
         
+        # Log file path - all ExecutionPage subclasses use the same log file
+        self.log_file_path = config.log_file
+        
         # UI components
         self.status_label: Optional[Gtk.Label] = None
         self.progress_bar: Optional[Gtk.ProgressBar] = None
@@ -329,17 +332,19 @@ class ExecutionPage(BasePage):
         return "开始"
     
     def append_log(self, text: str):
-        """Append text to log view with auto-scrolling."""
-        if not self.log_buffer:
-            return
+        """Append text to log view with auto-scrolling and stdout logging."""
+        # Write to UI
+        if self.log_buffer:
+            end_iter = self.log_buffer.get_end_iter()
+            self.log_buffer.insert(end_iter, text)
+            
+            # Auto-scroll to bottom
+            if self.log_view:
+                mark = self.log_buffer.get_insert()
+                self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
         
-        end_iter = self.log_buffer.get_end_iter()
-        self.log_buffer.insert(end_iter, text)
-        
-        # Auto-scroll to bottom
-        if self.log_view:
-            mark = self.log_buffer.get_insert()
-            self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+        # Write to stdout (captured by tee in installer-modular launcher)
+        print(text, end='', flush=True)
     
     def update_status(self, text: str, markup: bool = True):
         """Update status label."""

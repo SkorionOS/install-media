@@ -72,8 +72,8 @@ class NetworkPage(BasePage):
         # Scroll window (inside the bordered container)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(config.scaled(300))
-        scroll.set_max_content_height(config.scaled(300))
+        scroll.set_min_content_height(config.scaled(200))
+        # scroll.set_max_content_height(config.scaled(300))
         scroll.set_propagate_natural_height(False)
         scroll.set_child(self.wifi_list)
         

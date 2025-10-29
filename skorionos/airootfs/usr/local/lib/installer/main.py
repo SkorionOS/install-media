@@ -10,6 +10,9 @@ import sys
 import atexit
 
 from .config import config
+from .logger import get_logger
+
+logger = get_logger('main')
 from .ui.styling import apply_styling
 from .ui.components.base import UIComponents
 from .ui.pages.network import create_network_page
@@ -109,17 +112,17 @@ class StatusBar:
             
             # Choose icon based on status and capacity
             if status == "Charging":
-                icon_name = "battery-level-{}-charging-symbolic".format(
-                    self._get_battery_level(capacity)
-                )
+                # For charging, use level icons (0-90), not 100
+                level = self._get_battery_level(capacity)
+                icon_name = f"battery-level-{level}-charging-symbolic"
                 status_text = "充电中"
             elif status == "Full":
+                # Only 'charged' has a 100 variant
                 icon_name = "battery-level-100-charged-symbolic"
                 status_text = "已充满"
             else:  # Discharging or Unknown
-                icon_name = "battery-level-{}-symbolic".format(
-                    self._get_battery_level(capacity)
-                )
+                level = self._get_battery_level(capacity)
+                icon_name = f"battery-level-{level}-symbolic"
                 status_text = ""
             
             self.battery_icon.set_from_icon_name(icon_name)
@@ -130,25 +133,40 @@ class StatusBar:
             self.battery_label.set_text(text)
             
         except Exception as e:
+            logger.debug(f"Could not read battery status: {e}")
             self.battery_icon.set_from_icon_name("battery-missing-symbolic")
             self.battery_label.set_text("--")
         
         return True  # Continue timer
     
     def _get_battery_level(self, capacity):
-        """Get battery level icon suffix based on capacity"""
-        if capacity >= 90:
-            return "100"
-        elif capacity >= 70:
+        """
+        Get battery level icon suffix based on capacity.
+        Returns values that match available icon names: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90.
+        Note: Don't return "100" - it's only used for 'charged' state, not during charging.
+        """
+        if capacity >= 95:
+            return "90"  # Max level for charging icons is 90
+        elif capacity >= 85:
+            return "90"
+        elif capacity >= 75:
             return "80"
-        elif capacity >= 50:
+        elif capacity >= 65:
+            return "70"
+        elif capacity >= 55:
             return "60"
-        elif capacity >= 30:
+        elif capacity >= 45:
+            return "50"
+        elif capacity >= 35:
             return "40"
-        elif capacity >= 10:
+        elif capacity >= 25:
+            return "30"
+        elif capacity >= 15:
             return "20"
-        else:
+        elif capacity >= 5:
             return "10"
+        else:
+            return "0"
     
     def update_time(self):
         """Update time display"""
@@ -343,12 +361,12 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Title
         title = Gtk.Label()
-        title.set_markup('<span size="xx-large" weight="bold">SkorionOS 图形化安装器</span>')
+        title.set_markup('<span size="xx-large" weight="bold">SkorionOS 安装器</span>')
         box.append(title)
         
         # Subtitle
         subtitle = Gtk.Label()
-        subtitle.set_markup(f'<span size="large">版本 {config.version} PoC</span>')
+        subtitle.set_markup(f'<span size="large">版本 {config.version}</span>')
         subtitle.add_css_class("installer-subtitle")
         box.append(subtitle)
         
@@ -432,8 +450,8 @@ class InstallerApp(Gtk.ApplicationWindow):
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not read device info: {e}")
         return "未知设备"
 
 

@@ -1,8 +1,8 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-01-30 (第四次更新)
+> 最后更新: 2025-01-30 (第五次更新)
 > 
-> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项
+> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项、统一日志系统
 
 ---
 
@@ -19,6 +19,7 @@
 /usr/local/lib/installer/
 ├── __init__.py
 ├── config.py                   # 全局配置（缩放、路径、Steam URL）
+├── logger.py                   # 统一日志系统（结构化日志、异常跟踪）🆕
 ├── main.py                     # 主窗口和页面导航
 │
 ├── backend/                    # 后端工具模块
@@ -134,18 +135,27 @@
 
 - ✅ **install_utils.py**:
   - `grab_steam_bootstrap()` - 获取 Steam 引导文件（基础版，无进度报告）
-  - `grab_steam_bootstrap_with_progress()` - 获取 Steam 引导文件（带进度回调）
+  - `grab_steam_bootstrap_with_progress()` - 获取 Steam 引导文件（带进度回调）🆕
     - **使用 Python urllib 替代 curl**（更精确的进度，更好的错误处理）
     - 支持本地文件优先（`/root/packages/`）
     - 自动下载 Steam 包（精确显示文件大小）
     - 实时进度报告（基于字节数，每 5% 更新）
     - **支持断点续传**（使用 HTTP Range 头）
+    - **自动重试机制**（最多3次，文件损坏自动删除并重新下载）🆕
+    - **完整性验证**（文件大小 > 250MB，tar/xz 格式验证）🆕
+    - **详细错误日志**（捕获 tar/xz 的 stderr 输出）🆕
     - 后台线程执行，不阻塞 UI
   - `_download_file_with_progress()` - 通用文件下载函数（带进度）
     - Python urllib 原生实现
     - 支持断点续传
     - 精确的字节级进度计算
     - 文件大小验证
+  - `_extract_bootstrap_from_steam_pkg()` - 从 Steam 包提取引导文件 🆕
+    - 文件大小检查（必须 > 250MB）
+    - tar 内容列表验证（30秒超时）
+    - 提取到临时文件并验证 xz 格式
+    - 捕获并记录所有命令错误输出（tar/xz stderr）
+    - 检测损坏文件自动删除
   - `copy_network_config()` - 复制网络配置到安装系统
   - `post_install()` - 后安装优化
     - 遍历所有 btrfs 部署子卷
@@ -342,12 +352,27 @@ else:
   - 删除文件扩展名（例如 `.img`）
   - 确保 frzr-deploy 正确识别源
 
-### 统一日志系统
+### 统一日志系统 🆕
+- ✅ **结构化日志框架**（`logger.py`）：
+  - `InstallerLogger` 类：提供 debug/info/warning/error/exception 方法
+  - 时间戳格式：`[2025-01-30 12:34:56] [INFO] [component] message`
+  - 组件标识：每个模块可创建独立 logger（如 `logger = get_logger('install')`）
+  - 自动异常跟踪：`logger.exception()` 自动包含完整堆栈信息
+  - 输出到 stdout：通过 `tee` 重定向到 `/tmp/frzr.log`
+  
+- ✅ **全局异常处理改进**：
+  - 消除所有 bare `except:` 块
+  - 所有异常捕获使用 `except Exception as e:` 或更具体的异常类型
+  - 异常处理统一使用 `logger.exception()` 记录完整堆栈
+  - UI日志同步：`append_log()` 输出到 stdout，自动被 `tee` 捕获
+  
 - ✅ **单一日志文件**：所有阶段写入 `/tmp/frzr.log`
   - Launcher（installer-modular 环境信息）
-  - Bootstrap（frzr-bootstrap 输出）
+  - Bootstrap（frzr-bootstrap 输出 + Steam bootstrap 详细日志）
   - Install（frzr-deploy 输出）
   - Post-install（Steam bootstrap、post_install、验证）
+  - Python 日志（所有 logger 输出）
+  
 - ✅ **自动清理**：删除 ANSI 转义码、空行、过长空格
 - ✅ **自动上传**：Complete 页面异步上传到 fpaste，显示 URL
 
@@ -394,7 +419,25 @@ else:
 
 ## 🔄 更新历史
 
-### 最近完成（2025-01-30 第三次更新）🆕
+### 最近完成（2025-01-30 第四次更新）🆕
+
+1. ✅ **统一日志系统改造**
+   - 创建 `logger.py` 模块（`InstallerLogger` 类）
+   - 结构化日志格式：`[时间戳] [级别] [组件] 消息`
+   - 全局消除 bare `except:` 块（改用 `except Exception as e:`）
+   - 所有异常使用 `logger.exception()` 记录完整堆栈
+   - UI 日志通过 stdout + `tee` 统一到 `/tmp/frzr.log`
+   - 替换所有 `print()` 为 `logger.info/warning/error()`
+
+2. ✅ **Steam Bootstrap 健壮性增强**
+   - 自动重试机制（最多3次，间隔2秒）
+   - 文件完整性检查（大小 > 250MB）
+   - 损坏文件自动删除并重新下载
+   - 捕获并记录命令错误输出（tar/xz stderr）
+   - 超时保护（tar 命令30秒超时）
+   - 详细的错误日志（包括堆栈跟踪）
+
+### 最近完成（2025-01-30 第三次更新）
 
 1. ✅ **完成本地安装功能**
    - 创建 `LocalFileManager` 类（挂载生命周期管理）
@@ -404,7 +447,7 @@ else:
    - Install 页面支持本地文件安装
    - 集成自动清理机制（atexit + Complete 页面）
 
-2. ✅ **完成高级选项功能** 🆕
+2. ✅ **完成高级选项功能**
    - 创建 Advanced Options 页面（4 个选项）
    - 固件覆盖：创建 device-quirks 配置
    - CDN 加速：修改 frzr-sk.conf 的 release_cdn/api_cdn
@@ -436,6 +479,16 @@ else:
 ---
 
 ## 🐛 已修复问题
+
+### 2025-01-30 (第四次更新)
+- ✅ 日志系统不统一 → 创建 logger.py（结构化日志、异常跟踪）
+- ✅ 使用 print() 而非日志工具 → 全局替换为 logger
+- ✅ 存在 bare except 块 → 全部改为具体异常类型
+- ✅ 缺少异常堆栈信息 → 使用 logger.exception() 自动记录
+- ✅ Steam 包损坏无法重试 → 自动重试3次 + 损坏文件删除
+- ✅ 命令错误信息丢失 → 捕获并记录 stderr 输出
+- ✅ 状态栏电池图标错误 → 修复充电图标选择逻辑
+- ✅ Adwaita 警告 → 移除废弃的 gtk-application-prefer-dark-theme 设置
 
 ### 2025-01-30 (第三次更新)
 - ✅ 本地安装功能不完整 → 完全实现（扫描、选择、安装、清理）

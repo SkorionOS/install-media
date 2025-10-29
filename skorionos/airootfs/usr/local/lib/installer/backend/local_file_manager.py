@@ -6,6 +6,9 @@ import os
 import re
 import subprocess
 from typing import List, Dict, Tuple, Optional
+from ..logger import get_logger
+
+logger = get_logger('local_file')
 
 
 class LocalFileManager:
@@ -90,7 +93,7 @@ class LocalFileManager:
             print(f"[LocalFileManager] Scan complete: {len(self.scanned_files)} files found")
             
         except Exception as e:
-            print(f"[LocalFileManager] Error during scan: {e}")
+            logger.exception(f"[LocalFileManager] Error during scan: {e}")
         
         return self.scanned_files
     
@@ -143,7 +146,7 @@ class LocalFileManager:
                 return None
                 
         except Exception as e:
-            print(f"[LocalFileManager] Error mounting {device}: {e}")
+            logger.exception(f"[LocalFileManager] Error mounting {device}: {e}")
             return None
     
     def _scan_partition(self, device: str, mount_point: str):
@@ -194,10 +197,10 @@ class LocalFileManager:
                     print(f"[LocalFileManager] Found: {file_info['display']}")
                     
                 except Exception as e:
-                    print(f"[LocalFileManager] Error reading file {filename}: {e}")
+                    logger.exception(f"[LocalFileManager] Error reading file {filename}: {e}")
         
         except Exception as e:
-            print(f"[LocalFileManager] Error scanning {update_dir}: {e}")
+            logger.exception(f"[LocalFileManager] Error scanning {update_dir}: {e}")
     
     def cleanup(self):
         """
@@ -226,11 +229,11 @@ class LocalFileManager:
                 # Remove mount point directory
                 try:
                     os.rmdir(mount_point)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Cleanup error: {e}")
                 
             except Exception as e:
-                print(f"[LocalFileManager] Error cleaning up {mount_point}: {e}")
+                logger.exception(f"[LocalFileManager] Error cleaning up {mount_point}: {e}")
         
         self.mounted_by_us.clear()
         print("[LocalFileManager] Cleanup complete")

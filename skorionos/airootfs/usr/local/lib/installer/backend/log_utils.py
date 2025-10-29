@@ -6,6 +6,9 @@ import re
 import subprocess
 import threading
 from typing import Optional, Callable
+from ..logger import get_logger
+
+logger = get_logger('logutils')
 
 
 def cleanup_log(log_file: str) -> bool:
@@ -52,7 +55,7 @@ def cleanup_log(log_file: str) -> bool:
         return True
         
     except Exception as e:
-        print(f"[LOG] Error cleaning log: {e}", flush=True)
+        logger.exception(f"[LOG] Error cleaning log: {e}")
         return False
 
 
@@ -98,11 +101,11 @@ def upload_log_to_fpaste(log_file: str, timeout: int = 10) -> Optional[str]:
                 
         except subprocess.TimeoutExpired:
             process.kill()
-            print("[LOG] Fpaste upload timed out", flush=True)
+            logger.warning("[LOG] Fpaste upload timed out")
             return None
         
     except Exception as e:
-        print(f"[LOG] Error uploading log: {e}", flush=True)
+        logger.exception(f"[LOG] Error uploading log: {e}")
         return None
 
 

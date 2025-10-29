@@ -10,6 +10,10 @@ import re
 import tempfile
 import urllib.request
 import urllib.error
+from ..logger import get_logger
+from ..config import config
+
+logger = get_logger('install')
 
 
 def copy_network_config(mount_path):
@@ -51,7 +55,7 @@ def copy_network_config(mount_path):
         return True
         
     except Exception as e:
-        print(f"Error copying network config: {e}")
+        logger.exception(f"Error copying network config: {e}")
         return False
 
 
@@ -69,22 +73,22 @@ def grab_steam_bootstrap(mount_path):
     return grab_steam_bootstrap_with_progress(mount_path, progress_callback=None)
 
 
-def grab_steam_bootstrap_with_progress(mount_path, progress_callback=None):
+def grab_steam_bootstrap_with_progress(mount_path, progress_callback=None, max_retries=3):
     """
     Grab Steam bootstrap file for first boot with progress reporting.
     Priority: local /root/packages/ > download from Steam servers
     Uses Python urllib for better progress tracking and error handling.
+    Automatically retries on corrupted downloads.
     
     Args:
         mount_path: Mount path of the installed system
         progress_callback: Optional callback function(message, progress_fraction)
                           Called with progress updates. progress_fraction is 0.0-1.0 or None
+        max_retries: Maximum retry attempts on file corruption (default: 3)
     
     Returns:
         bool: True if successful, False otherwise
     """
-    from ...config import config
-    
     destination = f"{mount_path}/etc/first-boot/"
     os.makedirs(destination, exist_ok=True)
     
@@ -109,56 +113,97 @@ def grab_steam_bootstrap_with_progress(mount_path, progress_callback=None):
                 report("[成功] 已复制本地引导文件", 1.0)
                 return True
             else:
-                report("[警告] 本地引导文件格式无效", None)
+                report("[警告] 本地引导文件格式无效，将删除", None)
+                try:
+                    os.remove(bootstrap_pkg)
+                    logger.info(f"Deleted invalid bootstrap file: {bootstrap_pkg}")
+                except Exception as e:
+                    logger.warning(f"Could not delete invalid bootstrap: {e}")
         
-        # Check if Steam package exists locally
+        # Check if Steam package exists locally - with auto-retry on corruption
         if os.path.exists(stm_pkg):
             report("从本地 Steam 包提取引导文件...", 0.3)
             success = _extract_bootstrap_from_steam_pkg(stm_pkg, destination)
             if success:
                 report("[成功] 已从本地包提取引导文件", 1.0)
+                return True
             else:
-                report("[失败] 无法从本地包提取引导文件", None)
-            return success
+                # Corrupted file was already deleted by _extract_bootstrap_from_steam_pkg
+                report("[警告] 本地包已损坏，将重新下载", None)
+                # Continue to download section
         
-        # Download Steam package using urllib
-        report("准备下载 Steam 包...", 0.05)
+        # Download Steam package with retry logic
+        for retry_count in range(max_retries):
+            try:
+                if retry_count > 0:
+                    report(f"重试下载 ({retry_count + 1}/{max_retries})...", 0.05)
+                    logger.info(f"Retry attempt {retry_count + 1}/{max_retries}")
+                else:
+                    report("准备下载 Steam 包...", 0.05)
+                
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    steam_tmp_pkg = os.path.join(tmp_dir, config.steam_package_filename)
+                    
+                    # Download with progress reporting
+                    success = _download_file_with_progress(
+                        config.steam_package_url,
+                        steam_tmp_pkg,
+                        report,
+                        progress_start=0.1,
+                        progress_end=0.8
+                    )
+                    
+                    if not success:
+                        if retry_count < max_retries - 1:
+                            report(f"[警告] 下载失败，2秒后重试...", None)
+                            import time
+                            time.sleep(2)
+                            continue
+                        else:
+                            report("[失败] 下载失败，已达最大重试次数", None)
+                            return False
+                    
+                    # Extract bootstrap
+                    report("正在提取引导文件...", 0.85)
+                    success = _extract_bootstrap_from_steam_pkg(steam_tmp_pkg, destination)
+                    
+                    if success:
+                        report("[成功] Steam 引导文件准备完成", 1.0)
+                        # Save package for future use
+                        os.makedirs(config.steam_packages_dir, exist_ok=True)
+                        try:
+                            shutil.copy2(steam_tmp_pkg, stm_pkg)
+                            logger.info(f"Saved Steam package to {stm_pkg}")
+                        except Exception as e:
+                            logger.debug(f"Could not save Steam package: {e}")  # Not critical
+                        return True
+                    else:
+                        # Extraction failed - file may be corrupted
+                        if retry_count < max_retries - 1:
+                            report(f"[警告] 提取失败，文件可能损坏，2秒后重试 ({retry_count + 2}/{max_retries})", None)
+                            import time
+                            time.sleep(2)
+                            continue
+                        else:
+                            report("[失败] 无法提取引导文件，已达最大重试次数", None)
+                            return False
+                            
+            except Exception as e:
+                logger.exception(f"Retry {retry_count + 1}/{max_retries} failed")
+                if retry_count < max_retries - 1:
+                    report(f"[错误] {str(e)}，2秒后重试...", None)
+                    import time
+                    time.sleep(2)
+                    continue
+                else:
+                    report(f"[错误] {str(e)}，已达最大重试次数", None)
+                    return False
         
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            steam_tmp_pkg = os.path.join(tmp_dir, config.steam_package_filename)
-            
-            # Download with progress reporting
-            success = _download_file_with_progress(
-                config.steam_package_url,
-                steam_tmp_pkg,
-                report,
-                progress_start=0.1,
-                progress_end=0.8
-            )
-            
-            if not success:
-                report("[失败] 下载失败", None)
-                return False
-            
-            # Extract bootstrap
-            report("正在提取引导文件...", 0.85)
-            success = _extract_bootstrap_from_steam_pkg(steam_tmp_pkg, destination)
-            
-            if success:
-                report("[成功] Steam 引导文件准备完成", 1.0)
-                # Save package for future use
-                os.makedirs(config.steam_packages_dir, exist_ok=True)
-                try:
-                    shutil.copy2(steam_tmp_pkg, stm_pkg)
-                    print(f"已保存 Steam 包到 {stm_pkg}")
-                except:
-                    pass  # Not critical
-            else:
-                report("[失败] 无法提取引导文件", None)
-            
-            return success
+        # Should not reach here
+        return False
         
     except Exception as e:
+        logger.exception("Fatal error in grab_steam_bootstrap_with_progress")
         report(f"[错误] {str(e)}", None)
         return False
 
@@ -286,59 +331,125 @@ def _extract_bootstrap_from_steam_pkg(pkg_path, destination):
         bool: True if successful
     """
     try:
+        # Check if file exists and is not empty
+        if not os.path.exists(pkg_path):
+            logger.error(f"Steam package not found: {pkg_path}")
+            return False
+        
+        file_size = os.path.getsize(pkg_path)
+        if file_size == 0:
+            logger.error(f"Steam package is empty: {pkg_path}")
+            return False
+        
+        logger.info(f"Steam package size: {file_size / (1024*1024):.1f} MB")
+        
+        # Expected size range (280-300 MB for steam-jupiter-stable)
+        expected_min_size = 250 * 1024 * 1024  # 250 MB
+        if file_size < expected_min_size:
+            logger.error(f"Steam package too small: {file_size / (1024*1024):.1f} MB (expected > 250 MB)")
+            logger.error("File appears to be incomplete, deleting...")
+            try:
+                os.remove(pkg_path)
+                logger.info(f"Deleted incomplete file: {pkg_path}")
+            except Exception as e:
+                logger.warning(f"Could not delete file: {e}")
+            return False
+        
         # Verify file exists in package
+        logger.info("Verifying Steam package contents...")
         result = subprocess.run(
             ['tar', '-I', 'zstd', '-tf', pkg_path],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=30  # Add timeout to prevent hanging
         )
         
         if result.returncode != 0:
-            print(f"Cannot read Steam package: {result.stderr}")
+            logger.error("Cannot read Steam package - file may be corrupted")
+            if result.stderr:
+                # Log the actual error for debugging
+                logger.error(f"tar stderr: {result.stderr.strip()}")
+            logger.error(f"Deleting corrupted file: {pkg_path}")
+            # Delete corrupted file to force re-download
+            try:
+                os.remove(pkg_path)
+                logger.info(f"Deleted corrupted file: {pkg_path}")
+            except Exception as e:
+                logger.warning(f"Could not delete corrupted file: {e}")
             return False
         
         if 'usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz' not in result.stdout:
-            print("Bootstrap file not found in Steam package")
+            logger.error("Bootstrap file not found in Steam package")
+            logger.error(f"Package contents preview: {result.stdout[:500]}")
             return False
+        
+        logger.info("Bootstrap file found in package")
         
         # Extract to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.xz') as tmp_file:
             tmp_path = tmp_file.name
         
         try:
-            result = subprocess.run(
-                ['tar', '-I', 'zstd', '-xf', pkg_path,
-                 'usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz', '-O'],
-                stdout=open(tmp_path, 'wb'),
-                stderr=subprocess.PIPE
-            )
+            logger.info("Extracting bootstrap file from package...")
+            with open(tmp_path, 'wb') as out_file:
+                result = subprocess.run(
+                    ['tar', '-I', 'zstd', '-xf', pkg_path,
+                     'usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz', '-O'],
+                    stdout=out_file,
+                    stderr=subprocess.PIPE
+                )
             
             if result.returncode != 0:
-                print(f"Failed to extract bootstrap: {result.stderr.decode()}")
+                logger.error("Failed to extract bootstrap from Steam package")
+                if result.stderr:
+                    logger.error(f"tar stderr: {result.stderr.decode().strip()}")
                 return False
             
             # Verify extracted file
-            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
-                print("Extracted file is empty")
+            if not os.path.exists(tmp_path):
+                logger.error("Extracted file does not exist")
                 return False
             
-            result = subprocess.run(['xz', '-t', tmp_path], capture_output=True)
-            if result.returncode != 0:
-                print("Extracted file format is invalid")
+            extracted_size = os.path.getsize(tmp_path)
+            if extracted_size == 0:
+                logger.error("Extracted file is empty")
                 return False
+            
+            logger.info(f"Extracted file size: {extracted_size / (1024*1024):.1f} MB")
+            
+            # Verify xz format
+            result = subprocess.run(['xz', '-t', tmp_path], 
+                                   capture_output=True)
+            if result.returncode != 0:
+                logger.error("Extracted file format is invalid (xz test failed)")
+                if result.stderr:
+                    logger.error(f"xz stderr: {result.stderr.decode().strip()}")
+                return False
+            
+            logger.info("Extracted file verified successfully")
             
             # Copy to destination
             dest_file = os.path.join(destination, 'bootstraplinux_ubuntu12_32.tar.xz')
             shutil.copy2(tmp_path, dest_file)
-            print(f"Successfully extracted bootstrap to {dest_file}")
+            logger.info(f"Successfully extracted bootstrap to {dest_file}")
             return True
             
         finally:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
         
+    except subprocess.TimeoutExpired:
+        logger.exception("Timeout while reading Steam package - file may be corrupted")
+        # Try to delete corrupted file
+        try:
+            if os.path.exists(pkg_path):
+                os.remove(pkg_path)
+                logger.info(f"Deleted corrupted Steam package: {pkg_path}")
+        except Exception:
+            pass
+        return False
     except Exception as e:
-        print(f"Error extracting bootstrap from Steam package: {e}")
+        logger.exception(f"Error extracting bootstrap from Steam package: {e}")
         return False
 
 
@@ -419,12 +530,12 @@ def post_install(mount_path):
                 
                 print(f"Processed /source file: {content}")
             except Exception as e:
-                print(f"Error processing /source file: {e}")
+                logger.exception(f"Error processing /source file: {e}")
         
         return True
         
     except Exception as e:
-        print(f"Error in post_install: {e}")
+        logger.exception(f"Error in post_install: {e}")
         return False
 
 
@@ -476,7 +587,7 @@ fi'''
             print(f"Modified Steam session file: {steam_sessions}")
     
     except Exception as e:
-        print(f"Error modifying Steam session file: {e}")
+        logger.exception(f"Error modifying Steam session file: {e}")
 
 
 def _modify_steamos_update(deploy_path):
@@ -506,7 +617,7 @@ def _modify_steamos_update(deploy_path):
                 print(f"Modified steamos-update script: {steamos_update}")
     
     except Exception as e:
-        print(f"Error modifying steamos-update script: {e}")
+        logger.exception(f"Error modifying steamos-update script: {e}")
 
 
 def verify_boot_config(mount_path, result_code):

@@ -10,6 +10,9 @@ import threading
 import os
 from ...config import config
 from ..components.base import ExecutionPage, UIComponents
+from ...logger import get_logger
+
+logger = get_logger('install')
 
 
 class InstallPage(ExecutionPage):
@@ -293,8 +296,8 @@ class InstallPage(ExecutionPage):
                 with open(boot_cfg, 'r') as f:
                     content = f.read()
                     self.append_log(f"\n启动配置内容:\n{content}\n")
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not read boot config: {e}")
         else:
             self.append_log("[警告] 启动配置文件不存在！\n")
     

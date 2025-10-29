@@ -14,11 +14,12 @@ def apply_styling(scaled_func):
     Args:
         scaled_func: Function that scales values based on UI scale factor
     """
-    # Enable GTK dark theme and DPI scaling
+    # Note: Dark theme is now handled by AdwStyleManager in main.py
+    # to avoid "Using GtkSettings:gtk-application-prefer-dark-theme with libadwaita is unsupported" warning
+    
+    # Enable DPI scaling
     settings = Gtk.Settings.get_default()
     if settings:
-        settings.set_property("gtk-application-prefer-dark-theme", True)
-        
         # Scale all fonts using DPI setting
         # GTK default DPI is 96, we multiply by UI_SCALE
         # DPI value in GTK is stored as: actual_dpi * 1024

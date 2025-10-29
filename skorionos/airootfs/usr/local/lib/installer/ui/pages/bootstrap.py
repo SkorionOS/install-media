@@ -10,6 +10,9 @@ import subprocess
 import os
 from ...config import config
 from ..components.base import ExecutionPage, UIComponents
+from ...logger import get_logger
+
+logger = get_logger('bootstrap')
 
 
 class BootstrapPage(ExecutionPage):
@@ -263,6 +266,7 @@ class BootstrapPage(ExecutionPage):
                     log_content = f.read()
                     self.append_log(log_content)
         except Exception as e:
+            logger.exception(f"[WARN] Could not reload log: {e}")
             print(f"[WARN] Could not reload log: {e}")
         
         # Show continue button

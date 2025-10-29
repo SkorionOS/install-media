@@ -13,6 +13,14 @@ echo ""
 REQUIRED_BINS=("gamescope" "python3")
 MISSING_BINS=()
 
+gamescope_has_option() {
+    if ($(get_gamescope_binary) --help 2>&1 | grep -e "$1" > /dev/null); then
+        return 0
+    fi
+
+    return 1
+}
+
 for bin in "${REQUIRED_BINS[@]}"; do
     if ! command -v "$bin" &> /dev/null; then
         MISSING_BINS+=("$bin")
@@ -83,6 +91,9 @@ if [ -f "$QUIRKS_FILE" ]; then
     [ -n "$ORIENTATION" ] && echo "   Orientation: $ORIENTATION"
     [ -n "$OUTPUT_CONNECTOR" ] && echo "   Output: $OUTPUT_CONNECTOR"
     [ -n "$USE_ROTATION_SHADER" ] && echo "   Rotation Shader: enabled"
+    [ -n "$GAMESCOPE_TAP_TO_CLICK" ] && echo "   Tap to Click: enabled"
+    [ -n "$GAMESCOPE_TAP_DRAG_LOCK" ] && echo "   Tap Drag Lock: enabled"
+    [ -n "$GAMESCOPE_NATURAL_SCROLL" ] && echo "   Natural Scroll: $GAMESCOPE_NATURAL_SCROLL"
 fi
 
 # Swap width and height for 90/270 degree rotations
@@ -100,20 +111,28 @@ if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" ]]; then
     export INSTALLER_HEIGHT="$HEIGHT"
 fi
 
-export INNER_WIDTH=1280
-export INNER_HEIGHT=$((INSTALLER_HEIGHT * 1280 / INSTALLER_WIDTH))
+INNER_WIDTH=1280
+INNER_HEIGHT=$(awk "BEGIN {printf \"%.0f\", $INSTALLER_HEIGHT * 1280 / $INSTALLER_WIDTH}")
+
+INNER_WIDTH=""
+INNER_HEIGHT=""
+
+export INNER_WIDTH
+export INNER_HEIGHT
 echo "   Inner size: ${INNER_WIDTH}x${INNER_HEIGHT}"
 
 # UI_SCALE can be set manually (default: 1.0)
-# export UI_SCALE=2
 if [ "$INSTALLER_HEIGHT" -ge 1440 ]; then
-    export GDK_SCALE=2
-    # export UI_SCALE=2.5
+    GDK_SCALE=2
+    # UI_SCALE=2.5
 elif [ "$INSTALLER_HEIGHT" -ge 720 ]; then
-    export UI_SCALE=$((INSTALLER_HEIGHT / 720))
+    UI_SCALE=$(awk "BEGIN {printf \"%.2f\", $INSTALLER_HEIGHT / 720}")
 else
-    export UI_SCALE=1
+    UI_SCALE=1
 fi
+
+export UI_SCALE
+export GDK_SCALE
 echo "   UI scale: ${UI_SCALE}"
 
 echo ""
@@ -126,9 +145,6 @@ UNIFIED_LOG="/tmp/frzr.log"  # 统一日志文件
 echo "Logging to: $LOGFILE (and $UNIFIED_LOG)"
 echo ""
 
-INNER_WIDTH=""
-INNER_HEIGHT=""
-
 # Build gamescope command with device-specific options
 GAMESCOPE_CMD="gamescope \
   -f \
@@ -137,12 +153,16 @@ GAMESCOPE_CMD="gamescope \
   --expose-wayland"
 
 # Add device-specific options
-[ -n "$ORIENTATION" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --force-orientation $ORIENTATION"
-[ -n "$OUTPUT_CONNECTOR" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --prefer-output $OUTPUT_CONNECTOR"
-[ -n "$USE_ROTATION_SHADER" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --use-rotation-shader $USE_ROTATION_SHADER"
+[ -n "$ORIENTATION" ] && GAMESCOPE_CMD+=" --force-orientation $ORIENTATION"
+[ -n "$OUTPUT_CONNECTOR" ] && GAMESCOPE_CMD+=" --prefer-output $OUTPUT_CONNECTOR"
+[ -n "$USE_ROTATION_SHADER" ] && GAMESCOPE_CMD+=" --use-rotation-shader $USE_ROTATION_SHADER"
 
-[ -n "$INNER_WIDTH" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD -w $INNER_WIDTH"
-[ -n "$INNER_HEIGHT" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD -h $INNER_HEIGHT"
+[ -n "$INNER_WIDTH" ] && GAMESCOPE_CMD+=" -w $INNER_WIDTH"
+[ -n "$INNER_HEIGHT" ] && GAMESCOPE_CMD+=" -h $INNER_HEIGHT"
+
+[ -n "$GAMESCOPE_TAP_TO_CLICK" ] && gamescope_has_option "--tap-to-click" && GAMESCOPE_CMD+=" --tap-to-click"
+[ -n "$GAMESCOPE_TAP_DRAG_LOCK" ] && gamescope_has_option "--drag-lock" && GAMESCOPE_CMD+=" --drag-lock"
+[ -n "$GAMESCOPE_NATURAL_SCROLL" ] && gamescope_has_option "--natural-scrolling" && GAMESCOPE_CMD+=" --natural-scrolling $GAMESCOPE_NATURAL_SCROLL"
 
 # Launch gamescope + installer (with logging)
 {
@@ -159,10 +179,17 @@ GAMESCOPE_CMD="gamescope \
     [ -n "$ORIENTATION" ] && echo "Orientation: $ORIENTATION"
     [ -n "$OUTPUT_CONNECTOR" ] && echo "Output: $OUTPUT_CONNECTOR"
     [ -n "$USE_ROTATION_SHADER" ] && echo "Rotation Shader: $USE_ROTATION_SHADER"
+    [ -n "$GAMESCOPE_TAP_TO_CLICK" ] && echo "Tap to Click: $GAMESCOPE_TAP_TO_CLICK"
+    [ -n "$GAMESCOPE_TAP_DRAG_LOCK" ] && echo "Tap Drag Lock: $GAMESCOPE_TAP_DRAG_LOCK"
+    [ -n "$GAMESCOPE_NATURAL_SCROLL" ] && echo "Natural Scroll: $GAMESCOPE_NATURAL_SCROLL"
     echo ""
     echo "Gamescope command:"
     echo "$GAMESCOPE_CMD"
     echo ""
+    
+    # Note: Not setting GDK_BACKEND=wayland to allow GTK auto-detection
+    # GTK will try Wayland first, then fallback if needed
+    # The "Wayland compositor does not provide..." warning is harmless
     
     $GAMESCOPE_CMD -- python3 /usr/local/bin/installer-poc-modular "$@" 2>&1
     
