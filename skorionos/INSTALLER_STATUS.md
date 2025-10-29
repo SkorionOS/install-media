@@ -1,8 +1,8 @@
 # SkorionOS 图形化安装器
 
-> 最后更新: 2025-01-30
+> 最后更新: 2025-01-30 (第三次更新)
 > 
-> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示
+> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装
 
 ---
 
@@ -21,7 +21,11 @@
 /usr/local/lib/installer/
 ├── config.py                  # 全局配置（缩放、路径、Steam URL）
 ├── main.py                    # 主窗口和页面导航
-├── backend/                   # 后端工具（disk_utils, install_utils, log_utils）
+├── backend/                   # 后端工具
+│   ├── disk_utils.py          # 磁盘检测、分区扫描
+│   ├── install_utils.py       # 安装辅助（Steam、网络配置）
+│   ├── local_file_manager.py  # 本地文件扫描与挂载管理 🆕
+│   └── log_utils.py           # 日志处理、fpaste 上传
 ├── network/                   # 网络管理（NetworkManager 封装）
 └── ui/                        # UI 组件（pages/, components/, styling.py）
 ```
@@ -45,12 +49,15 @@
 - [x] 安装模式（Repair/Fresh/Dual 三种模式）
 - [x] 磁盘初始化（frzr-bootstrap + 实时日志）
 - [x] 版本选择（通道/桌面/NVIDIA）
+- [x] **安装方式选择**（在线/本地 🆕）
 - [x] **在线安装**（frzr-deploy + 进度显示 + 后安装配置）
+- [x] **本地安装**（USB 镜像 + 智能挂载管理 🆕）
 - [x] 完成页面（SUCCESS/CANCELLED/FAILED 三种状态）
 
 #### 后端功能
 - [x] 磁盘工具（检测、分区、安全检查）
-- [x] Steam bootstrap 下载（**urllib + 进度 + 断点续传**）
+- [x] **LocalFileManager**（本地文件扫描 + 挂载生命周期管理 🆕）
+- [x] Steam bootstrap 下载（urllib + 进度 + 断点续传）
 - [x] 网络配置复制（WiFi 自动保留）
 - [x] post_install 优化（Steam 自动配置）
 - [x] 日志上传（fpaste + 异步）
@@ -62,19 +69,6 @@
 - [x] 状态栏（电池、时间、主题切换）
 - [x] 统一组件（BasePage、ExecutionPage、UIComponents）
 - [x] overrides 文件支持（自定义磁盘名称）
-
-### 🔄 部分完成功能
-
-#### 本地安装（离线安装）
-- [x] 扫描本地文件（`bootstrap.py: _scan_frzr_update_files()`）
-- [ ] **Version 页面未显示本地安装选项**
-- [ ] **未让用户选择"本地/在线"安装**
-- [ ] **Install 页面未使用本地文件**
-
-**需要实现**：
-1. Version 页面添加安装方式选择（在线/本地）
-2. 显示本地文件列表（如果可用）
-3. Install 页面支持 `frzr-deploy /path/to/file.img.tar.zst`
 
 ### ⏳ 待实现功能
 
@@ -122,6 +116,45 @@ self.log_file = "/tmp/frzr.log"
 self.min_disk_size = 55  # GB
 self.steam_package_url = "https://..."
 self.steam_packages_dir = "/root/packages"
+```
+
+### 本地安装系统（LocalFileManager）🆕
+
+**完全对齐文本安装器的扫描逻辑**：
+
+#### 扫描策略
+- 扫描所有支持的分区（ntfs/ext4/vfat/exfat/btrfs）
+- 查找每个分区的 `FRZR_UPDATE/` 文件夹
+- 文件名匹配：`^(chimeraos|skorionos)-.*(\.img\.tar\.xz|\.xz|\.zst|\.skosys)$`
+- 显示设备名、文件大小、完整路径
+
+#### 挂载生命周期管理
+```python
+# 智能挂载
+if 已挂载:
+    直接使用，不记录  # 不干预系统已有挂载
+else:
+    临时挂载到 /tmp/frzr_scan_*
+    记录到 mounted_by_us[]  # 只清理我们创建的挂载
+
+# 延迟清理
+扫描后保持挂载  # 文件路径在临时挂载点上
+安装时文件仍可访问
+完成后自动清理  # atexit + Complete 页面双保障
+```
+
+#### Version 页面动态 UI
+- 检测本地文件可用性
+- 动态显示"在线/本地"选择
+- 本地模式：显示文件列表（设备、大小、选择）
+- 在线模式：显示通道/桌面/NVIDIA 选择
+
+#### Install 页面适配
+```python
+if install_mode == 'local':
+    cmd = ['frzr-deploy', '/tmp/frzr_scan_sda1/FRZR_UPDATE/skorionos.img.tar.zst']
+else:
+    cmd = ['frzr-deploy', 'skorionos/stable', '--desktop', 'gnome']
 ```
 
 ### 下载系统（urllib）
@@ -186,7 +219,17 @@ self.steam_packages_dir = "/root/packages"
 
 ## 📝 更新历史
 
-### 最近完成（2025-01-30）
+### 最近完成（2025-01-30 第三次更新）🆕
+
+1. ✅ **完成本地安装功能**
+   - 创建 `LocalFileManager` 类（挂载生命周期管理）
+   - 完全对齐文本安装器的扫描逻辑（支持 4 种文件格式）
+   - Version 页面添加"安装方式"选择（在线/本地）
+   - 动态显示本地文件列表（设备名、大小、选择）
+   - Install 页面支持本地文件安装
+   - 集成自动清理机制（atexit + Complete 页面）
+
+### 最近完成（2025-01-30 第二次更新）
 
 1. ✅ 使用 urllib 替代 curl（精确进度、断点续传）
 2. ✅ 配置集中管理（Steam URL 移到 config.py）
@@ -199,23 +242,28 @@ self.steam_packages_dir = "/root/packages"
 ### 下一步 TODO
 
 #### 优先级：高
-- [ ] **完成本地安装功能**
-  - Version 页面添加"本地/在线"选择
-  - 显示本地文件列表
-  - Install 页面支持本地文件
+- [ ] **全面测试**
+  - repair/fresh/dual 模式完整流程
+  - 本地安装流程（有/无本地文件）
+  - 断点续传（中断后继续下载）
+  - 安全检查对话框
 
 #### 优先级：中
-- [ ] 全面测试（repair/fresh/dual 模式）
 - [ ] 添加高级选项 UI
 - [ ] 改进进度解析精确度
+- [ ] 帮助系统/FAQ
 
 #### 优先级：低
-- [ ] 帮助系统/FAQ
 - [ ] 安装时间估算
 
 ### 已修复问题
 
-#### 2025-01-30
+#### 2025-01-30 (第三次更新)
+- ✅ 本地安装功能不完整 → 完全实现（扫描、选择、安装、清理）
+- ✅ 与文本安装器扫描逻辑不一致 → 完全对齐（4 种格式、智能挂载）
+- ✅ 挂载管理缺失 → LocalFileManager（生命周期管理、自动清理）
+
+#### 2025-01-30 (第二次更新)
 - ✅ Steam bootstrap 下载无进度 → urllib + 实时进度
 - ✅ 日志使用 emoji → 纯文本标记
 - ✅ 配置硬编码 → config.py 集中管理

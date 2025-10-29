@@ -75,6 +75,9 @@ class InstallPage(ExecutionPage):
     def execute(self):
         """Execute the actual installation process."""
         try:
+            # Check install mode
+            install_mode = getattr(self.app, 'version_selections', {}).get('install_mode', 'online')
+            
             # Get installation parameters
             version = getattr(self.app, 'selected_version', 'stable')
             desktop = getattr(self.app, 'selected_desktop', 'steamos')
@@ -84,17 +87,33 @@ class InstallPage(ExecutionPage):
             log_path = config.log_file
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             
+            # Write log header
             with open(log_path, 'a') as f:
                 f.write(f"\n{'='*60}\n")
                 f.write("=== frzr-deploy started ===\n")
                 f.write(f"{'='*60}\n")
-                f.write(f"Version: {version}\n")
-                f.write(f"Desktop: {desktop}\n")
-                f.write(f"NVIDIA: {nvidia}\n\n")
+                f.write(f"Install mode: {install_mode}\n")
+                if install_mode == 'local':
+                    local_file = self.app.version_selections.get('local_file')
+                    f.write(f"Local file: {local_file}\n\n")
+                else:
+                    f.write(f"Version: {version}\n")
+                    f.write(f"Desktop: {desktop}\n")
+                    f.write(f"NVIDIA: {nvidia}\n\n")
             
-            # Update status
-            GLib.idle_add(self.update_status, '<span size="large">正在下载系统镜像...</span>')
-            GLib.idle_add(self.update_progress, 0.1, "下载中")
+            # Update status based on mode
+            if install_mode == 'local':
+                local_file = self.app.version_selections.get('local_file')
+                if not local_file or not os.path.exists(local_file):
+                    raise Exception(f"本地镜像文件不存在: {local_file}")
+                
+                filename = os.path.basename(local_file)
+                GLib.idle_add(self.update_status, '<span size="large">正在从本地镜像安装...</span>')
+                GLib.idle_add(self.append_log, f"使用本地镜像: {filename}\n\n")
+            else:
+                GLib.idle_add(self.update_status, '<span size="large">正在下载系统镜像...</span>')
+            
+            GLib.idle_add(self.update_progress, 0.1, "准备中")
             
             # Build install command
             cmd = self._build_install_command(version, desktop, nvidia)
@@ -136,25 +155,37 @@ class InstallPage(ExecutionPage):
     
     def _build_install_command(self, version, desktop, nvidia):
         """Build the installation command based on user selections."""
-        cmd = ['frzr-deploy']
+        # Check install mode
+        install_mode = getattr(self.app, 'version_selections', {}).get('install_mode', 'online')
         
-        # Add version parameter
-        if version == 'stable':
-            cmd.append('skorionos/stable')
-        elif version == 'beta':
-            cmd.append('skorionos/beta')
-        elif version == 'nightly':
-            cmd.append('skorionos/nightly')
-        
-        # Add desktop parameter
-        if desktop != 'steamos':
-            cmd.extend(['--desktop', desktop])
-        
-        # Add NVIDIA driver flag
-        if nvidia:
-            cmd.append('--nvidia')
-        
-        return cmd
+        if install_mode == 'local':
+            # Local installation - use local file
+            local_file = self.app.version_selections.get('local_file')
+            if not local_file or not os.path.exists(local_file):
+                raise Exception(f"本地镜像文件不存在: {local_file}")
+            
+            return ['frzr-deploy', local_file]
+        else:
+            # Online installation - build command with version/desktop/nvidia
+            cmd = ['frzr-deploy']
+            
+            # Add version parameter
+            if version == 'stable':
+                cmd.append('skorionos/stable')
+            elif version == 'beta':
+                cmd.append('skorionos/beta')
+            elif version == 'nightly':
+                cmd.append('skorionos/nightly')
+            
+            # Add desktop parameter
+            if desktop != 'steamos':
+                cmd.extend(['--desktop', desktop])
+            
+            # Add NVIDIA driver flag
+            if nvidia:
+                cmd.append('--nvidia')
+            
+            return cmd
     
     def _update_progress_from_output(self, line):
         """Update progress bar based on installation output."""

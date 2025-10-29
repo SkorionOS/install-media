@@ -1,5 +1,5 @@
 """
-Version selection page (Channel, Desktop, NVIDIA driver)
+Version selection page (Install mode, Channel, Desktop, NVIDIA driver)
 """
 import gi
 gi.require_version('Gtk', '4.0')
@@ -18,12 +18,15 @@ class VersionPage(BasePage):
         # Initialize selections if not exist
         if not hasattr(app, 'version_selections'):
             app.version_selections = {
+                'install_mode': 'online',  # 'online' or 'local'
+                'local_file': None,        # Selected local file path
                 'channel': 'stable',
                 'desktop': 'gnome',
                 'nvidia': False
             }
         
         self.config_label = None
+        self.dynamic_content_box = None
     
     def create_title(self) -> Gtk.Widget:
         """Create title with icon."""
@@ -41,10 +44,95 @@ class VersionPage(BasePage):
     
     def populate_content(self, content_box: Gtk.Box):
         """Populate the content area with selection sections."""
+        # Step 1: Install mode selection (always visible)
+        install_mode_section = self._create_install_mode_section()
+        content_box.append(install_mode_section)
+        
+        # Step 2: Dynamic content container
+        self.dynamic_content_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=config.scaled(15)
+        )
+        self.dynamic_content_box.set_margin_top(config.scaled(15))
+        content_box.append(self.dynamic_content_box)
+        
+        # Step 3: Fill dynamic content based on current mode
+        self._update_dynamic_content()
+        
+        # Step 4: Configuration display
+        config_display_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
+        config_display_box.set_halign(Gtk.Align.CENTER)
+        config_display_box.set_margin_top(config.scaled(10))
+        
+        self.config_label = Gtk.Label()
+        target = self._build_target(self.app.version_selections)
+        self.config_label.set_markup(f'<span size="large">当前配置: <b>{target}</b></span>')
+        config_display_box.append(self.config_label)
+        
+        content_box.append(config_display_box)
+    
+    def _create_install_mode_section(self):
+        """Create install mode selection section."""
+        # Check if local files are available
+        has_local_files = (
+            hasattr(self.app, 'local_frzr_files') 
+            and len(self.app.local_frzr_files) > 0
+        )
+        
+        # Build options
+        if has_local_files:
+            options = [
+                ('online', '在线安装', f'下载最新系统镜像'),
+                ('local', '本地安装', f'使用 USB 镜像 ({len(self.app.local_frzr_files)} 个可用)')
+            ]
+        else:
+            options = [
+                ('online', '在线安装', '下载最新系统镜像')
+            ]
+        
+        # Create section
+        section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(10))
+        section_box.set_halign(Gtk.Align.CENTER)
+        
+        section = self._create_compact_section(
+            "安装方式",
+            options,
+            self.app.version_selections.get('install_mode', 'online'),
+            lambda value: self._on_install_mode_changed(value)
+        )
+        section_box.append(section)
+        
+        return section_box
+    
+    def _on_install_mode_changed(self, mode):
+        """Handle install mode change."""
+        print(f"[VERSION] install_mode = {mode}")
+        self.app.version_selections['install_mode'] = mode
+        
+        # Update dynamic content
+        self._update_dynamic_content()
+        
+        # Update config display
+        self._update_config_display()
+    
+    def _update_dynamic_content(self):
+        """Update dynamic content based on install mode."""
+        # Clear existing content
+        while child := self.dynamic_content_box.get_first_child():
+            self.dynamic_content_box.remove(child)
+        
+        mode = self.app.version_selections.get('install_mode', 'online')
+        
+        if mode == 'online':
+            self._show_online_options()
+        else:
+            self._show_local_file_list()
+    
+    def _show_online_options(self):
+        """Show online installation options (channel, desktop, NVIDIA)."""
         # Selection container - horizontal layout
         selection_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(15))
         selection_box.set_halign(Gtk.Align.CENTER)
-        selection_box.set_margin_top(config.scaled(10))
         
         # Section 1: Channel selection
         channel_section = self._create_compact_section(
@@ -83,19 +171,98 @@ class VersionPage(BasePage):
         )
         selection_box.append(nvidia_section)
         
-        content_box.append(selection_box)
+        self.dynamic_content_box.append(selection_box)
+    
+    def _show_local_file_list(self):
+        """Show local file selection list."""
+        local_files = getattr(self.app, 'local_frzr_files', [])
         
-        # Show selected configuration
-        config_display_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
-        config_display_box.set_halign(Gtk.Align.CENTER)
-        config_display_box.set_margin_top(config.scaled(10))
+        if not local_files:
+            # No local files - show message
+            message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(10))
+            message_box.set_halign(Gtk.Align.CENTER)
+            
+            label = Gtk.Label()
+            label.set_markup(
+                '<span size="large">未找到本地镜像文件</span>\n'
+                '<span size="small">请插入包含安装镜像的 USB 设备</span>'
+            )
+            label.set_justify(Gtk.Justification.CENTER)
+            message_box.append(label)
+            
+            self.dynamic_content_box.append(message_box)
+            return
         
-        self.config_label = Gtk.Label()
-        target = self._build_target(self.app.version_selections)
-        self.config_label.set_markup(f'<span size="large">当前配置: <b>{target}</b></span>')
-        config_display_box.append(self.config_label)
+        # Create file selection box
+        file_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(10))
+        file_box.set_halign(Gtk.Align.CENTER)
         
-        content_box.append(config_display_box)
+        # Title
+        title_label = Gtk.Label()
+        title_label.set_markup('<span size="large" weight="bold">选择镜像文件</span>')
+        file_box.append(title_label)
+        
+        # File list with radio buttons
+        list_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
+        list_container.add_css_class("info-box")
+        list_container.set_size_request(config.scaled(600), -1)
+        
+        first_btn = None
+        for file_info in local_files:
+            # Radio button
+            if first_btn is None:
+                btn = Gtk.CheckButton()
+                first_btn = btn
+                btn.set_active(True)  # Select first by default
+                self.app.version_selections['local_file'] = file_info['path']
+            else:
+                btn = Gtk.CheckButton()
+                btn.set_group(first_btn)
+            
+            # File info display
+            info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(2))
+            
+            # Filename
+            filename_label = Gtk.Label(label=file_info['filename'])
+            filename_label.set_xalign(0)
+            info_box.append(filename_label)
+            
+            # Details (device + size)
+            details_label = Gtk.Label()
+            details_label.set_markup(
+                f'<span size="small" foreground="#888">'
+                f'设备: {file_info["device"]} | 大小: {file_info["size"]}'
+                f'</span>'
+            )
+            details_label.set_xalign(0)
+            details_label.set_margin_start(config.scaled(15))
+            info_box.append(details_label)
+            
+            btn.set_child(info_box)
+            
+            # Connect signal
+            file_path = file_info['path']
+            btn.connect("toggled", lambda b, p=file_path: self._on_local_file_selected(b, p))
+            
+            list_container.append(btn)
+        
+        file_box.append(list_container)
+        self.dynamic_content_box.append(file_box)
+    
+    def _on_local_file_selected(self, button, file_path):
+        """Handle local file selection."""
+        if button.get_active():
+            print(f"[VERSION] Selected local file: {file_path}")
+            self.app.version_selections['local_file'] = file_path
+            self._update_config_display()
+    
+    def _update_config_display(self):
+        """Update configuration display label."""
+        if self.config_label:
+            target = self._build_target(self.app.version_selections)
+            self.config_label.set_markup(
+                f'<span size="large">当前配置: <b>{target}</b></span>'
+            )
     
     def populate_buttons(self, button_box: Gtk.Box):
         """Populate the button area."""
@@ -193,22 +360,31 @@ class VersionPage(BasePage):
         self.app.version_selections[key] = value
         
         # Update config label
-        if self.config_label:
-            target = self._build_target(self.app.version_selections)
-            self.config_label.set_markup(
-                f'<span size="large">当前配置: <b>{target}</b></span>'
-            )
+        self._update_config_display()
     
     def _build_target(self, selections):
         """Build TARGET string from selections."""
-        channel = selections['channel']
-        desktop = selections['desktop']
-        nvidia = selections['nvidia']
+        mode = selections.get('install_mode', 'online')
         
-        if nvidia:
-            return f"{channel}:{desktop}-nv"
+        if mode == 'local':
+            # Local installation - show filename
+            local_file = selections.get('local_file')
+            if local_file:
+                import os
+                filename = os.path.basename(local_file)
+                return f"本地镜像: {filename}"
+            else:
+                return "本地安装 (未选择文件)"
         else:
-            return f"{channel}:{desktop}"
+            # Online installation - show channel:desktop configuration
+            channel = selections['channel']
+            desktop = selections['desktop']
+            nvidia = selections['nvidia']
+            
+            if nvidia:
+                return f"{channel}:{desktop}-nv"
+            else:
+                return f"{channel}:{desktop}"
     
     def _on_exit(self):
         """Handle exit button - go to complete page with CANCELLED status."""

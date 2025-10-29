@@ -7,6 +7,7 @@ gi.require_version('Gdk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Gdk, GLib, Adw
 import sys
+import atexit
 
 from .config import config
 from .ui.styling import apply_styling
@@ -439,6 +440,16 @@ def main():
     """Main entry point"""
     print("[INFO] Starting SkorionOS Installer...")
     app = InstallerApplication()
+    
+    # Register cleanup function for local file manager
+    def cleanup_local_files():
+        """Cleanup local file manager mounts on exit"""
+        if hasattr(app, 'local_file_manager'):
+            print("[INFO] Cleaning up local file mounts...")
+            app.local_file_manager.cleanup()
+    
+    atexit.register(cleanup_local_files)
+    
     return app.run(sys.argv)
 
 

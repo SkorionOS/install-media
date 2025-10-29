@@ -164,44 +164,26 @@ class BootstrapPage(ExecutionPage):
     
     def _scan_frzr_update_files(self):
         """
-        Scan mounted partitions for FRZR_UPDATE files.
-        Returns list of available local files.
+        Scan mounted partitions for FRZR_UPDATE files using LocalFileManager.
+        Returns list of available local files (keeps mounts until cleanup).
         """
-        local_files = []
+        from ...backend.local_file_manager import LocalFileManager
         
-        try:
-            # Check if FRZR_UPDATE label exists
-            result = subprocess.run(
-                ['ls', '-1', '/dev/disk/by-label'],
-                capture_output=True,
-                text=True
-            )
-            
-            if 'FRZR_UPDATE' not in result.stdout:
-                return local_files
-            
-            # Mount and scan FRZR_UPDATE partition
-            update_mount = '/tmp/frzr_update_mount'
-            os.makedirs(update_mount, exist_ok=True)
-            
-            subprocess.run(
-                ['mount', '/dev/disk/by-label/FRZR_UPDATE', update_mount],
-                check=False
-            )
-            
-            # Scan for .img.tar.zst files
-            if os.path.exists(update_mount):
-                for file in os.listdir(update_mount):
-                    if file.endswith('.img.tar.zst'):
-                        local_files.append(os.path.join(update_mount, file))
-            
-            # Unmount
-            subprocess.run(['umount', update_mount], check=False)
-            
-        except Exception as e:
-            print(f"Error scanning FRZR_UPDATE: {e}")
+        # Initialize LocalFileManager on app if not exists
+        if not hasattr(self.app, 'local_file_manager'):
+            self.app.local_file_manager = LocalFileManager()
         
-        return local_files
+        # Scan for files (mounts partitions and keeps them mounted)
+        files = self.app.local_file_manager.scan_files()
+        
+        if files:
+            GLib.idle_add(self.append_log, f"\n[成功] 找到 {len(files)} 个本地安装文件\n")
+            for file_info in files:
+                GLib.idle_add(self.append_log, f"  - {file_info['display']}\n")
+        else:
+            GLib.idle_add(self.append_log, "\n[信息] 未找到本地安装文件（将使用在线安装）\n")
+        
+        return files
     
     def on_execution_success(self):
         """Called when bootstrap completes successfully."""

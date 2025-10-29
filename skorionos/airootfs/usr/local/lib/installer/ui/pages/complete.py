@@ -266,6 +266,12 @@ class CompletePage(BasePage):
     def _on_open_shell(self, button):
         """Handle open shell button - exit to TTY."""
         print("[COMPLETE] User selected: Open shell (exit to TTY)", flush=True)
+        
+        # Cleanup local file manager before exit
+        if hasattr(self.app, 'local_file_manager'):
+            print("[COMPLETE] Cleaning up local file mounts...", flush=True)
+            self.app.local_file_manager.cleanup()
+        
         sys.exit(0)
     
     def _on_reinstall(self, button):
