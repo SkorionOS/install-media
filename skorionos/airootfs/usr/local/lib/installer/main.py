@@ -4,7 +4,8 @@ Main installer application window
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GLib
+gi.require_version('Adw', '1')
+from gi.repository import Gtk, Gdk, GLib, Adw
 import sys
 
 from .config import config
@@ -52,6 +53,25 @@ class StatusBar:
         time_box.append(self.time_label)
         
         self.box.append(time_box)
+        
+        # Theme toggle button (far right)
+        self.theme_button = Gtk.Button()
+        self.theme_button.set_has_frame(False)  # Flat style
+        self.theme_button.add_css_class("theme-toggle-btn")
+        self.theme_icon = Gtk.Image()
+        self.theme_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        self.theme_button.set_child(self.theme_icon)
+        self.theme_button.connect("clicked", self.toggle_theme)
+        self.box.append(self.theme_button)
+        
+        # Get initial theme state using libadwaita StyleManager
+        self.style_manager = Adw.StyleManager.get_default()
+        
+        # Force dark mode by default
+        self.dark_mode = True
+        self.style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        
+        self.update_theme_icon()
         
         # Update immediately
         self.update_battery()
@@ -133,6 +153,30 @@ class StatusBar:
         time_str = now.strftime("%Y-%m-%d %H:%M")
         self.time_label.set_text(time_str)
         return True  # Continue timer
+    
+    def toggle_theme(self, button):
+        """Toggle between light and dark theme using libadwaita StyleManager"""
+        self.dark_mode = not self.dark_mode
+        
+        # Use libadwaita StyleManager for proper theme switching
+        if self.dark_mode:
+            self.style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        else:
+            self.style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        
+        self.update_theme_icon()
+        print(f"[THEME] Switched to {'dark' if self.dark_mode else 'light'} mode", flush=True)
+    
+    def update_theme_icon(self):
+        """Update theme button icon based on current mode"""
+        if self.dark_mode:
+            # Dark mode - show sun icon (click to go light)
+            self.theme_icon.set_from_icon_name("weather-clear-symbolic")
+            self.theme_button.set_tooltip_text("切换到亮色模式")
+        else:
+            # Light mode - show moon icon (click to go dark)
+            self.theme_icon.set_from_icon_name("weather-clear-night-symbolic")
+            self.theme_button.set_tooltip_text("切换到暗色模式")
 
 
 class InstallerApp(Gtk.ApplicationWindow):

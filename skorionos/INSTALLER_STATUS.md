@@ -148,9 +148,15 @@
     - GTK 图标根据电量和状态自动变化
     - 台式机/虚拟机显示"AC 电源"
     - 每分钟自动更新
-  - **日期时间**（右侧）：
+  - **日期时间**（中间靠右）：
     - 格式：`YYYY-MM-DD HH:MM`
     - 每秒自动更新
+  - **主题切换按钮**（最右侧）：
+    - 暗色模式：显示太阳图标 ☀️（点击切换到亮色）
+    - 亮色模式：显示月亮图标 🌙（点击切换到暗色）
+    - 默认暗色模式启动
+    - 使用 libadwaita StyleManager 实现主题切换
+    - 扁平按钮样式，hover 时显示半透明背景
   - **样式**：淡色半透明背景，底部分隔线
 
 ---
@@ -352,6 +358,26 @@ pages = [
 
 ---
 
+## 📦 系统依赖
+
+安装器需要以下软件包（已添加到 `skorionos/packages.x86_64`）：
+
+### 核心依赖
+- **gamescope** - Wayland 合成器，提供全屏显示环境
+- **gtk4** - GTK 4 图形界面库
+- **libadwaita** - Adwaita 主题库，提供主题切换功能
+- **python-gobject** - Python GTK 绑定
+
+### 图形和网络
+- **mesa** / **libdrm** - OpenGL/Vulkan 驱动
+- **vulkan-icd-loader** / **vulkan-radeon** / **vulkan-intel** - Vulkan 支持
+- **wayland** - Wayland 协议库
+- **libnm** - NetworkManager 库（网络管理）
+- **adwaita-icon-theme** - Adwaita 图标主题
+- **wqy-microhei** - 中文字体
+
+---
+
 ## 🚀 运行方式
 
 ```bash
@@ -367,5 +393,5 @@ UI_SCALE=2.0 /usr/local/bin/installer-modular
 
 ---
 
-*基于实际代码生成 - 2025-01-28*
+*基于实际代码生成 - 2025-01-29*
 

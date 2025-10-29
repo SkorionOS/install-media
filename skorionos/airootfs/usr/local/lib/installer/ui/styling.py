@@ -146,6 +146,21 @@ def apply_styling(scaled_func):
             padding: {padding}px {padding_medium}px;
         }}
         
+        /* Theme toggle button */
+        .theme-toggle-btn {{
+            border-radius: {border_radius}px;
+            padding: 0;
+            margin: 0;
+        }}
+        
+        .theme-toggle-btn:hover {{
+            background: alpha(currentColor, 0.1);
+        }}
+        
+        .theme-toggle-btn:active {{
+            background: alpha(currentColor, 0.15);
+        }}
+        
         /* Virtual keyboard styling */
         .keyboard-key {{
             min-width: {scaled_func(40)}px;

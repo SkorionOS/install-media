@@ -46,6 +46,7 @@ networkmanager
 # Graphical installer dependencies (PoC)
 gamescope
 gtk4
+libadwaita
 python-gobject
 mesa
 libdrm
