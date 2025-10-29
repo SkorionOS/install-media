@@ -128,9 +128,9 @@ class LocalFileManager:
         try:
             os.makedirs(mount_point, exist_ok=True)
             
-            # Mount read-only for safety
+            # Mount read-write for file operations (needed for local installation merge)
             result = subprocess.run(
-                ['mount', '-o', 'ro', device, mount_point],
+                ['mount', '-o', 'rw', device, mount_point],
                 capture_output=True,
                 text=True
             )
@@ -138,7 +138,7 @@ class LocalFileManager:
             if result.returncode == 0:
                 # Track this mount for cleanup
                 self.mounted_by_us.append((device, mount_point))
-                print(f"[LocalFileManager] Mounted: {device} -> {mount_point}")
+                print(f"[LocalFileManager] Mounted (rw): {device} -> {mount_point}")
                 return mount_point
             else:
                 print(f"[LocalFileManager] Mount failed: {device} ({result.stderr.strip()})")

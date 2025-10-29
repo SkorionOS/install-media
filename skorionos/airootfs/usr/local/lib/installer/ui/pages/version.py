@@ -67,6 +67,11 @@ class VersionPage(BasePage):
             and len(self.app.local_frzr_files) > 0
         )
         
+        # Check network status
+        is_network_online = False
+        if hasattr(self.app, 'nm') and self.app.nm:
+            is_network_online = self.app.nm.is_online()
+        
         # Container (no info-box styling)
         container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
         container.set_halign(Gtk.Align.CENTER)
@@ -84,10 +89,17 @@ class VersionPage(BasePage):
         # Buttons
         buttons_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(30))
         
-        # Online option
+        # Online option (disable if offline)
         online_btn = Gtk.CheckButton(label="在线安装")
-        online_btn.set_active(self.app.version_selections['install_mode'] == 'online')
-        online_btn.connect("toggled", lambda b: self._on_install_mode_changed('online') if b.get_active() else None)
+        if is_network_online:
+            online_btn.set_active(self.app.version_selections['install_mode'] == 'online')
+            online_btn.connect("toggled", lambda b: self._on_install_mode_changed('online') if b.get_active() else None)
+        else:
+            online_btn.set_sensitive(False)
+            online_btn.set_tooltip_text("未检测到网络连接")
+            # Force local mode if online was selected but no network
+            if self.app.version_selections['install_mode'] == 'online':
+                self.app.version_selections['install_mode'] = 'local'
         buttons_box.append(online_btn)
         
         first_btn = online_btn
@@ -96,7 +108,10 @@ class VersionPage(BasePage):
         local_btn = Gtk.CheckButton(label="本地安装")
         local_btn.set_group(first_btn)
         if has_local_files:
-            local_btn.set_active(self.app.version_selections['install_mode'] == 'local')
+            # Auto-select local if offline or already selected
+            if not is_network_online or self.app.version_selections['install_mode'] == 'local':
+                local_btn.set_active(True)
+                self.app.version_selections['install_mode'] = 'local'
             local_btn.connect("toggled", lambda b: self._on_install_mode_changed('local') if b.get_active() else None)
         else:
             local_btn.set_sensitive(False)
@@ -224,43 +239,32 @@ class VersionPage(BasePage):
         title_label.set_markup('<span size="large" weight="bold">选择镜像文件</span>')
         file_box.append(title_label)
         
+        # Scrolled window for file list
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(config.scaled(200))
+        scrolled.set_max_content_height(config.scaled(400))
+        scrolled.set_size_request(config.scaled(650), -1)
+        scrolled.set_propagate_natural_height(True)
+        
         # File list with radio buttons
-        list_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
+        list_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
         list_container.add_css_class("info-box")
-        list_container.set_size_request(config.scaled(600), -1)
         
         first_btn = None
         for file_info in local_files:
-            # Radio button
+            # Use unified selection button component (same as disk selection page)
+            btn = UIComponents.create_selection_button(
+                group=first_btn,
+                title=file_info['filename'],
+                description=f'设备: {file_info["device"]} | 大小: {file_info["size"]}',
+                orientation=Gtk.Orientation.VERTICAL
+            )
+            
             if first_btn is None:
-                btn = Gtk.CheckButton()
                 first_btn = btn
                 btn.set_active(True)  # Select first by default
                 self.app.version_selections['local_file'] = file_info['path']
-            else:
-                btn = Gtk.CheckButton()
-                btn.set_group(first_btn)
-            
-            # File info display
-            info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(2))
-            
-            # Filename
-            filename_label = Gtk.Label(label=file_info['filename'])
-            filename_label.set_xalign(0)
-            info_box.append(filename_label)
-            
-            # Details (device + size)
-            details_label = Gtk.Label()
-            details_label.set_markup(
-                f'<span size="small" foreground="#888">'
-                f'设备: {file_info["device"]} | 大小: {file_info["size"]}'
-                f'</span>'
-            )
-            details_label.set_xalign(0)
-            details_label.set_margin_start(config.scaled(15))
-            info_box.append(details_label)
-            
-            btn.set_child(info_box)
             
             # Connect signal
             file_path = file_info['path']
@@ -268,7 +272,10 @@ class VersionPage(BasePage):
             
             list_container.append(btn)
         
-        file_box.append(list_container)
+        # Add list to scrolled window
+        scrolled.set_child(list_container)
+        file_box.append(scrolled)
+        
         self.dynamic_content_box.append(file_box)
     
     def _on_local_file_selected(self, button, file_path):
@@ -406,6 +413,23 @@ class VersionPage(BasePage):
     
     def _on_continue(self):
         """Handle continue button."""
+        mode = self.app.version_selections.get('install_mode', 'online')
+        
+        # Validate network requirement for online install
+        if mode == 'online':
+            is_online = False
+            if hasattr(self.app, 'nm') and self.app.nm:
+                is_online = self.app.nm.is_online()
+            
+            if not is_online:
+                # Show error dialog
+                dialog = Gtk.AlertDialog()
+                dialog.set_message("网络连接已断开")
+                dialog.set_detail("在线安装需要稳定的网络连接。请连接网络后重试，或选择本地安装。")
+                dialog.set_buttons(["确定"])
+                dialog.choose(self.app, None, lambda d, r: None)
+                return
+        
         target = self._build_target(self.app.version_selections)
         print(f"[VERSION] Selected target: {target}")
         
