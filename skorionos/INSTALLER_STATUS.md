@@ -1,8 +1,8 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-01-30 (第三次更新)
+> 最后更新: 2025-01-30 (第四次更新)
 > 
-> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装
+> 基于 GTK4 + Python 的现代化安装器，支持手柄操作、多设备适配、进度显示、本地安装、高级选项
 
 ---
 
@@ -43,8 +43,9 @@
         ├── confirm.py         # 4. 确认操作
         ├── bootstrap.py       # 5. 磁盘初始化（ExecutionPage）
         ├── version.py         # 6. 版本选择（含安装方式选择 🆕）
-        ├── install.py         # 7. 系统安装（ExecutionPage，支持本地安装 🆕）
-        └── complete.py        # 8. 完成页面（SUCCESS/CANCELLED/FAILED）
+        ├── advanced.py        # 7. 高级选项（固件/CDN/Debug 🆕）
+        ├── install.py         # 8. 系统安装（ExecutionPage，支持本地安装 🆕）
+        └── complete.py        # 9. 完成页面（SUCCESS/CANCELLED/FAILED）
 ```
 
 ---
@@ -63,10 +64,13 @@
                    └─→ 5. Bootstrap 页 (Bootstrap) - 执行 frzr-bootstrap，扫描本地文件 🆕
                        ├─→ [失败/退出] → 8. Complete 页 (CANCELLED/FAILED)
                        └─→ 6. 版本选择页 (Version) - 选择安装方式（在线/本地）+ 配置 🆕
-                           ├─→ [退出] → 8. Complete 页 (CANCELLED)
-                           └─→ 7. 安装页 (Install) - 执行 frzr-deploy（在线或本地文件） 🆕
-                               ├─→ [成功] → 8. Complete 页 (SUCCESS) ✅
-                               └─→ [失败/退出] → 8. Complete 页 (FAILED/CANCELLED)
+                           ├─→ [退出] → 9. Complete 页 (CANCELLED)
+                           ├─→ [启用高级选项] → 7. 高级选项页 (Advanced) 🆕
+                           │   ├─→ [退出] → 9. Complete 页 (CANCELLED)
+                           │   └─→ 8. 安装页 (Install)
+                           └─→ [不启用高级选项] → 8. 安装页 (Install) - 执行 frzr-deploy（在线或本地文件） 🆕
+                               ├─→ [成功] → 9. Complete 页 (SUCCESS) ✅
+                               └─→ [失败/退出] → 9. Complete 页 (FAILED/CANCELLED)
 
 8. Complete 页面 (完成页面)
    - SUCCESS: 重启 / 打开命令行 / 关机
@@ -95,8 +99,9 @@
 - ✅ **Mode 页面**: repair/fresh/dual 模式选择
 - ✅ **Confirm 页面**: 操作摘要显示
 - ✅ **Bootstrap 页面**: frzr-bootstrap 执行、实时日志、错误处理、**Steam bootstrap 下载进度显示**、**本地文件扫描** 🆕
-- ✅ **Version 页面**: **安装方式选择（在线/本地）** 🆕、通道/桌面/NVIDIA 选择、**本地文件列表显示** 🆕
-- ✅ **Install 页面**: frzr-deploy 执行、**支持本地文件安装** 🆕、进度显示、日志输出、**后安装配置**
+- ✅ **Version 页面**: **安装方式选择（在线/本地）** 🆕、通道/桌面/NVIDIA 选择、**本地文件列表显示** 🆕、**高级选项开关** 🆕
+- ✅ **Advanced 页面**: **固件覆盖、CDN 加速、备用源、Debug 模式** 🆕
+- ✅ **Install 页面**: frzr-deploy 执行、**支持本地文件安装** 🆕、**应用高级选项配置** 🆕、进度显示、日志输出、**后安装配置**
 - ✅ **Complete 页面**: 统一的结束页面、**自动清理临时挂载** 🆕
   - 三种状态：SUCCESS（成功）/ CANCELLED（取消）/ FAILED（失败）
   - 自动异步上传日志到 fpaste（后台线程）
@@ -356,12 +361,6 @@ else:
 
 ## ⚠️ 待实现功能（非阻塞）
 
-### 高级选项 UI
-- [ ] 固件覆盖选项（`--disable-kernel-upgrade`）
-- [ ] CDN 选择
-- [ ] Debug 模式
-- [ ] 自定义安装路径
-
 ### 用户体验
 - [ ] 帮助系统/FAQ
 - [ ] 更精确的 frzr-deploy 进度解析（目前基于关键词）
@@ -404,6 +403,15 @@ else:
    - 动态显示本地文件列表（设备名、大小、选择）
    - Install 页面支持本地文件安装
    - 集成自动清理机制（atexit + Complete 页面）
+
+2. ✅ **完成高级选项功能** 🆕
+   - 创建 Advanced Options 页面（4 个选项）
+   - 固件覆盖：创建 device-quirks 配置
+   - CDN 加速：修改 frzr-sk.conf 的 release_cdn/api_cdn
+   - 备用源：控制 fallback_url（默认启用）
+   - Debug 模式：传递 DEBUG 环境变量
+   - Version 页面添加"启用高级选项"切换
+   - Install 页面应用配置（在 frzr-deploy 前执行）
 
 ### 最近完成（2025-01-30 第二次更新）
 

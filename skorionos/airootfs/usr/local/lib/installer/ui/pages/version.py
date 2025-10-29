@@ -70,6 +70,18 @@ class VersionPage(BasePage):
         config_display_box.append(self.config_label)
         
         content_box.append(config_display_box)
+        
+        # Step 5: Advanced options toggle
+        advanced_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
+        advanced_box.set_halign(Gtk.Align.CENTER)
+        advanced_box.set_margin_top(config.scaled(15))
+        
+        self.advanced_check = Gtk.CheckButton(label="启用高级选项")
+        self.advanced_check.set_active(self.app.use_advanced_options)
+        self.advanced_check.connect("toggled", self._on_advanced_toggled)
+        
+        advanced_box.append(self.advanced_check)
+        content_box.append(advanced_box)
     
     def _create_install_mode_section(self):
         """Create install mode selection section."""
@@ -386,6 +398,11 @@ class VersionPage(BasePage):
             else:
                 return f"{channel}:{desktop}"
     
+    def _on_advanced_toggled(self, checkbox):
+        """Handle advanced options toggle."""
+        self.app.use_advanced_options = checkbox.get_active()
+        print(f"[VERSION] Advanced options: {self.app.use_advanced_options}")
+    
     def _on_exit(self):
         """Handle exit button - go to complete page with CANCELLED status."""
         from .complete import CompletePage
@@ -404,8 +421,13 @@ class VersionPage(BasePage):
         # Store target for installation
         self.app.install_target = target
         
-        # Go to installation page
-        self.app.show_page('install')
+        # Check if advanced options enabled
+        if self.app.use_advanced_options:
+            # Go to advanced options page
+            self.app.show_page('advanced')
+        else:
+            # Go directly to installation page
+            self.app.show_page('install')
 
 
 def create_version_page(app):

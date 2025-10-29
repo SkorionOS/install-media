@@ -18,6 +18,7 @@ from .ui.pages.mode import create_mode_page
 from .ui.pages.confirm import create_confirm_page
 from .ui.pages.bootstrap import create_bootstrap_page
 from .ui.pages.version import create_version_page
+from .ui.pages.advanced import create_advanced_options_page
 from .ui.pages.install import create_install_page
 from .ui.pages.complete import CompletePage
 
@@ -203,6 +204,15 @@ class InstallerApp(Gtk.ApplicationWindow):
         self.password_dialog = None
         self.connecting_dialog = None
         
+        # Advanced options (initialized before any page)
+        self.advanced_options = {
+            'firmware_overrides': False,
+            'cdn': False,
+            'fallback_url': True,   # Default ON (recommended)
+            'debug': False
+        }
+        self.use_advanced_options = False  # Toggle for showing advanced page
+        
         # Setup keyboard/gamepad controller
         self.setup_input_controller()
         
@@ -261,8 +271,9 @@ class InstallerApp(Gtk.ApplicationWindow):
             'confirm': 4,
             'bootstrap': 5,
             'version': 6,
-            'install': 7,
-            'complete': 8,
+            'advanced': 7,   # Advanced options (NEW)
+            'install': 8,    # Moved from 7 to 8
+            'complete': 9,   # Moved from 8 to 9
         }
         
         # Convert string to number if needed
@@ -278,15 +289,16 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Create page content
         pages = [
-            self.create_welcome_page,            # 0: Welcome
-            lambda: create_network_page(self),   # 1: Network
-            lambda: create_disk_page(self),      # 2: Disk selection
-            lambda: create_mode_page(self),      # 3: Mode selection (NEW)
-            lambda: create_confirm_page(self),   # 4: Confirmation
-            lambda: create_bootstrap_page(self), # 5: Bootstrap (frzr-bootstrap)
-            lambda: create_version_page(self),   # 6: Version selection
-            lambda: create_install_page(self),   # 7: Installation
-            lambda: self.create_complete_page(), # 8: Complete
+            self.create_welcome_page,                   # 0: Welcome
+            lambda: create_network_page(self),          # 1: Network
+            lambda: create_disk_page(self),             # 2: Disk selection
+            lambda: create_mode_page(self),             # 3: Mode selection
+            lambda: create_confirm_page(self),          # 4: Confirmation
+            lambda: create_bootstrap_page(self),        # 5: Bootstrap (frzr-bootstrap)
+            lambda: create_version_page(self),          # 6: Version selection
+            lambda: create_advanced_options_page(self), # 7: Advanced options (NEW)
+            lambda: create_install_page(self),          # 8: Installation
+            lambda: self.create_complete_page(),        # 9: Complete
         ]
         
         if page_num < len(pages):

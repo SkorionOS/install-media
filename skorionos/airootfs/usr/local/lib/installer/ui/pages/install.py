@@ -115,10 +115,19 @@ class InstallPage(ExecutionPage):
             
             GLib.idle_add(self.update_progress, 0.1, "准备中")
             
+            # Apply advanced options before installation
+            self._apply_advanced_options()
+            
             # Build install command
             cmd = self._build_install_command(version, desktop, nvidia)
             
             GLib.idle_add(self.append_log, f"=== Executing: {' '.join(cmd)} ===\n\n")
+            
+            # Set environment variables from advanced options
+            env = os.environ.copy()
+            if self.app.advanced_options.get('debug', False):
+                env['DEBUG'] = '1'
+                GLib.idle_add(self.append_log, "[信息] Debug 模式已启用\n")
             
             # Execute installation
             self.install_process = subprocess.Popen(
@@ -126,7 +135,8 @@ class InstallPage(ExecutionPage):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env  # Pass environment variables
             )
             
             # Read output line by line
@@ -287,6 +297,103 @@ class InstallPage(ExecutionPage):
                 pass
         else:
             self.append_log("[警告] 启动配置文件不存在！\n")
+    
+    def _apply_advanced_options(self):
+        """Apply advanced options before installation."""
+        options = self.app.advanced_options
+        
+        GLib.idle_add(self.append_log, f"\n{'='*60}\n")
+        GLib.idle_add(self.append_log, "正在应用高级选项...\n")
+        GLib.idle_add(self.append_log, f"{'='*60}\n\n")
+        
+        # 1. Firmware overrides
+        if options.get('firmware_overrides', False):
+            self._apply_firmware_overrides()
+        
+        # 2. CDN settings
+        self._apply_cdn_settings(options.get('cdn', False))
+        
+        # 3. Fallback URL
+        self._apply_fallback_setting(options.get('fallback_url', True))
+        
+        GLib.idle_add(self.append_log, "[信息] 高级选项已应用\n\n")
+    
+    def _apply_firmware_overrides(self):
+        """Create device-quirks configuration."""
+        from ...config import config
+        quirks_dir = f"{config.mount_path}/etc/device-quirks"
+        
+        try:
+            os.makedirs(quirks_dir, exist_ok=True)
+            
+            # Create device-quirks.conf
+            config_file = f"{quirks_dir}/device-quirks.conf"
+            with open(config_file, 'w') as f:
+                f.write("export USE_FIRMWARE_OVERRIDES=1\n")
+                f.write("export USB_WAKE_ENABLED=1\n")
+            
+            # Create dsdt_override.log
+            log_file = f"{quirks_dir}/dsdt_override.log"
+            with open(log_file, 'w') as f:
+                f.write("LAST_DSDT=None\n")
+                f.write("LAST_BIOS_DATE=None\n")
+                f.write("LAST_BIOS_RELEASE=None\n")
+                f.write("LAST_BIOS_VENDOR=None\n")
+                f.write("LAST_BIOS_VERSION=None\n")
+            
+            GLib.idle_add(self.append_log, "[成功] 固件覆盖配置已创建\n")
+            
+        except Exception as e:
+            GLib.idle_add(self.append_log, f"[警告] 固件覆盖配置失败: {e}\n")
+    
+    def _apply_cdn_settings(self, enable_cdn):
+        """Modify frzr-sk.conf for CDN settings."""
+        try:
+            config_file = "/etc/frzr-sk.conf"
+            if not os.path.exists(config_file):
+                GLib.idle_add(self.append_log, "[警告] frzr-sk.conf 不存在\n")
+                return
+            
+            # Read config
+            with open(config_file, 'r') as f:
+                content = f.read()
+            
+            # Modify CDN settings
+            import re
+            content = re.sub(r'^release_cdn\s*=.*', f'release_cdn = {"true" if enable_cdn else "false"}', content, flags=re.MULTILINE)
+            content = re.sub(r'^api_cdn\s*=.*', f'api_cdn = {"true" if enable_cdn else "false"}', content, flags=re.MULTILINE)
+            
+            # Write back
+            with open(config_file, 'w') as f:
+                f.write(content)
+            
+            status = "启用" if enable_cdn else "禁用"
+            GLib.idle_add(self.append_log, f"[成功] CDN 加速已{status}\n")
+            
+        except Exception as e:
+            GLib.idle_add(self.append_log, f"[警告] CDN 配置失败: {e}\n")
+    
+    def _apply_fallback_setting(self, enable_fallback):
+        """Modify frzr-sk.conf for fallback URL."""
+        try:
+            config_file = "/etc/frzr-sk.conf"
+            if not os.path.exists(config_file):
+                return
+            
+            with open(config_file, 'r') as f:
+                content = f.read()
+            
+            import re
+            content = re.sub(r'^fallback_url\s*=.*', f'fallback_url = {"true" if enable_fallback else "false"}', content, flags=re.MULTILINE)
+            
+            with open(config_file, 'w') as f:
+                f.write(content)
+            
+            status = "启用" if enable_fallback else "禁用"
+            GLib.idle_add(self.append_log, f"[成功] 备用源已{status}\n")
+            
+        except Exception as e:
+            GLib.idle_add(self.append_log, f"[警告] 备用源配置失败: {e}\n")
     
     def on_execution_error(self, error_msg: str):
         """Called when installation fails."""
