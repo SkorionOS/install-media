@@ -10,8 +10,10 @@ class Config:
     
     def __init__(self):
         # Get screen resolution from environment
-        self.screen_width = int(os.environ.get('INNER_WIDTH', '1280'))
-        self.screen_height = int(os.environ.get('INNER_WIDTH', '720'))
+        inner_width = os.environ.get('INSTALLER_WIDTH', '1280')
+        inner_height = os.environ.get('INSTALLER_HEIGHT', '720')
+        self.screen_width = int(inner_width) if inner_width else 1280
+        self.screen_height = int(inner_height) if inner_height else 720
         
         # Get scaling factors
         self.gdk_scale = os.environ.get('GDK_SCALE', '1')

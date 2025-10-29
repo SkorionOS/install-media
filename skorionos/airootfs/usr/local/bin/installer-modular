@@ -73,13 +73,50 @@ export INSTALLER_WIDTH="$WIDTH"
 export INSTALLER_HEIGHT="$HEIGHT"
 echo "📐 Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
 
+# Source device quirks for screen orientation and output
+QUIRKS_FILE="/usr/share/installer/device-quirks"
+if [ -f "$QUIRKS_FILE" ]; then
+    echo ""
+    echo "🔍 Loading device quirks..."
+    source "$QUIRKS_FILE"
+    echo "   Device: $(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
+    [ -n "$ORIENTATION" ] && echo "   Orientation: $ORIENTATION"
+    [ -n "$OUTPUT_CONNECTOR" ] && echo "   Output: $OUTPUT_CONNECTOR"
+    [ -n "$USE_ROTATION_SHADER" ] && echo "   Rotation Shader: enabled"
+fi
+
+# Swap width and height for 90/270 degree rotations
+if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" ]]; then
+    echo ""
+    echo "🔄 Swapping width/height for ${ORIENTATION} rotation"
+    echo "   Original: ${WIDTH}x${HEIGHT}"
+    TEMP=$WIDTH
+    WIDTH=$HEIGHT
+    HEIGHT=$TEMP
+    echo "   Adjusted: ${WIDTH}x${HEIGHT}"
+    
+    # Recalculate dimensions
+    export INSTALLER_WIDTH="$WIDTH"
+    export INSTALLER_HEIGHT="$HEIGHT"
+fi
+
 export INNER_WIDTH=1280
-export INNER_HEIGHT=$((HEIGHT * 1280 / WIDTH))
-echo "📐 Inner window size: ${INNER_WIDTH}x${INNER_HEIGHT}"
+export INNER_HEIGHT=$((INSTALLER_HEIGHT * 1280 / INSTALLER_WIDTH))
+echo "   Inner size: ${INNER_WIDTH}x${INNER_HEIGHT}"
 
 # UI_SCALE can be set manually (default: 1.0)
-# export UI_SCALE=2.0
+# export UI_SCALE=2
+if [ "$INSTALLER_HEIGHT" -ge 1440 ]; then
+    export GDK_SCALE=2
+    # export UI_SCALE=2.5
+elif [ "$INSTALLER_HEIGHT" -ge 720 ]; then
+    export UI_SCALE=$((INSTALLER_HEIGHT / 720))
+else
+    export UI_SCALE=1
+fi
+echo "   UI scale: ${UI_SCALE}"
 
+echo ""
 echo "🚀 Starting gamescope..."
 echo ""
 
@@ -87,6 +124,24 @@ echo ""
 LOGFILE="/tmp/installer-modular.log"
 echo "📝 Logging to: $LOGFILE"
 echo ""
+
+INNER_WIDTH=""
+INNER_HEIGHT=""
+
+# Build gamescope command with device-specific options
+GAMESCOPE_CMD="gamescope \
+  -f \
+  -F fsr \
+  --force-grab-cursor \
+  --expose-wayland"
+
+# Add device-specific options
+[ -n "$ORIENTATION" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --force-orientation $ORIENTATION"
+[ -n "$OUTPUT_CONNECTOR" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --prefer-output $OUTPUT_CONNECTOR"
+[ -n "$USE_ROTATION_SHADER" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD --use-rotation-shader $USE_ROTATION_SHADER"
+
+[ -n "$INNER_WIDTH" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD -w $INNER_WIDTH"
+[ -n "$INNER_HEIGHT" ] && GAMESCOPE_CMD="$GAMESCOPE_CMD -h $INNER_HEIGHT"
 
 # Launch gamescope + installer (with logging)
 {
@@ -99,18 +154,16 @@ echo ""
     echo "UI_SCALE: ${UI_SCALE:-1.0}"
     echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
     echo "TTY: $(tty)"
+    echo "Device: $(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
+    [ -n "$ORIENTATION" ] && echo "Orientation: $ORIENTATION"
+    [ -n "$OUTPUT_CONNECTOR" ] && echo "Output: $OUTPUT_CONNECTOR"
+    [ -n "$USE_ROTATION_SHADER" ] && echo "Rotation Shader: $USE_ROTATION_SHADER"
+    echo ""
+    echo "Gamescope command:"
+    echo "$GAMESCOPE_CMD"
     echo ""
     
-    gamescope \
-      -W "$WIDTH" \
-      -H "$HEIGHT" \
-      -w "$INNER_WIDTH" \
-      -h "$INNER_HEIGHT" \
-      -f \
-      -F fsr \
-      --force-grab-cursor \
-      --expose-wayland \
-      -- python3 /usr/local/bin/installer-poc-modular "$@" 2>&1
+    $GAMESCOPE_CMD -- python3 /usr/local/bin/installer-poc-modular "$@" 2>&1
     
     EXIT_CODE=$?
     echo ""

@@ -14,10 +14,19 @@ def apply_styling(scaled_func):
     Args:
         scaled_func: Function that scales values based on UI scale factor
     """
-    # Enable GTK dark theme
+    # Enable GTK dark theme and DPI scaling
     settings = Gtk.Settings.get_default()
     if settings:
         settings.set_property("gtk-application-prefer-dark-theme", True)
+        
+        # Scale all fonts using DPI setting
+        # GTK default DPI is 96, we multiply by UI_SCALE
+        # DPI value in GTK is stored as: actual_dpi * 1024
+        import os
+        ui_scale = float(os.environ.get('UI_SCALE', '1.0'))
+        scaled_dpi = int(96 * 1024 * ui_scale)
+        settings.set_property("gtk-xft-dpi", scaled_dpi)
+        print(f"[STYLING] DPI scaling: {scaled_dpi} (UI_SCALE={ui_scale}x, effective DPI={int(96*ui_scale)})")
     
     # Scaled font sizes
     font_size = scaled_func(16)
@@ -78,12 +87,53 @@ def apply_styling(scaled_func):
             -gtk-icon-size: {scaled_func(24)}px;
         }}
         
+        /* Scale checkbutton/radiobutton indicators */
+        checkbutton check,
+        checkbutton radio,
+        radio,
+        check {{
+            min-width: {scaled_func(20)}px;
+            min-height: {scaled_func(20)}px;
+            -gtk-icon-size: {scaled_func(20)}px;
+        }}
+        
+        checkbutton {{
+            padding: {scaled_func(6)}px {scaled_func(12)}px;
+            -gtk-icon-size: {scaled_func(20)}px;
+        }}
+        
+        checkbutton > label {{
+            margin-left: {scaled_func(8)}px;
+        }}
+        
         /* Info box - use GTK theme colors */
         .info-box {{
             border: 1px solid alpha(currentColor, 0.2);
             border-radius: {border_radius_large}px;
             padding: {padding_medium}px;
             margin: {padding}px 0;
+        }}
+        
+        /* Fix rounded corners for ListBox inside info-box */
+        .info-box list {{
+            border-radius: {border_radius_large}px;
+            background: transparent;
+        }}
+        
+        .info-box scrolledwindow {{
+            border-radius: {border_radius_large}px;
+            background: transparent;
+        }}
+        
+        /* First and last row have rounded corners */
+        .info-box list > row:first-child {{
+            border-top-left-radius: {border_radius_large}px;
+            border-top-right-radius: {border_radius_large}px;
+        }}
+        
+        .info-box list > row:last-child {{
+            border-bottom-left-radius: {border_radius_large}px;
+            border-bottom-right-radius: {border_radius_large}px;
         }}
         
         .success {{

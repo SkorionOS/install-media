@@ -51,10 +51,11 @@ class ModePage(BasePage):
         desc.set_justify(Gtk.Justification.CENTER)
         content_box.append(desc)
         
-        # Radio buttons container
+        # Radio buttons container with border/background like disk selection
         radio_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(15))
         radio_box.set_halign(Gtk.Align.CENTER)
         radio_box.set_margin_top(config.scaled(20))
+        radio_box.add_css_class("info-box")
         
         # Create radio buttons based on existing installation
         if self.has_existing:
@@ -132,6 +133,7 @@ class ModePage(BasePage):
     def _create_option_button(self, group, title, description, active=False):
         """
         Create a radio button option with title and description.
+        Uses the unified UIComponents.create_selection_button for consistent styling.
         
         Args:
             group: Group button (None for first button)
@@ -142,28 +144,14 @@ class ModePage(BasePage):
         Returns:
             Gtk.CheckButton: Radio button
         """
-        if group is None:
-            btn = Gtk.CheckButton()
-        else:
-            btn = Gtk.CheckButton()
-            btn.set_group(group)
+        from ..components.base import UIComponents
         
-        # Content box
-        label_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(5))
-        
-        # Title
-        title_label = Gtk.Label()
-        title_label.set_markup(f'<span weight="bold">{title}</span>')
-        title_label.set_halign(Gtk.Align.START)
-        label_box.append(title_label)
-        
-        # Description
-        desc_label = Gtk.Label(label=description)
-        desc_label.set_halign(Gtk.Align.START)
-        desc_label.add_css_class("dim-label")
-        label_box.append(desc_label)
-        
-        btn.set_child(label_box)
+        btn = UIComponents.create_selection_button(
+            group=group,
+            title=title,
+            description=description,
+            orientation=Gtk.Orientation.VERTICAL
+        )
         
         if active:
             btn.set_active(True)

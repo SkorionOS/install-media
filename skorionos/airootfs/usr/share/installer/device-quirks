@@ -1,0 +1,210 @@
+#!/bin/bash
+# Simplified device quirks for installer
+# Only handles screen orientation and output priority needed for installation UI
+
+SYS_ID="$(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+CPU_VENDOR="$(cat /proc/cpuinfo | grep vendor_id | head -n 1 | cut -d : -f 2 | xargs)"
+
+# Default values
+ORIENTATION=""
+OUTPUT_CONNECTOR="*,eDP-1"
+USE_ROTATION_SHADER=""
+
+# ============================================================================
+# OXP Devices
+# ============================================================================
+
+# OXP 60Hz Devices (Left orientation)
+OXP_LIST="ONE XPLAYER:ONEXPLAYER 1 T08:ONEXPLAYER 1S A08:ONEXPLAYER 1S T08:ONEXPLAYER mini A07:ONEXPLAYER mini GA72:ONEXPLAYER mini GT72:ONEXPLAYER Mini Pro:ONEXPLAYER GUNDAM GA72:ONEXPLAYER 2 ARP23:ONEXPLAYER 2 PRO ARP23H:ONEXPLAYER 2 PRO ARP23P:ONEXPLAYER 2 PRO ARP23P EVA-01"
+if [[ ":$OXP_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# OXP F1 series (Left orientation)
+OXP_F1_LIST="ONEXPLAYER F1:ONEXPLAYER F1 EVA-01:ONEXPLAYER F1 EVA-02:ONEXPLAYER F1Pro:ONEXPLAYER F1 OLED"
+if [[ ":$OXP_F1_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# OXP 120Hz Devices (Left orientation)
+OXP_120_LIST="ONEXPLAYER F1:ONEXPLAYER F1 EVA-01"
+if [[ ":$OXP_120_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# OXP X1 series (Left orientation)
+OXP_X1_LIST="ONEXPLAYER X1 i:ONEXPLAYER X1Pro EVA-02:ONEXPLAYER X1Air:ONEXPLAYER X1 A:ONEXPLAYER X1 mini"
+if [[ ":$OXP_X1_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# OXP G1 (Left orientation)
+if [[ ":$SYS_ID:" =~ :ONEXPLAYER\ G1\ (A|i): ]]; then
+  ORIENTATION="left"
+fi
+
+# Other OXP devices (Left orientation for AMD)
+if [[ "$SYS_ID" =~ "ONEXPLAYER" && -z "$ORIENTATION" && "$CPU_VENDOR" != "GenuineIntel" ]]; then
+  ORIENTATION="left"
+fi
+
+# ============================================================================
+# AOKZOE Devices
+# ============================================================================
+
+# AOKZOE A1 series (Left orientation)
+AOK_LIST="AOKZOE A1 AR07:AOKZOE A1 Pro:AOKZOE A2 Pro"
+if [[ ":$AOK_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# AOKZOE A1X (Normal orientation)
+if [[ ":AOKZOE A1X:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# AYANEO Devices
+# ============================================================================
+
+# AYANEO AIR/SLIDE series (Left orientation)
+AIR_LIST="AIR:AIR Pro:AIR Plus:SLIDE:AIR 1S:AIR 1S Limited"
+if [[ ":$AIR_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# AYANEO FLIP Dual Screen (Left + prefer top screen)
+if [[ ":FLIP DS:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+  OUTPUT_CONNECTOR='*,eDP-1,eDP-2'
+fi
+
+# AYANEO FLIP KB (Left orientation)
+if [[ ":FLIP KB:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# ============================================================================
+# AYN Devices
+# ============================================================================
+
+# AYN Loki series (Left orientation)
+AYN_LIST="Loki Max:Loki Zero:Loki MiniPro"
+if [[ ":$AYN_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# ============================================================================
+# GPD Devices
+# ============================================================================
+
+# GPD Win devices (Right orientation, DSI output)
+GDP_LIST="G1619-01:G1621-02:MicroPC:G1618-03"
+if [[ ":$GDP_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="right"
+  OUTPUT_CONNECTOR='*,DSI-1'
+fi
+
+# GPD Win 2 (Right + shader rotation, DSI output)
+if [[ ":WIN2:G1619-03:" =~ ":$SYS_ID:" ]]; then
+  USE_ROTATION_SHADER="1"
+  ORIENTATION="right"
+  OUTPUT_CONNECTOR='*,DSI-1'
+fi
+
+# GPD Win 4 (Normal orientation)
+if [[ ":G1618-04:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# GPD Win Max 2 (Normal orientation)
+if [[ ":G1619-04:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# GPD Win mini (Depends on screen)
+WINMINI_LIST="G1617-01:G1617-02"
+if [[ ":$WINMINI_LIST:" =~ ":$SYS_ID:" ]]; then
+  # Detect screen orientation by checking for vertical resolution
+  if xrandr --prop 2>/dev/null | grep -q "1080x1920"; then
+    ORIENTATION="right"
+  else
+    ORIENTATION="normal"
+  fi
+fi
+
+# ============================================================================
+# Steam Deck
+# ============================================================================
+
+# Steam Deck (LCD and OLED) - Normal orientation
+if [[ ":Jupiter:Galileo:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# ASUS Devices
+# ============================================================================
+
+# ROG Ally & ROG Ally X (Normal orientation)
+ALLY_LIST="ROG Ally RC71L_RC71L:ROG Ally RC71L:ROG Ally X RC72LA"
+if [[ ":$ALLY_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ASUS ROG Flow Z13 2025 (Normal orientation)
+if [[ ":ROG Flow Z13 GZ302EA_GZ302EA_03156148D:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# Lenovo Devices
+# ============================================================================
+
+# Lenovo Legion Go (Left orientation)
+if [[ ":83E1:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# Legion Go S (Normal orientation)
+GO_S_LIST="83L3"
+if [[ ":$GO_S_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# Minisforum Devices
+# ============================================================================
+
+# Minisforum V3 (Normal orientation)
+if [[ ":V3:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# ZOTAC Devices
+# ============================================================================
+
+# ZOTAC Gaming Zone (Left orientation)
+if [[ ":ZOTAC GAMING ZONE:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# ============================================================================
+# MSI Devices
+# ============================================================================
+
+# MSI Claw 8 (Normal orientation)
+CLAW_LIST="Claw 8 AI+ A2VM"
+if [[ ":$CLAW_LIST:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="normal"
+fi
+
+# ============================================================================
+# Export detected values
+# ============================================================================
+
+export ORIENTATION
+export OUTPUT_CONNECTOR
+export USE_ROTATION_SHADER
+

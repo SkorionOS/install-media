@@ -153,35 +153,18 @@ def _show_disk_list(app, disks):
     for disk_info in disks:
         row = Gtk.ListBoxRow()
         
-        # CheckButton as container (makes entire row clickable)
-        btn = Gtk.CheckButton()
-        if first_button:
-            btn.set_group(first_button)
-        else:
+        # Use unified selection button component
+        from ..components.base import UIComponents
+        
+        btn = UIComponents.create_selection_button(
+            group=first_button,
+            title=f'/dev/{disk_info["name"]}',
+            description=disk_info['description'],
+            orientation=Gtk.Orientation.VERTICAL
+        )
+        
+        if first_button is None:
             first_button = btn
-        
-        # Content box inside button
-        content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))
-        content_box.set_margin_start(config.scaled(10))
-        content_box.set_margin_end(config.scaled(10))
-        content_box.set_margin_top(config.scaled(8))
-        content_box.set_margin_bottom(config.scaled(8))
-        
-        # Disk info
-        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(4))
-        
-        name_label = Gtk.Label(label=f"/dev/{disk_info['name']}")
-        name_label.set_xalign(0)
-        name_label.set_markup(f'<b>/dev/{disk_info["name"]}</b>')
-        info_box.append(name_label)
-        
-        desc_label = Gtk.Label(label=disk_info['description'])
-        desc_label.set_xalign(0)
-        desc_label.set_wrap(True)
-        info_box.append(desc_label)
-        
-        content_box.append(info_box)
-        btn.set_child(content_box)
         
         row.set_child(btn)
         list_box.append(row)

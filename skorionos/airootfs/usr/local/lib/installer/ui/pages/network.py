@@ -60,12 +60,16 @@ class NetworkPage(BasePage):
             
             content_box.append(status_box)
         
+        # WiFi list container with fixed border
+        wifi_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        wifi_container.add_css_class("info-box")
+        
         # WiFi list
         self.wifi_list = Gtk.ListBox()
         self.wifi_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.app.wifi_list = self.wifi_list
         
-        # Scroll window
+        # Scroll window (inside the bordered container)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_min_content_height(config.scaled(300))
@@ -73,7 +77,8 @@ class NetworkPage(BasePage):
         scroll.set_propagate_natural_height(False)
         scroll.set_child(self.wifi_list)
         
-        content_box.append(scroll)
+        wifi_container.append(scroll)
+        content_box.append(wifi_container)
         
         # Scan networks
         _scan_networks(self.app)

@@ -106,6 +106,57 @@ class UIComponents:
         box.set_homogeneous(homogeneous)
         box.set_halign(Gtk.Align.CENTER)
         return box
+    
+    @staticmethod
+    def create_selection_button(
+        group: Optional[Gtk.CheckButton],
+        title: str,
+        description: Optional[str] = None,
+        orientation: Gtk.Orientation = Gtk.Orientation.VERTICAL
+    ) -> Gtk.CheckButton:
+        """
+        Create a radio button for selection lists (disk, mode, etc.) with consistent styling.
+        
+        Args:
+            group: Group button (None for first button in group)
+            title: Main title text (will be bold)
+            description: Optional description text (can be None)
+            orientation: Box orientation (VERTICAL for stacked, HORIZONTAL for side-by-side)
+        
+        Returns:
+            Gtk.CheckButton: Configured radio button with consistent margins
+        """
+        if group is None:
+            btn = Gtk.CheckButton()
+        else:
+            btn = Gtk.CheckButton()
+            btn.set_group(group)
+        
+        # Content box with consistent margins
+        spacing = config.scaled(4) if orientation == Gtk.Orientation.VERTICAL else config.scaled(10)
+        content_box = Gtk.Box(orientation=orientation, spacing=spacing)
+        content_box.set_margin_start(config.scaled(10))
+        content_box.set_margin_end(config.scaled(10))
+        content_box.set_margin_top(config.scaled(8))
+        content_box.set_margin_bottom(config.scaled(8))
+        
+        # Title
+        title_label = Gtk.Label()
+        title_label.set_markup(f'<b>{title}</b>')
+        title_label.set_xalign(0)
+        title_label.set_wrap(True)
+        content_box.append(title_label)
+        
+        # Description (optional)
+        if description:
+            desc_label = Gtk.Label(label=description)
+            desc_label.set_xalign(0)
+            desc_label.set_wrap(True)
+            desc_label.add_css_class("dim-label")
+            content_box.append(desc_label)
+        
+        btn.set_child(content_box)
+        return btn
 
 
 class BasePage:
