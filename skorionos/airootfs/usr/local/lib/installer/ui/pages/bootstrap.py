@@ -207,8 +207,54 @@ class BootstrapPage(ExecutionPage):
         """Called when bootstrap completes successfully."""
         super().on_execution_success()
         
-        # Update custom success message
-        GLib.idle_add(self._update_success_message)
+        # Grab Steam bootstrap after disk initialization
+        GLib.idle_add(self._grab_steam_bootstrap)
+    
+    def _grab_steam_bootstrap(self):
+        """Grab Steam bootstrap file for first boot with progress display."""
+        self.append_log(f"\n{'='*60}\n")
+        self.append_log("正在准备 Steam 引导文件...\n")
+        self.append_log(f"{'='*60}\n\n")
+        
+        # Run in background thread to avoid blocking UI
+        def grab_in_thread():
+            try:
+                from ...backend.install_utils import grab_steam_bootstrap_with_progress
+                from ...config import config
+                
+                mount_path = config.mount_path
+                
+                # Progress callback - update UI components
+                def on_progress(message, progress_fraction):
+                    # Update log
+                    GLib.idle_add(self.append_log, f"{message}\n")
+                    
+                    # Update progress bar and status
+                    if progress_fraction is not None:
+                        GLib.idle_add(self.update_progress, progress_fraction, message)
+                        GLib.idle_add(self.update_status, 
+                                    f'<span size="large">{message}</span>')
+                
+                # Call with progress callback
+                success = grab_steam_bootstrap_with_progress(mount_path, on_progress)
+                
+                if not success:
+                    GLib.idle_add(self.append_log, 
+                                "[警告] Steam 引导文件准备失败 (不影响安装)\n")
+            
+            except Exception as e:
+                GLib.idle_add(self.append_log, 
+                            f"[警告] Steam 引导文件准备出错: {str(e)}\n")
+            
+            # Reset progress and show success message
+            GLib.idle_add(self.update_progress, 1.0, "完成")
+            GLib.idle_add(self._update_success_message)
+        
+        # Start background thread
+        import threading
+        thread = threading.Thread(target=grab_in_thread, daemon=True)
+        thread.start()
+        return False
     
     def _update_success_message(self):
         """Update success message in log."""
@@ -225,7 +271,7 @@ class BootstrapPage(ExecutionPage):
     def _restore_success_state(self):
         """Restore success state when returning to page."""
         # Update UI
-        self.update_status('<span size="large" foreground="green" weight="bold">✓ 磁盘初始化完成</span>')
+        self.update_status('<span size="large" foreground="green" weight="bold">[成功] 磁盘初始化完成</span>')
         self.update_progress(1.0, "完成")
         
         # Reload log from file

@@ -426,6 +426,8 @@ def check_free_space(disk):
                     end = parts[1].replace('s', '')
                     
                     try:
+                        from ..config import config
+                        
                         start_sectors = int(start)
                         end_sectors = int(end)
                         size_sectors = end_sectors - start_sectors
@@ -433,7 +435,7 @@ def check_free_space(disk):
                         # Convert to GB (assuming 512 byte sectors)
                         size_gb = (size_sectors * 512) // (1024 ** 3)
                         
-                        if size_gb >= 55:
+                        if size_gb >= config.min_disk_size:
                             free_spaces.append({
                                 'start_sectors': start_sectors,
                                 'end_sectors': end_sectors,
@@ -451,7 +453,7 @@ def check_free_space(disk):
 
 def list_shrinkable_partitions(disk):
     """
-    List partitions that can be shrunk or deleted (>= 55GB, ntfs/ext4/btrfs).
+    List partitions that can be shrunk or deleted (>= config.min_disk_size, ntfs/ext4/btrfs).
     
     Args:
         disk: Disk name without /dev/ (e.g., "sda")
@@ -459,6 +461,8 @@ def list_shrinkable_partitions(disk):
     Returns:
         List[dict]: List of partitions with path, fstype, size_gb
     """
+    from ..config import config
+    
     try:
         result = subprocess.run(
             ['lsblk', '-rno', 'NAME,FSTYPE,SIZE', f'/dev/{disk}', '--bytes'],
@@ -484,8 +488,8 @@ def list_shrinkable_partitions(disk):
                 
                 size_gb = size_bytes // (1024 ** 3)
                 
-                # Only partitions >= 55GB with supported filesystems
-                if size_gb >= 55 and fstype in ['ntfs', 'ext4', 'btrfs']:
+                # Only partitions >= config.min_disk_size with supported filesystems
+                if size_gb >= config.min_disk_size and fstype in ['ntfs', 'ext4', 'btrfs']:
                     partitions.append({
                         'path': f'/dev/{name}',
                         'fstype': fstype,

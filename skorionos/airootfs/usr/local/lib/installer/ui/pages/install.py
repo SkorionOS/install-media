@@ -180,6 +180,9 @@ class InstallPage(ExecutionPage):
         # Update success message in log first
         GLib.idle_add(self._update_success_message)
         
+        # Perform post-installation steps
+        GLib.idle_add(self._post_install_steps)
+        
         # Go to complete page with SUCCESS status
         def show_success():
             self.app.show_complete_page(
@@ -189,8 +192,8 @@ class InstallPage(ExecutionPage):
             )
             return False
         
-        # Delay slightly to let log update finish
-        GLib.timeout_add(500, show_success)
+        # Delay slightly to let log update and post-install finish
+        GLib.timeout_add(1000, show_success)
     
     def _update_success_message(self):
         """Update success message in log."""
@@ -198,6 +201,61 @@ class InstallPage(ExecutionPage):
         self.append_log("系统安装成功完成！\n")
         self.append_log(f"{'='*60}\n")
         return False
+    
+    def _post_install_steps(self):
+        """Perform post-installation configuration."""
+        from ...config import config
+        mount_path = config.mount_path
+        
+        self.append_log(f"\n{'='*60}\n")
+        self.append_log("正在进行后安装配置...\n")
+        self.append_log(f"{'='*60}\n\n")
+        
+        try:
+            from ...backend.install_utils import copy_network_config, post_install
+            
+            # Step 1: Copy network configuration
+            self.append_log("正在复制网络配置...\n")
+            if copy_network_config(mount_path):
+                self.append_log("[成功] 网络配置已复制\n")
+            else:
+                self.append_log("[警告] 网络配置复制失败\n")
+            
+            # Step 2: Post-installation optimizations
+            self.append_log("\n正在执行系统优化...\n")
+            if post_install(mount_path):
+                self.append_log("[成功] 系统优化完成\n")
+            else:
+                self.append_log("[警告] 系统优化失败\n")
+            
+            # Step 3: Verify boot configuration
+            self.append_log("\n正在验证启动配置...\n")
+            self._verify_boot_config(mount_path)
+            
+            self.append_log(f"\n{'='*60}\n")
+            self.append_log("后安装配置完成！\n")
+            self.append_log(f"{'='*60}\n\n")
+            
+        except Exception as e:
+            self.append_log(f"\n[警告] 后安装步骤出错: {str(e)}\n")
+        
+        return False
+    
+    def _verify_boot_config(self, mount_path):
+        """Verify boot configuration exists."""
+        boot_cfg = f"{mount_path}/boot/loader/entries/frzr.conf"
+        
+        if os.path.exists(boot_cfg):
+            self.append_log("[成功] 启动配置文件存在\n")
+            # Read and display boot config
+            try:
+                with open(boot_cfg, 'r') as f:
+                    content = f.read()
+                    self.append_log(f"\n启动配置内容:\n{content}\n")
+            except:
+                pass
+        else:
+            self.append_log("[警告] 启动配置文件不存在！\n")
     
     def on_execution_error(self, error_msg: str):
         """Called when installation fails."""

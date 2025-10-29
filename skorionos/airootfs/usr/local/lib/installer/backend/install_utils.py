@@ -8,6 +8,8 @@ import os
 import shutil
 import re
 import tempfile
+import urllib.request
+import urllib.error
 
 
 def copy_network_config(mount_path):
@@ -55,7 +57,7 @@ def copy_network_config(mount_path):
 
 def grab_steam_bootstrap(mount_path):
     """
-    Grab Steam bootstrap file for first boot.
+    Grab Steam bootstrap file for first boot (without progress reporting).
     Priority: local /root/packages/ > download from Steam servers
     
     Args:
@@ -64,65 +66,211 @@ def grab_steam_bootstrap(mount_path):
     Returns:
         bool: True if successful, False otherwise
     """
+    return grab_steam_bootstrap_with_progress(mount_path, progress_callback=None)
+
+
+def grab_steam_bootstrap_with_progress(mount_path, progress_callback=None):
+    """
+    Grab Steam bootstrap file for first boot with progress reporting.
+    Priority: local /root/packages/ > download from Steam servers
+    Uses Python urllib for better progress tracking and error handling.
+    
+    Args:
+        mount_path: Mount path of the installed system
+        progress_callback: Optional callback function(message, progress_fraction)
+                          Called with progress updates. progress_fraction is 0.0-1.0 or None
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    from ...config import config
+    
     destination = f"{mount_path}/etc/first-boot/"
     os.makedirs(destination, exist_ok=True)
     
-    bootstrap_filename = "bootstraplinux_ubuntu12_32.tar.xz"
-    bootstrap_pkg = f"/root/packages/{bootstrap_filename}"
-    stm_pkg = "/root/packages/steam-jupiter-stable.pkg.tar.zst"
+    bootstrap_pkg = os.path.join(config.steam_packages_dir, config.steam_bootstrap_filename)
+    stm_pkg = os.path.join(config.steam_packages_dir, config.steam_package_filename)
+    
+    def report(msg, progress=None):
+        """Report progress if callback is provided."""
+        print(msg)  # Always print to console
+        if progress_callback:
+            progress_callback(msg, progress)
     
     try:
         # Check if bootstrap file already exists locally
         if os.path.exists(bootstrap_pkg):
-            print(f"Found local bootstrap file: {bootstrap_pkg}")
+            report("发现本地 Steam 引导文件", 0.3)
             # Verify xz format
             result = subprocess.run(['xz', '-t', bootstrap_pkg], capture_output=True)
             if result.returncode == 0:
+                report("正在复制本地引导文件...", 0.7)
                 shutil.copy2(bootstrap_pkg, destination)
-                print(f"Copied bootstrap file to {destination}")
+                report("[成功] 已复制本地引导文件", 1.0)
                 return True
             else:
-                print("Local bootstrap file format is invalid")
+                report("[警告] 本地引导文件格式无效", None)
         
-        # Check if Steam package exists
+        # Check if Steam package exists locally
         if os.path.exists(stm_pkg):
-            print(f"Extracting bootstrap from Steam package: {stm_pkg}")
-            return _extract_bootstrap_from_steam_pkg(stm_pkg, destination)
+            report("从本地 Steam 包提取引导文件...", 0.3)
+            success = _extract_bootstrap_from_steam_pkg(stm_pkg, destination)
+            if success:
+                report("[成功] 已从本地包提取引导文件", 1.0)
+            else:
+                report("[失败] 无法从本地包提取引导文件", None)
+            return success
         
-        # Download Steam package
-        print("Downloading Steam package...")
-        steam_url = "https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
+        # Download Steam package using urllib
+        report("准备下载 Steam 包...", 0.05)
         
         with tempfile.TemporaryDirectory() as tmp_dir:
-            steam_tmp_pkg = os.path.join(tmp_dir, "steam-jupiter-stable.pkg.tar.zst")
+            steam_tmp_pkg = os.path.join(tmp_dir, config.steam_package_filename)
             
-            # Download with curl
-            result = subprocess.run(
-                ['curl', '--http1.1', '-L', '-o', steam_tmp_pkg, '-C', '-', steam_url],
-                capture_output=True,
-                text=True
+            # Download with progress reporting
+            success = _download_file_with_progress(
+                config.steam_package_url,
+                steam_tmp_pkg,
+                report,
+                progress_start=0.1,
+                progress_end=0.8
             )
             
-            if result.returncode != 0:
-                print(f"Failed to download Steam package: {result.stderr}")
+            if not success:
+                report("[失败] 下载失败", None)
                 return False
             
-            # Extract bootstrap from downloaded package
+            # Extract bootstrap
+            report("正在提取引导文件...", 0.85)
             success = _extract_bootstrap_from_steam_pkg(steam_tmp_pkg, destination)
             
-            # Optionally save the package for future use
             if success:
-                os.makedirs('/root/packages', exist_ok=True)
+                report("[成功] Steam 引导文件准备完成", 1.0)
+                # Save package for future use
+                os.makedirs(config.steam_packages_dir, exist_ok=True)
                 try:
                     shutil.copy2(steam_tmp_pkg, stm_pkg)
-                    print(f"Saved Steam package to {stm_pkg}")
+                    print(f"已保存 Steam 包到 {stm_pkg}")
                 except:
                     pass  # Not critical
+            else:
+                report("[失败] 无法提取引导文件", None)
             
             return success
         
     except Exception as e:
-        print(f"Error grabbing Steam bootstrap: {e}")
+        report(f"[错误] {str(e)}", None)
+        return False
+
+
+def _download_file_with_progress(url, dest_path, report_callback, 
+                                  progress_start=0.0, progress_end=1.0,
+                                  chunk_size=8192):
+    """
+    Download file with progress reporting using Python urllib.
+    Supports resume from partial downloads.
+    
+    Args:
+        url: Download URL
+        dest_path: Destination file path
+        report_callback: Callback function(message, progress)
+        progress_start: Starting progress value (0.0-1.0)
+        progress_end: Ending progress value (0.0-1.0)
+        chunk_size: Download chunk size in bytes (default: 8KB)
+    
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Check if partial file exists (for resume)
+        downloaded_size = 0
+        mode = 'wb'
+        
+        if os.path.exists(dest_path):
+            downloaded_size = os.path.getsize(dest_path)
+            mode = 'ab'  # Append mode for resume
+        
+        # Create request with resume support
+        req = urllib.request.Request(url)
+        if downloaded_size > 0:
+            req.add_header('Range', f'bytes={downloaded_size}-')
+        
+        # Open connection
+        with urllib.request.urlopen(req, timeout=30) as response:
+            # Get total file size
+            total_size = downloaded_size
+            content_range = response.headers.get('Content-Range')
+            if content_range:
+                # Resuming download - parse "bytes start-end/total"
+                total_size = int(content_range.split('/')[-1])
+            else:
+                # New download
+                content_length = response.headers.get('Content-Length')
+                if content_length:
+                    total_size = int(content_length)
+            
+            # Calculate size in MB for display
+            total_mb = total_size / (1024 * 1024)
+            
+            if downloaded_size > 0:
+                downloaded_mb = downloaded_size / (1024 * 1024)
+                report_callback(
+                    f"继续下载 Steam 包 (已下载 {downloaded_mb:.1f}MB / {total_mb:.1f}MB)...",
+                    progress_start
+                )
+            else:
+                report_callback(f"正在下载 Steam 包 ({total_mb:.1f}MB)...", progress_start)
+            
+            # Download with progress
+            last_reported_percent = -1
+            with open(dest_path, mode) as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
+                    
+                    # Calculate progress
+                    if total_size > 0:
+                        percent = (downloaded_size / total_size) * 100
+                        
+                        # Report every 5%
+                        if int(percent / 5) > int(last_reported_percent / 5):
+                            # Map to progress range
+                            progress = progress_start + (percent / 100.0) * (progress_end - progress_start)
+                            downloaded_mb = downloaded_size / (1024 * 1024)
+                            report_callback(
+                                f"下载中... {percent:.1f}% ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)",
+                                progress
+                            )
+                            last_reported_percent = percent
+        
+        # Verify download
+        final_size = os.path.getsize(dest_path)
+        if total_size > 0 and final_size != total_size:
+            report_callback(
+                f"[警告] 下载的文件大小不匹配 (期望: {total_size}, 实际: {final_size})",
+                None
+            )
+            return False
+        
+        final_mb = final_size / (1024 * 1024)
+        report_callback(f"下载完成 ({final_mb:.1f}MB)", progress_end)
+        return True
+        
+    except urllib.error.HTTPError as e:
+        report_callback(f"[错误] HTTP {e.code}: {e.reason}", None)
+        return False
+    except urllib.error.URLError as e:
+        report_callback(f"[错误] 网络错误: {e.reason}", None)
+        return False
+    except TimeoutError:
+        report_callback("[错误] 下载超时", None)
+        return False
+    except Exception as e:
+        report_callback(f"[错误] {str(e)}", None)
         return False
 
 

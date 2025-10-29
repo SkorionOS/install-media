@@ -21,7 +21,7 @@ class Config:
         self.ui_scale = float(ui_scale)
         
         # Version
-        self.version = "2.1.1"
+        self.version = "3.0.0"
         
         # Installation paths
         self.mount_path = "/tmp/frzr_root"
@@ -29,6 +29,12 @@ class Config:
         
         # Disk requirements
         self.min_disk_size = 55  # GB
+        
+        # Steam bootstrap configuration
+        self.steam_package_url = "https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
+        self.steam_package_filename = "steam-jupiter-stable.pkg.tar.zst"
+        self.steam_bootstrap_filename = "bootstraplinux_ubuntu12_32.tar.xz"
+        self.steam_packages_dir = "/root/packages"
         
         # Device information (for disk overrides)
         self.device_vendor = self._read_file('/sys/devices/virtual/dmi/id/sys_vendor')

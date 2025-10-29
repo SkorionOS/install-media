@@ -433,7 +433,7 @@ class ExecutionPage(BasePage):
         self.update_status('<span size="large" foreground="green" weight="bold">执行完成！</span>')
         self.update_progress(1.0, "完成")
         self.append_log(f"\n{'='*60}\n")
-        self.append_log("✓ 执行成功完成\n")
+        self.append_log("[成功] 执行成功完成\n")
         self.append_log(f"{'='*60}\n")
         
         # Replace cancel with continue button

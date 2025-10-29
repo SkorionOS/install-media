@@ -233,7 +233,7 @@ class NetworkManager:
                         elif state in [NM.ActiveConnectionState.DEACTIVATING,
                                       NM.ActiveConnectionState.DEACTIVATED]:
                             error_msg = self._get_error_message(reason)
-                            print(f"[NM] ❌ Connection failed: {error_msg}")
+                            print(f"[NM] [FAILED] Connection failed: {error_msg}")
                             callback(False, error_msg, ssid)
                             ac.disconnect_by_func(on_state_changed)
                     

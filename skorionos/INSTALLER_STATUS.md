@@ -1,6 +1,6 @@
 # SkorionOS 图形化安装器 - 当前状态
 
-> 最后更新: 2025-01-29
+> 最后更新: 2025-01-30 (第二次更新)
 
 ---
 
@@ -90,9 +90,9 @@
 - ✅ **Disk 页面**: 磁盘扫描、现有安装检测、后台线程扫描
 - ✅ **Mode 页面**: repair/fresh/dual 模式选择
 - ✅ **Confirm 页面**: 操作摘要显示
-- ✅ **Bootstrap 页面**: frzr-bootstrap 执行、实时日志、错误处理
+- ✅ **Bootstrap 页面**: frzr-bootstrap 执行、实时日志、错误处理、**Steam bootstrap 下载进度显示**
 - ✅ **Version 页面**: 通道/桌面/NVIDIA 选择
-- ✅ **Install 页面**: frzr-deploy 执行、进度显示、日志输出
+- ✅ **Install 页面**: frzr-deploy 执行、进度显示、日志输出、**后安装配置**
 - ✅ **Complete 页面**: 统一的结束页面
   - 三种状态：SUCCESS（成功）/ CANCELLED（取消）/ FAILED（失败）
   - 自动异步上传日志到 fpaste（后台线程）
@@ -111,8 +111,21 @@
   - `list_shrinkable_partitions()` - 列出可缩小分区
   
 - ✅ **install_utils.py**:
-  - `grab_steam_bootstrap()` - 获取 Steam 引导文件
-  - `post_install()` - 后安装优化（Steam 配置）
+  - `grab_steam_bootstrap()` - 获取 Steam 引导文件（基础版，无进度报告）
+  - `grab_steam_bootstrap_with_progress()` - 获取 Steam 引导文件（带进度回调）
+    - **使用 Python urllib 替代 curl**（更精确的进度，更好的错误处理）
+    - 支持本地文件优先（`/root/packages/`）
+    - 自动下载 Steam 包（精确显示文件大小）
+    - 实时进度报告（基于字节数，每 5% 更新）
+    - **支持断点续传**（使用 HTTP Range 头）
+    - 后台线程执行，不阻塞 UI
+  - `_download_file_with_progress()` - 通用文件下载函数（带进度）
+    - Python urllib 原生实现
+    - 支持断点续传
+    - 精确的字节级进度计算
+    - 文件大小验证
+  - `copy_network_config()` - 复制网络配置到安装系统
+  - `post_install()` - 后安装优化（Steam 配置、steamos-update）
 
 - ✅ **log_utils.py**:
   - `cleanup_log()` - 清理日志中的 ANSI 转义码
@@ -139,6 +152,9 @@
 - ✅ 状态持久化（防止页面重新执行）
 - ✅ Loading spinner 动画
 - ✅ 居中对齐和边距优化
+- ✅ **去除所有 emoji**：改用纯文本标记（`[成功]`、`[警告]`、`[失败]`、`[ERROR]` 等）
+  - 更好的日志可读性和兼容性
+  - 统一的状态标记格式
 
 ### UI 缩放系统
 - ✅ **UI_SCALE 支持**：支持小数缩放（1.0, 1.5, 2.0 等）
@@ -166,6 +182,34 @@
   - 圆角处理：第一行/最后一行添加圆角，避免覆盖边框圆角
   - 高亮效果：保留 GTK 主题的 hover/selected 背景色
 
+### ExecutionPage 进度组件
+- ✅ **标准化的进度显示组件**：
+  - `self.status_label` - 大标题状态标签（支持 markup）
+  - `self.progress_bar` - 进度条（0.0-1.0）
+  - `self.log_view` - 滚动日志视图
+- ✅ **标准化的更新方法**：
+  - `update_status(text, markup=True)` - 更新状态标签
+  - `update_progress(fraction, text="")` - 更新进度条
+  - `append_log(text)` - 追加日志（自动滚动）
+- ✅ **Bootstrap 页面应用**：
+  - Steam bootstrap 下载使用进度回调
+  - 实时更新状态、进度条、日志（显示 MB 和百分比）
+  - 后台线程 + `GLib.idle_add` 确保线程安全
+
+### 下载系统（urllib）
+- ✅ **使用 Python urllib 替代 curl**：
+  - 原生 Python 支持，无需外部命令
+  - 精确的字节级进度计算（不是解析文本输出）
+  - 显示精确文件大小（MB）和下载进度（%）
+  - **支持断点续传**：检测部分下载，使用 HTTP Range 头继续下载
+  - 更好的错误处理：HTTPError、URLError、TimeoutError
+  - 文件大小验证：下载后比对 Content-Length
+- ✅ **配置集中管理**（config.py）：
+  - Steam 包 URL
+  - 文件名
+  - 存储路径
+  - 易于维护和更新
+
 ### 状态栏
 - ✅ **顶部状态栏**：显示系统状态信息，固定在所有页面顶部
   - **电池信息**（左侧）：
@@ -188,98 +232,30 @@
 
 ## ❌ 缺失功能（阻塞性）
 
-### 🔴 严重问题
-1. **install.py 缺少后安装步骤**
-   - ❌ 未调用 `grab_steam_bootstrap()`（代码已在 install_utils.py）
-   - ❌ 未调用 `post_install()`（代码已在 install_utils.py）
-   - ❌ 未复制网络配置到安装系统
-   - ❌ 未验证启动配置
-   - **后果**: Steam 启动需要额外配置，网络配置丢失
+### 🟢 已解决的严重问题
+1. ✅ **install.py 后安装步骤**（已完成 2025-01-30）
+   - ✅ 已调用 `copy_network_config()` - 复制网络配置
+   - ✅ 已调用 `grab_steam_bootstrap_with_progress()` - 在 bootstrap 页面执行
+   - ✅ 已调用 `post_install()` - 系统优化
+   - ✅ 已调用 `_verify_boot_config()` - 验证启动配置
+   - **结果**: Steam 自动配置完成，网络配置保留
 
-2. **disk.py 未使用安全检查函数**
-   - ✅ 函数已实现（`is_disk_external`, `is_disk_smaller_than`）
-   - ❌ 但 UI 未调用，不会警告用户
-   - **后果**: 可能安装到外部磁盘或太小的磁盘
+2. ✅ **disk.py 安全检查**（已完成 2025-01-30）
+   - ✅ 已调用 `is_disk_smaller_than(disk, 55)` - 检查磁盘最小 55GB
+   - ✅ 已调用 `is_disk_external(disk)` - 警告外部磁盘安装
+   - ✅ 已实现对话框提示用户
+   - **结果**: 用户安装前会收到明确警告
 
 ---
 
-## ⚠️ 需要修复
+## ⚠️ 需要测试
 
-### 必须立即修复（第一优先级）
-
-#### 1. 修复 install.py 的 execute() 函数
-```python
-def execute(self):
-    # ... 现有的 frzr-deploy 代码 ...
-    
-    # 在 frzr-deploy 成功后，添加：
-    
-    # 1. 复制网络配置
-    self._copy_network_config()
-    
-    # 2. 获取 Steam bootstrap
-    from ...backend.install_utils import grab_steam_bootstrap
-    grab_steam_bootstrap(mount_path)
-    
-    # 3. 后安装优化
-    from ...backend.install_utils import post_install
-    post_install(mount_path)
-    
-    # 4. 验证启动配置
-    self._verify_boot_config()
-
-def _copy_network_config(self):
-    """Copy NetworkManager configs to installed system."""
-    import shutil
-    SYS_CONN_DIR = "/etc/NetworkManager/system-connections"
-    TARGET_DIR = f"/tmp/frzr_root{SYS_CONN_DIR}"
-    
-    if os.path.isdir(SYS_CONN_DIR) and os.listdir(SYS_CONN_DIR):
-        os.makedirs(TARGET_DIR, exist_ok=True)
-        os.chmod(TARGET_DIR, 0o700)
-        for file in os.listdir(SYS_CONN_DIR):
-            shutil.copy2(
-                os.path.join(SYS_CONN_DIR, file),
-                os.path.join(TARGET_DIR, file)
-            )
-
-def _verify_boot_config(self):
-    """Verify boot configuration exists."""
-    boot_cfg = "/tmp/frzr_root/boot/loader/entries/frzr.conf"
-    if not os.path.exists(boot_cfg):
-        self.append_log("⚠️  警告: 启动配置文件缺失\n")
-```
-
-#### 2. 在 disk.py 添加安全检查
-```python
-def _on_disk_selected(app, disk_name):
-    """Handle disk selection with safety checks."""
-    from ...backend.disk_utils import is_disk_external, is_disk_smaller_than
-    from ...config import config
-    
-    # 检查磁盘大小
-    if is_disk_smaller_than(disk_name, 55):
-        dialog = Gtk.AlertDialog()
-        dialog.set_message("磁盘太小")
-        dialog.set_detail(f"磁盘 {disk_name} 小于 55GB，无法安装 SkorionOS")
-        dialog.set_buttons(["返回"])
-        dialog.choose(app, None, None, None)
-        return
-    
-    # 检查是否外部磁盘
-    if is_disk_external(disk_name):
-        dialog = Gtk.AlertDialog()
-        dialog.set_message("外部磁盘警告")
-        dialog.set_detail(
-            f"磁盘 {disk_name} 似乎是外部设备（USB等）\n\n"
-            "在外部磁盘上安装可能导致:\n"
-            "• 性能不佳\n"
-            "• 磁盘损坏\n\n"
-            "是否继续？"
-        )
-        dialog.set_buttons(["取消", "继续安装"])
-        # ... 处理用户选择
-```
+### 核心功能测试
+1. **完整安装流程测试** - 测试 repair/fresh/dual 模式
+2. **Steam bootstrap 下载** - 删除本地文件测试下载进度显示
+3. **安全检查对话框** - 测试小磁盘和外部磁盘警告
+4. **网络配置复制** - 验证安装后 WiFi 连接保留
+5. **post_install 优化** - 验证 Steam 首次启动无需额外配置
 
 ---
 
@@ -300,28 +276,44 @@ def _on_disk_selected(app, disk_name):
 
 ## 🎯 下一步 TODO
 
-### 立即执行（今天）
+### 已完成（2025-01-30）
 1. ✅ 清理过时文档
-2. [ ] 创建 `ui/pages/complete.py`
-3. [ ] 在 `main.py` 注册 complete 页面
-4. [ ] 修复 `install.py` 添加后安装步骤
-5. [ ] 在 `disk.py` 添加安全检查
-6. [ ] 测试完整安装流程
+2. ✅ 创建 `ui/pages/complete.py`
+3. ✅ 在 `main.py` 注册 complete 页面
+4. ✅ 修复 `install.py` 添加后安装步骤
+5. ✅ 在 `disk.py` 添加安全检查
+6. ✅ 实现 Steam bootstrap 下载进度显示
+7. ✅ 去除所有 emoji，改用纯文本标记
+8. ✅ **使用 urllib 替代 curl 进行下载**（精确进度、断点续传）
+9. ✅ **配置集中管理**（Steam URL 移到 config.py）
 
-### 近期执行（本周）
-7. [ ] 实现本地安装文件扫描
-8. [ ] 添加高级选项 UI
-9. [ ] 改进进度显示精确度
-10. [ ] 添加帮助系统
+### 待测试（本周）
+8. [ ] 测试完整安装流程（repair/fresh/dual）
+9. [ ] 测试 Steam bootstrap 下载进度（无本地文件场景）
+10. [ ] 测试安全检查对话框（小磁盘、外部磁盘）
+11. [ ] 验证网络配置复制功能
+12. [ ] 验证 Steam 首次启动优化
+
+### 近期执行（后续）
+13. [ ] 实现本地安装文件扫描（FRZR_UPDATE）
+14. [ ] 添加高级选项 UI（固件覆盖、CDN、Debug）
+15. [ ] 改进 frzr-deploy 进度解析精确度
+16. [ ] 添加帮助系统/FAQ
 
 ---
 
-## 📝 已知问题
+## 📝 已修复的已知问题
 
-1. **安装成功后无法重启** - 缺少 complete 页面
-2. **Steam 首次启动慢** - 未调用 grab_steam_bootstrap
-3. **安装后需重新配置 WiFi** - 未复制网络配置
-4. **可能安装到不安全的磁盘** - 未使用安全检查
+### 2025-01-30 已修复
+1. ✅ ~~**安装成功后无法重启**~~ - Complete 页面已实现
+2. ✅ ~~**Steam 首次启动慢**~~ - 已在 bootstrap 页面调用 `grab_steam_bootstrap_with_progress()`
+3. ✅ ~~**安装后需重新配置 WiFi**~~ - 已在 install 页面调用 `copy_network_config()`
+4. ✅ ~~**可能安装到不安全的磁盘**~~ - disk 页面已添加安全检查对话框
+
+### 待观察
+- [ ] frzr-deploy 进度解析精确度（当前基于行数估算）
+- [ ] 长时间安装过程中的超时处理
+- [ ] 网络断开时的重试机制
 
 ---
 
@@ -481,6 +473,57 @@ UI_SCALE=2.0 /usr/local/bin/installer-modular
 ---
 
 ## 🐛 最近修复
+
+### 2025-01-30 修复
+
+#### 问题 1：Steam bootstrap 下载无进度显示
+**现象**：下载 Steam 包（~300MB）时，用户界面无任何进度反馈，显示卡住。
+
+**第一次修复**（使用 curl）：
+1. 在 `install_utils.py` 添加 `grab_steam_bootstrap_with_progress()` 函数
+   - 支持进度回调 `progress_callback(message, progress_fraction)`
+   - 使用 `subprocess.Popen` 实时解析 curl 的 `-#` 进度输出
+   - 每 5% 更新一次进度
+2. 修改 `bootstrap.py` 的 `_grab_steam_bootstrap()` 方法
+   - 后台线程执行下载，使用 `GLib.idle_add` 确保线程安全
+
+**第二次改进**（使用 urllib - 推荐）：
+1. **配置集中管理**（`config.py`）
+   - 添加 `steam_package_url` 等配置，易于维护
+2. **使用 Python urllib 替代 curl**（`install_utils.py`）
+   - 新增 `_download_file_with_progress()` 通用下载函数
+   - 基于字节数精确计算进度（而非解析文本）
+   - 显示精确文件大小和下载进度（如 "下载中... 50.5% (152.3MB / 304.5MB)"）
+   - **支持断点续传**：自动检测部分下载，使用 HTTP Range 头继续
+   - 更好的错误处理和文件验证
+3. 修改 `grab_steam_bootstrap_with_progress()` 使用新下载函数
+   - 从 `config` 读取 URL 和路径配置
+   - 调用 `_download_file_with_progress()` 替代 curl
+
+**结果**：
+- 用户可以看到精确的下载进度和文件大小
+- 支持断点续传（下载中断后可继续）
+- 无需依赖外部 curl 命令
+- 配置集中管理，易于维护
+
+#### 问题 2：日志输出使用 emoji
+**现象**：日志中大量使用 emoji（✓、⚠️、❌ 等），在某些终端或日志查看器中显示异常，影响可读性。
+
+**修复**：统一替换所有 emoji 为纯文本标记：
+- `✓` → `[成功]`
+- `⚠️` → `[警告]`
+- `❌` → `[失败]` / `[ERROR]`
+- `🔄` / `🚀` / `📝` 等 → 移除或改为描述性文本
+
+**修改文件**：
+- `install_utils.py`
+- `bootstrap.py`
+- `install.py`
+- `base.py`
+- `installer-modular`
+- `network/manager.py`
+
+**结果**：日志更具可读性和兼容性，适合任何终端环境。
 
 ### 2025-01-29 修复
 

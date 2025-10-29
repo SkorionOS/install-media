@@ -20,7 +20,7 @@ for bin in "${REQUIRED_BINS[@]}"; do
 done
 
 if [ ${#MISSING_BINS[@]} -gt 0 ]; then
-    echo "❌ Error: Missing dependencies: ${MISSING_BINS[*]}"
+    echo "[ERROR] Missing dependencies: ${MISSING_BINS[*]}"
     echo "   Please install them first."
     exit 1
 fi
@@ -28,17 +28,17 @@ fi
 # Check Python modules
 echo "Checking Python dependencies..."
 if ! python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null; then
-    echo "❌ Error: GTK4 Python bindings not found"
+    echo "[ERROR] GTK4 Python bindings not found"
     echo "   Install python-gobject package"
     exit 1
 fi
 
 if ! python3 -c "import gi; gi.require_version('NM', '1.0')" 2>/dev/null; then
-    echo "⚠️  Warning: NetworkManager Python bindings not found"
+    echo "[WARNING] NetworkManager Python bindings not found"
     echo "   Network features may not work"
 fi
 
-echo "✅ All dependencies found"
+echo "[OK] All dependencies found"
 echo ""
 
 # Setup XDG_RUNTIME_DIR
@@ -88,7 +88,7 @@ fi
 # Swap width and height for 90/270 degree rotations
 if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" ]]; then
     echo ""
-    echo "🔄 Swapping width/height for ${ORIENTATION} rotation"
+    echo "Swapping width/height for ${ORIENTATION} rotation"
     echo "   Original: ${WIDTH}x${HEIGHT}"
     TEMP=$WIDTH
     WIDTH=$HEIGHT
@@ -117,13 +117,13 @@ fi
 echo "   UI scale: ${UI_SCALE}"
 
 echo ""
-echo "🚀 Starting gamescope..."
+echo "Starting gamescope..."
 echo ""
 
 # Log file for debugging
 LOGFILE="/tmp/installer-modular.log"
 UNIFIED_LOG="/tmp/frzr.log"  # 统一日志文件
-echo "📝 Logging to: $LOGFILE (and $UNIFIED_LOG)"
+echo "Logging to: $LOGFILE (and $UNIFIED_LOG)"
 echo ""
 
 INNER_WIDTH=""

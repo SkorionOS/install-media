@@ -12,7 +12,9 @@ from ...backend.disk_utils import (
     list_available_disks,
     check_existing_frzr_installation,
     check_free_space,
-    list_shrinkable_partitions
+    list_shrinkable_partitions,
+    is_disk_smaller_than,
+    is_disk_external
 )
 from ..components.base import BasePage, UIComponents
 
@@ -189,9 +191,29 @@ def _on_disk_selected(app, button, disk_info):
 
 
 def _on_continue(app):
-    """Handle continue button - detect installation and show mode selection"""
+    """Handle continue button - perform safety checks then detect installation"""
     disk = app.selected_disk
     
+    # Perform safety checks first
+    print(f"[DISK] Performing safety checks on {disk}...")
+    
+    # Check 1: Disk size (must be >= config.min_disk_size)
+    from ...config import config
+    if is_disk_smaller_than(disk, config.min_disk_size):
+        _show_disk_too_small_dialog(app, disk)
+        return
+    
+    # Check 2: External disk warning
+    if is_disk_external(disk):
+        _show_external_disk_warning(app, disk)
+        return
+    
+    # Safety checks passed, proceed with installation detection
+    _continue_to_mode_selection(app, disk)
+
+
+def _continue_to_mode_selection(app, disk):
+    """Continue to mode selection after safety checks pass."""
     print(f"[DISK] Checking {disk} for existing frzr installation...")
     status = check_existing_frzr_installation(disk)
     print(f"[DISK] Installation status: {status}")
@@ -554,4 +576,57 @@ def _show_error(app, message):
     )
     dialog.set_secondary_text(message)
     dialog.connect("response", lambda d, r: d.close())
+    dialog.present()
+
+
+def _show_disk_too_small_dialog(app, disk):
+    """Show error when disk is too small"""
+    from ...config import config
+    
+    dialog = Gtk.MessageDialog(
+        transient_for=app,
+        modal=True,
+        message_type=Gtk.MessageType.ERROR,
+        buttons=Gtk.ButtonsType.OK,
+        text="磁盘空间不足"
+    )
+    dialog.set_secondary_text(
+        f"磁盘 {disk} 小于 {config.min_disk_size}GB，无法安装 SkorionOS。\n\n"
+        f"SkorionOS 需要至少 {config.min_disk_size}GB 的可用空间。\n"
+        "请选择更大的磁盘。"
+    )
+    
+    def on_response(dialog, response):
+        dialog.close()
+    
+    dialog.connect("response", on_response)
+    dialog.present()
+
+
+def _show_external_disk_warning(app, disk):
+    """Show warning when selecting external disk"""
+    dialog = Gtk.MessageDialog(
+        transient_for=app,
+        modal=True,
+        message_type=Gtk.MessageType.WARNING,
+        buttons=Gtk.ButtonsType.YES_NO,
+        text="外部磁盘警告"
+    )
+    dialog.set_secondary_text(
+        f"磁盘 {disk} 似乎是外部设备（USB/SD卡等）。\n\n"
+        "在外部磁盘上安装可能导致：\n"
+        "• 系统性能不佳\n"
+        "• 启动速度缓慢\n"
+        "• 磁盘易损坏或丢失\n\n"
+        "强烈建议安装到内置磁盘。\n\n"
+        "是否仍要继续安装到此磁盘？"
+    )
+    
+    def on_response(dialog, response):
+        dialog.close()
+        if response == Gtk.ResponseType.YES:
+            # User confirmed, continue with installation
+            _continue_to_mode_selection(app, disk)
+    
+    dialog.connect("response", on_response)
     dialog.present()
