@@ -14,7 +14,8 @@
 └── installer-poc-modular      # Python 入口
 
 /usr/share/installer/
-└── device-quirks              # 设备适配脚本（屏幕方向、输出优先级）
+├── device-quirks              # 设备适配脚本（屏幕方向、输出优先级）
+└── Skorion.svg                # 欢迎页 Logo
 
 /usr/local/lib/installer/
 ├── __init__.py
@@ -461,6 +462,23 @@ else:
    - 修复成功图标加载失败（`emblem-ok-symbolic` 不存在于 Adwaita 主题）
    - 改用 `object-select-symbolic` (勾选图标)
    - 更符合 GTK4/Adwaita 的图标命名规范
+
+7. ✅ **欢迎页 Logo 更新**
+   - 使用自定义 Skorion.svg 替代通用的 `computer-symbolic` 图标
+   - Logo 路径：`/usr/share/installer/Skorion.svg`
+   - 蓝色主题，尺寸 512x512，支持缩放
+
+8. ✅ **欢迎页系统信息展示**
+   - 替换静态测试信息为实时系统信息
+   - 显示内容：CPU 型号和核心数、内存容量、磁盘数量、引导模式 (UEFI/BIOS)、屏幕分辨率和缩放
+   - 使用 GTK Adwaita 图标（全部验证存在）：
+     - `applications-system-symbolic` - CPU 信息
+     - `drive-multidisk-symbolic` - 内存信息
+     - `drive-harddisk-symbolic` - 磁盘信息
+     - `preferences-system-symbolic` - 引导模式
+     - `video-display-symbolic` - 屏幕信息
+   - 图标 + 文本横向布局，信息清晰易读
+   - 异常容错：无法获取信息时显示默认 fallback 内容
 
 ### 最近完成（2025-01-30 第四次更新）
 

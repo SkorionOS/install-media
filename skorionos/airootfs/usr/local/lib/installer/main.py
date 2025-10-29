@@ -354,9 +354,8 @@ class InstallerApp(Gtk.ApplicationWindow):
         box.set_valign(Gtk.Align.CENTER)
         box.add_css_class("page-container")
         
-        # Logo/Icon
-        logo = Gtk.Image.new_from_icon_name("computer-symbolic")
-        logo.set_icon_size(Gtk.IconSize.LARGE)
+        # Logo/Icon - Skorion logo
+        logo = Gtk.Image.new_from_file("/usr/share/installer/Skorion.svg")
         logo.set_pixel_size(config.scaled(128))
         box.append(logo)
         
@@ -377,22 +376,17 @@ class InstallerApp(Gtk.ApplicationWindow):
         info_label.set_markup(f'<span foreground="#aaa">检测到设备: {device_info}</span>')
         box.append(info_label)
         
-        # Test info box
-        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # System info box
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
         info_box.add_css_class("info-box")
         info_box.set_size_request(config.scaled(600), -1)
         
-        tests = [
-            "• GTK4 窗口已创建",
-            "• Gamescope 合成器正常",
-            "• 输入系统已就绪",
-            "• 准备进入安装流程"
-        ]
+        # Get system information
+        sys_info = self._get_system_info()
         
-        for test in tests:
-            label = Gtk.Label(label=test)
-            label.set_xalign(0)
-            info_box.append(label)
+        for icon_name, text in sys_info:
+            row = self._create_info_row(icon_name, text)
+            info_box.append(row)
         
         box.append(info_box)
         
@@ -454,6 +448,113 @@ class InstallerApp(Gtk.ApplicationWindow):
         except Exception as e:
             logger.debug(f"Could not read device info: {e}")
         return "未知设备"
+    
+    def _create_info_row(self, icon_name: str, text: str) -> Gtk.Box:
+        """
+        Create a row with icon and text for system info display.
+        
+        Args:
+            icon_name: GTK icon name (e.g., "computer-symbolic")
+            text: Text to display next to the icon
+        
+        Returns:
+            Gtk.Box: Horizontal box containing icon and label
+        """
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(10))
+        row.set_margin_start(config.scaled(10))
+        row.set_margin_end(config.scaled(10))
+        
+        # Icon
+        icon = Gtk.Image.new_from_icon_name(icon_name)
+        icon.set_pixel_size(config.scaled(20))
+        row.append(icon)
+        
+        # Text
+        label = Gtk.Label(label=text)
+        label.set_xalign(0)
+        label.set_hexpand(True)
+        row.append(label)
+        
+        return row
+    
+    def _get_system_info(self) -> list:
+        """
+        Collect system information for welcome page.
+        
+        Returns:
+            List of tuples: [(icon_name, text), ...]
+        """
+        import subprocess
+        import os
+        
+        info_list = []
+        
+        # 1. CPU info
+        try:
+            cpu_info = subprocess.run(['lscpu'], capture_output=True, text=True, timeout=2)
+            if cpu_info.returncode == 0:
+                lines = cpu_info.stdout.split('\n')
+                # Get model name
+                cpu_model = next((line.split(':', 1)[1].strip() for line in lines 
+                                if 'Model name' in line), None)
+                # Get core count
+                cpu_cores = next((line.split(':', 1)[1].strip() for line in lines 
+                                if line.startswith('CPU(s):')), None)
+                
+                if cpu_model and cpu_cores:
+                    # Shorten CPU name if too long
+                    if len(cpu_model) > 40:
+                        cpu_model = cpu_model[:37] + '...'
+                    info_list.append(("applications-system-symbolic", f"CPU: {cpu_model} ({cpu_cores} 核心)"))
+        except Exception as e:
+            logger.debug(f"Could not read CPU info: {e}")
+        
+        # 2. Memory info
+        try:
+            mem_info = subprocess.run(['free', '-h'], capture_output=True, text=True, timeout=1)
+            if mem_info.returncode == 0:
+                mem_total = mem_info.stdout.split('\n')[1].split()[1]
+                info_list.append(("drive-multidisk-symbolic", f"内存: {mem_total}"))
+        except Exception as e:
+            logger.debug(f"Could not read memory info: {e}")
+        
+        # 3. Disk count
+        try:
+            disks = subprocess.run(['lsblk', '-dno', 'NAME,TYPE'], 
+                                  capture_output=True, text=True, timeout=1)
+            if disks.returncode == 0:
+                disk_count = len([line for line in disks.stdout.split('\n') 
+                                if 'disk' in line and line.strip()])
+                info_list.append(("drive-harddisk-symbolic", f"检测到 {disk_count} 个磁盘"))
+        except Exception as e:
+            logger.debug(f"Could not read disk info: {e}")
+        
+        # 4. Boot mode (UEFI/BIOS)
+        try:
+            boot_mode = "UEFI" if os.path.exists('/sys/firmware/efi') else "Legacy BIOS"
+            info_list.append(("preferences-system-symbolic", f"引导模式: {boot_mode}"))
+        except Exception as e:
+            logger.debug(f"Could not determine boot mode: {e}")
+        
+        # 5. Screen resolution
+        try:
+            width = os.environ.get('SCREEN_WIDTH', config.screen_width)
+            height = os.environ.get('SCREEN_HEIGHT', config.screen_height)
+            ui_scale = os.environ.get('UI_SCALE', '1.0')
+            info_list.append(("video-display-symbolic", f"屏幕: {width}x{height} (缩放 {ui_scale}x)"))
+        except Exception as e:
+            logger.debug(f"Could not read screen info: {e}")
+        
+        # Fallback if no info collected
+        if not info_list:
+            info_list = [
+                ("dialog-information-symbolic", "GTK4 窗口已创建"),
+                ("applications-games-symbolic", "Gamescope 合成器正常"),
+                ("input-gaming-symbolic", "输入系统已就绪"),
+                ("emblem-ok-symbolic", "准备进入安装流程")
+            ]
+        
+        return info_list
 
 
 class InstallerApplication(Gtk.Application):
