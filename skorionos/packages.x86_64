@@ -28,6 +28,7 @@ linux-skchos-headers
 linux-firmware
 mkinitcpio
 mkinitcpio-archiso
+hid-msi-claw-dkms-git
 nano
 netctl
 ntfs-3g

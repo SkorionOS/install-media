@@ -28,6 +28,7 @@ AUR_PACKAGES="\
     fpaste \
     frzr-sk \
     gamescope-sk \
+    hid-msi-claw-dkms-git \
     inputplumber-bin \
     pikaur \
     rtl88x2bu-dkms-git \
