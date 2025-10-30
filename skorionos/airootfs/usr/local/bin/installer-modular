@@ -97,7 +97,7 @@ if [ -f "$QUIRKS_FILE" ]; then
 fi
 
 # Swap width and height for 90/270 degree rotations
-if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" ]]; then
+if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" || "$HEIGHT" -gt "$WIDTH" ]]; then
     echo ""
     echo "Swapping width/height for ${ORIENTATION} rotation"
     echo "   Original: ${WIDTH}x${HEIGHT}"

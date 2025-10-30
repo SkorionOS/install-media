@@ -43,7 +43,7 @@ wget
 zsh
 networkmanager
 
-# Graphical installer dependencies (PoC)
+# Graphical installer dependencies
 gamescope
 gtk4
 libadwaita
@@ -57,3 +57,6 @@ wayland
 libnm
 adwaita-icon-theme
 wqy-microhei
+noto-fonts-emoji
+xrandr
+rsync
