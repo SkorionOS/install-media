@@ -117,7 +117,7 @@ echo "Screen size: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
 GDK_SCALE=1
 UI_SCALE=1
 if [ "$SCREEN_HEIGHT" -ge 1440 ]; then
-    GDK_SCALE=2
+    GDK_SCALE=$((SCREEN_HEIGHT / 720))
 elif [ "$SCREEN_HEIGHT" -ge 720 ]; then
     UI_SCALE=$(awk "BEGIN {printf \"%.2f\", $SCREEN_HEIGHT / 720}")
 fi
