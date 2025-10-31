@@ -53,14 +53,19 @@ class InstallPage(ExecutionPage):
         """Create and return the page widget."""
         page_box = super().create()
         
-        # Show start and cancel buttons initially (user must click to start)
-        self.show_buttons(back=False, cancel=True, start=True)
-        
         # Store references for backward compatibility
         self.app.install_status_label = self.status_label
         self.app.install_progress_bar = self.progress_bar
         self.app.install_cancel_btn = self.cancel_btn
         self.app.install_start_btn = self.start_btn
+        
+        # Check if installation already completed (in case user navigates back)
+        if hasattr(self.app, 'install_completed') and self.app.install_completed:
+            # Already done, don't restart
+            GLib.timeout_add(100, self._restore_success_state)
+        else:
+            # Start installation automatically (like bootstrap page)
+            GLib.timeout_add(100, lambda: (self.start_execution(), False)[1])
         
         return page_box
     
@@ -223,6 +228,9 @@ class InstallPage(ExecutionPage):
     def on_execution_success(self):
         """Called when installation completes successfully - go to complete page."""
         from .complete import CompletePage
+        
+        # Mark installation as completed
+        self.app.install_completed = True
         
         # Update success message in log first
         GLib.idle_add(self._update_success_message)
@@ -426,6 +434,23 @@ class InstallPage(ExecutionPage):
     def on_continue_clicked(self, button):
         """Navigate to completion page after successful installation."""
         self.app.show_page('complete')
+    
+    def _restore_success_state(self):
+        """Restore success state if installation was already completed."""
+        self.update_status('<span size="large" foreground="green" weight="bold">安装已完成！</span>')
+        self.update_progress(1.0, "完成")
+        self.show_buttons(back=False, cancel=False, exit=False, start=False)
+        
+        # Show continue button
+        if self._button_box and not self.continue_btn:
+            self.continue_btn = UIComponents.create_button("继续", "go-next-symbolic")
+            self.continue_btn.connect("clicked", self.on_continue_clicked)
+            self._button_box.append(self.continue_btn)
+        
+        if self.continue_btn:
+            self.continue_btn.set_visible(True)
+        
+        return False
 
 
 def create_install_page(app):
