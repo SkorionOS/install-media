@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2155
-# mobile-cloud-sync.sh - ChimeraOS移动云盘同步脚本
+# mobile-cloud-sync.sh - SkorionOS移动云盘同步脚本
 #
 # 支持两种下载模式:
 # 1. 多线程批量下载（默认）: USE_BATCH_DOWNLOAD=true
@@ -43,12 +43,12 @@ FORCE_SYNC="${FORCE_SYNC:-false}"       # 强制同步模式
 #   exclude:xxx   - 排除规则 (支持 prefix/suffix/contains/regex)
 #
 # 示例配置:
-#   "prefix:chimeraos-"                          # 只下载chimeraos-开头的文件
-#   "prefix:chimeraos-,exclude:suffix:.txt"     # 下载chimeraos-开头但排除.txt文件
+#   "prefix:skorionos-"                          # 只下载skorionos-开头的文件
+#   "prefix:skorionos-,exclude:suffix:.txt"     # 下载skorionos-开头但排除.txt文件
 #   "suffix:.img.xz,size_min:100"               # 下载.img.xz结尾且大于100MB的文件
 #   "contains:kde,exclude:contains:nv"          # 包含kde但不包含nv的文件
 #   "regex:.*-(kde|gnome)\..*"                  # 正则匹配包含kde或gnome的文件
-FILE_FILTER_RULES="prefix:sk-chimeraos-"
+FILE_FILTER_RULES="prefix:skorionos-"
 TIMEOUT_SECONDS=1800
 CHECK_INTERVAL=5
 
@@ -597,7 +597,7 @@ mount_mobile_cloud() {
     "mount_path": "$STORAGE_MOUNT_PATH",
     "driver": "139Yun", 
     "order": 0,
-    "remark": "ChimeraOS Release同步",
+    "remark": "SkorionOS Release同步",
     "addition": "{\"authorization\":\"${mobile_authorization}\",\"root_folder_id\":\"/\",\"type\":\"personal_new\",\"cloud_id\":\"\",\"custom_upload_part_size\":0,\"report_real_size\":true,\"use_large_thumbnail\":false}"
 }
 EOF
@@ -1483,7 +1483,7 @@ main() {
     
     # force_sync现在通过环境变量传递，在文件开头已经处理
     
-    echo "🚀 ChimeraOS移动云盘同步开始"
+    echo "🚀 SkorionOS移动云盘同步开始"
     echo "================================================"
     
     # 显示下载模式
@@ -1541,7 +1541,7 @@ main() {
     
     echo ""
     echo "================================================"
-    log_success "ChimeraOS $release_tag 同步完成！"
+    log_success "SkorionOS $release_tag 同步完成！"
     log_success "📱 目标: 中国移动云盘"
     log_success "📁 路径: $target_path"
     log_success "📊 成功文件数: $final_count"
