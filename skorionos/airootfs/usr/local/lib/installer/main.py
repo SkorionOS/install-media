@@ -46,6 +46,27 @@ class StatusBar:
         
         self.box.append(battery_box)
         
+        # Network speed info (between battery and time)
+        network_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=config.scaled(8))
+        
+        # Download section
+        download_icon = Gtk.Image.new_from_icon_name("go-down-symbolic")
+        download_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        network_box.append(download_icon)
+        
+        self.download_label = Gtk.Label(label="-- KB/s")
+        network_box.append(self.download_label)
+        
+        # Upload section
+        upload_icon = Gtk.Image.new_from_icon_name("go-up-symbolic")
+        upload_icon.set_icon_size(Gtk.IconSize.NORMAL)
+        network_box.append(upload_icon)
+        
+        self.upload_label = Gtk.Label(label="-- KB/s")
+        network_box.append(self.upload_label)
+        
+        self.box.append(network_box)
+        
         # Spacer
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
@@ -81,13 +102,20 @@ class StatusBar:
         
         self.update_theme_icon()
         
+        # Initialize network speed tracking
+        self.last_rx_bytes = 0
+        self.last_tx_bytes = 0
+        self.active_iface = None
+        
         # Update immediately
         self.update_battery()
         self.update_time()
+        self.update_network_speed()
         
         # Schedule updates
-        GLib.timeout_add_seconds(60, self.update_battery)  # Every minute
-        GLib.timeout_add_seconds(1, self.update_time)      # Every second
+        GLib.timeout_add_seconds(60, self.update_battery)     # Every minute
+        GLib.timeout_add_seconds(1, self.update_time)         # Every second
+        GLib.timeout_add_seconds(1, self.update_network_speed)  # Every second
     
     def update_battery(self):
         """Update battery information"""
@@ -176,6 +204,79 @@ class StatusBar:
         time_str = now.strftime("%Y-%m-%d %H:%M")
         self.time_label.set_text(time_str)
         return True  # Continue timer
+    
+    def update_network_speed(self):
+        """Update network upload/download speed by reading /sys/class/net"""
+        try:
+            import glob
+            
+            # Auto-detect active interface (exclude lo)
+            interfaces = [i.split('/')[-1] for i in glob.glob('/sys/class/net/*') 
+                         if 'lo' not in i]
+            
+            # Find interface with carrier (connected)
+            active_iface = None
+            for iface in interfaces:
+                try:
+                    with open(f'/sys/class/net/{iface}/carrier') as f:
+                        if f.read().strip() == '1':
+                            active_iface = iface
+                            break
+                except:
+                    continue
+            
+            if not active_iface:
+                # No active network interface
+                self.download_label.set_text("--")
+                self.upload_label.set_text("--")
+                self.last_rx_bytes = 0
+                self.last_tx_bytes = 0
+                self.active_iface = None
+                return True
+            
+            # Read current statistics
+            with open(f'/sys/class/net/{active_iface}/statistics/rx_bytes') as f:
+                current_rx = int(f.read().strip())
+            with open(f'/sys/class/net/{active_iface}/statistics/tx_bytes') as f:
+                current_tx = int(f.read().strip())
+            
+            # Calculate speed (only if interface hasn't changed)
+            if self.last_rx_bytes > 0 and self.active_iface == active_iface:
+                rx_speed = max(0, current_rx - self.last_rx_bytes)
+                tx_speed = max(0, current_tx - self.last_tx_bytes)
+                
+                self.download_label.set_text(self._format_speed(rx_speed))
+                self.upload_label.set_text(self._format_speed(tx_speed))
+            else:
+                # First run or interface changed - show 0
+                self.download_label.set_text("0 B/s")
+                self.upload_label.set_text("0 B/s")
+            
+            # Store for next calculation
+            self.last_rx_bytes = current_rx
+            self.last_tx_bytes = current_tx
+            self.active_iface = active_iface
+            
+        except Exception as e:
+            logger.debug(f"Could not read network speed: {e}")
+            self.download_label.set_text("--")
+            self.upload_label.set_text("--")
+        
+        return True  # Continue timer
+    
+    def _format_speed(self, bytes_per_sec):
+        """Format speed with appropriate unit"""
+        if bytes_per_sec < 0:
+            bytes_per_sec = 0
+        
+        if bytes_per_sec < 1024:
+            return f"{bytes_per_sec} B/s"
+        elif bytes_per_sec < 1024 * 1024:
+            return f"{bytes_per_sec / 1024:.1f} KB/s"
+        elif bytes_per_sec < 1024 * 1024 * 1024:
+            return f"{bytes_per_sec / (1024 * 1024):.1f} MB/s"
+        else:
+            return f"{bytes_per_sec / (1024 * 1024 * 1024):.2f} GB/s"
     
     def toggle_theme(self, button):
         """Toggle between light and dark theme using libadwaita StyleManager"""
