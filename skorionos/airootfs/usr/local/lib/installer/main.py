@@ -205,6 +205,36 @@ class StatusBar:
         self.time_label.set_text(time_str)
         return True  # Continue timer
     
+    def refresh_timezone(self):
+        """
+        Refresh timezone cache and immediately update time display.
+        Call this method after timezone changes.
+        """
+        import time
+        import os
+        import subprocess
+        
+        try:
+            # Read new timezone from system
+            result = subprocess.run(
+                ['timedatectl', 'show', '--property=Timezone', '--value'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                new_timezone = result.stdout.strip()
+                if new_timezone and new_timezone != 'n/a':
+                    # Update environment variable and refresh Python's timezone cache
+                    os.environ['TZ'] = new_timezone
+                    time.tzset()  # Force reload timezone information
+                    logger.info(f"Timezone cache refreshed: {new_timezone}")
+        except Exception as e:
+            logger.warning(f"Failed to refresh timezone cache: {e}")
+        
+        # Immediately update display
+        self.update_time()
+    
     def update_network_speed(self):
         """Update network upload/download speed by reading /sys/class/net"""
         try:

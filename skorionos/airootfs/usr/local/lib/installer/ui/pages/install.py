@@ -267,7 +267,7 @@ class InstallPage(ExecutionPage):
         self.append_log(f"{'='*60}\n\n")
         
         try:
-            from ...backend.install_utils import copy_network_config, post_install
+            from ...backend.install_utils import copy_network_config, copy_timezone_config, post_install
             
             # Step 1: Copy network configuration
             self.append_log("正在复制网络配置...\n")
@@ -276,14 +276,22 @@ class InstallPage(ExecutionPage):
             else:
                 self.append_log("[警告] 网络配置复制失败\n")
             
-            # Step 2: Post-installation optimizations
+            # Step 2: Copy timezone configuration
+            self.append_log("\n正在复制时区配置...\n")
+            timezone = os.environ.get('INSTALLER_TIMEZONE', 'UTC')
+            if copy_timezone_config(mount_path, timezone):
+                self.append_log(f"[成功] 时区已设置为: {timezone}\n")
+            else:
+                self.append_log(f"[警告] 时区配置复制失败，目标系统将使用 UTC\n")
+            
+            # Step 3: Post-installation optimizations
             self.append_log("\n正在执行系统优化...\n")
             if post_install(mount_path):
                 self.append_log("[成功] 系统优化完成\n")
             else:
                 self.append_log("[警告] 系统优化失败\n")
             
-            # Step 3: Verify boot configuration
+            # Step 4: Verify boot configuration
             self.append_log("\n正在验证启动配置...\n")
             self._verify_boot_config(mount_path)
             

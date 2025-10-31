@@ -4,11 +4,15 @@ Complete network connection page with full WiFi management
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, GLib
+import threading
 
 from ...config import config
 from ...network.manager import NetworkManager
 from ...network.dialogs import PasswordDialog
 from ..components.base import BasePage, UIComponents
+from ...logger import get_logger
+
+logger = get_logger('network')
 
 
 class NetworkPage(BasePage):
@@ -23,6 +27,10 @@ class NetworkPage(BasePage):
         
         self.is_online = app.nm.is_online()
         self.wifi_list = None
+        
+        # If already online (e.g., ethernet), start async timezone detection
+        if self.is_online:
+            start_async_timezone_detection(app)
     
     def create_title(self) -> Gtk.Widget:
         """Create title with icon."""
@@ -123,6 +131,61 @@ def create_network_page(app):
     """Create the network page using the new page architecture."""
     page = NetworkPage(app)
     return page.create()
+
+
+def start_async_timezone_detection(app):
+    """
+    Start timezone detection in background thread after network connection.
+    This runs asynchronously to avoid blocking the installation flow.
+    """
+    # Check if timezone already detected
+    if hasattr(app, 'timezone_detected') and app.timezone_detected:
+        logger.info("Timezone already detected, skipping")
+        return
+    
+    # Check if timezone was copied from existing system
+    import os
+    if 'INSTALLER_TIMEZONE' in os.environ:
+        existing_tz = os.environ['INSTALLER_TIMEZONE']
+        logger.info(f"Timezone already configured from existing system: {existing_tz}")
+        app.timezone_detected = True
+        # Refresh status bar to show the time in correct timezone
+        GLib.idle_add(lambda: app.status_bar.refresh_timezone())
+        return
+    
+    def detect_timezone_thread():
+        """Background thread for timezone detection"""
+        try:
+            from ...backend.timezone_utils import auto_detect_timezone, apply_timezone_to_live
+            import os
+            
+            logger.info("Starting async timezone detection...")
+            
+            # Detect timezone
+            detected_timezone = auto_detect_timezone()
+            
+            # Apply to live environment
+            if apply_timezone_to_live(detected_timezone):
+                logger.info(f"Timezone detected and applied: {detected_timezone}")
+                
+                # Save to environment variable for later use
+                os.environ['INSTALLER_TIMEZONE'] = detected_timezone
+                
+                # Mark as detected
+                app.timezone_detected = True
+                
+                # Refresh status bar timezone cache in main thread
+                GLib.idle_add(lambda: app.status_bar.refresh_timezone())
+            else:
+                logger.warning("Failed to apply timezone to live environment")
+                
+        except Exception as e:
+            logger.exception(f"Async timezone detection failed: {e}")
+    
+    # Start background thread
+    thread = threading.Thread(target=detect_timezone_thread, daemon=True)
+    thread.start()
+    logger.debug("Async timezone detection thread started")
 
 
 def _scan_networks(app):
@@ -360,6 +423,8 @@ def _connect_to_network(app, ap, ssid, password):
             if success:
                 app.password_dialog.close()
                 app.password_dialog = None
+                # Start async timezone detection after successful connection
+                start_async_timezone_detection(app)
                 # Refresh page after short delay to show connected status
                 GLib.timeout_add(500, lambda: app.show_page(1, add_to_history=False))
             else:
@@ -367,6 +432,8 @@ def _connect_to_network(app, ap, ssid, password):
         else:
             # No dialog, just refresh page to show status
             if success:
+                # Start async timezone detection after successful connection
+                start_async_timezone_detection(app)
                 GLib.timeout_add(500, lambda: app.show_page(1, add_to_history=False))
             else:
                 print(f"[ERROR] Connection failed: {error_msg}")

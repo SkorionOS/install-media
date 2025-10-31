@@ -11,6 +11,7 @@ import os
 from ...config import config
 from ..components.base import ExecutionPage, UIComponents
 from ...logger import get_logger
+from ...backend.timezone_utils import auto_detect_timezone, apply_timezone_to_live
 
 logger = get_logger('bootstrap')
 
@@ -67,6 +68,44 @@ class BootstrapPage(ExecutionPage):
         try:
             disk = self.app.selected_disk
             mode = self.app.install_mode
+            
+            # Step 0: Auto-detect and set timezone (if not already detected)
+            timezone_source = ""
+            if 'INSTALLER_TIMEZONE' in os.environ:
+                timezone_source = "现有系统"
+            elif hasattr(self.app, 'timezone_detected') and self.app.timezone_detected:
+                timezone_source = "网络连接后"
+            
+            if timezone_source:
+                # Timezone already configured
+                current_tz = os.environ.get('INSTALLER_TIMEZONE', 'Unknown')
+                GLib.idle_add(self.append_log, f"✓ 时区已从{timezone_source}获取: {current_tz}\n\n")
+            else:
+                # Network detection didn't run or failed, detect synchronously now
+                GLib.idle_add(self.update_status, '<span size="large">正在检测时区...</span>')
+                GLib.idle_add(self.append_log, "开始检测时区...\n")
+                
+                detected_timezone = auto_detect_timezone()
+                
+                if detected_timezone != 'UTC':
+                    GLib.idle_add(self.append_log, f"✓ 检测到时区: {detected_timezone}\n")
+                else:
+                    GLib.idle_add(self.append_log, f"⚠ 无法自动检测时区，使用 UTC\n")
+                
+                # Apply to live environment
+                if apply_timezone_to_live(detected_timezone):
+                    GLib.idle_add(self.append_log, f"✓ Live 环境时区已设置\n")
+                    
+                    # Refresh status bar timezone cache
+                    GLib.idle_add(lambda: self.app.status_bar.refresh_timezone())
+                    
+                    # Save timezone to environment variable for later use
+                    os.environ['INSTALLER_TIMEZONE'] = detected_timezone
+                    self.app.timezone_detected = True
+                else:
+                    GLib.idle_add(self.append_log, f"⚠ 时区设置失败\n")
+                
+                GLib.idle_add(self.append_log, "\n")
             
             # Step 1: Set NTP
             GLib.idle_add(self.update_status, '<span size="large">正在同步系统时间...</span>')

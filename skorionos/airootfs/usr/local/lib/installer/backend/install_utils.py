@@ -59,6 +59,63 @@ def copy_network_config(mount_path):
         return False
 
 
+def copy_timezone_config(mount_path, timezone=None):
+    """
+    Copy timezone configuration from live environment to installed system.
+    
+    Args:
+        mount_path: Mount path of the installed system (e.g., /tmp/frzr_root)
+        timezone: Timezone name (e.g., 'Asia/Shanghai'). If None, use current system timezone.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Get current timezone if not specified
+        if not timezone:
+            result = subprocess.run(
+                ['timedatectl', 'show', '--property=Timezone', '--value'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result.returncode == 0:
+                timezone = result.stdout.strip()
+            else:
+                timezone = 'UTC'  # Fallback to UTC
+        
+        logger.info(f"Copying timezone config: {timezone}")
+        
+        # Method 1: Create symlink (recommended, follows system standard)
+        zoneinfo_source = f'/usr/share/zoneinfo/{timezone}'
+        localtime_target = os.path.join(mount_path, 'etc/localtime')
+        
+        # Check if timezone file exists
+        if not os.path.exists(zoneinfo_source):
+            logger.error(f"Timezone file does not exist: {zoneinfo_source}")
+            return False
+        
+        # Remove old localtime (may be file or symlink)
+        if os.path.exists(localtime_target) or os.path.islink(localtime_target):
+            os.remove(localtime_target)
+        
+        # Create symlink
+        os.symlink(f'/usr/share/zoneinfo/{timezone}', localtime_target)
+        print(f"✓ Set /etc/localtime -> /usr/share/zoneinfo/{timezone}")
+        
+        # Method 2: Write /etc/timezone (some distros need this)
+        timezone_file = os.path.join(mount_path, 'etc/timezone')
+        with open(timezone_file, 'w') as f:
+            f.write(f"{timezone}\n")
+        print(f"✓ Written /etc/timezone: {timezone}")
+        
+        return True
+        
+    except Exception as e:
+        logger.exception(f"Error copying timezone config: {e}")
+        return False
+
+
 def grab_steam_bootstrap(mount_path):
     """
     Grab Steam bootstrap file for first boot (without progress reporting).

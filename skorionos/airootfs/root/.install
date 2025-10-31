@@ -156,6 +156,68 @@ function copy_system_configs() {
     echo "已挂载现有系统分区到: $mount_point"
   fi
   
+  # 复制时区配置
+  local timezone_copied=false
+  echo "正在检查现有系统的时区配置..."
+  
+  if [ -f "$mount_point/etc/timezone" ]; then
+    local old_timezone=$(cat "$mount_point/etc/timezone" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$old_timezone" ]; then
+      echo "检测到现有系统时区: $old_timezone"
+      
+      # 验证时区是否有效
+      if [ -f "/usr/share/zoneinfo/$old_timezone" ]; then
+        # 复制时区配置
+        cp "$mount_point/etc/timezone" /etc/timezone 2>/dev/null
+        
+        # 创建 localtime 符号链接
+        rm -f /etc/localtime
+        ln -sf "/usr/share/zoneinfo/$old_timezone" /etc/localtime
+        
+        # 应用时区到当前会话
+        if command -v timedatectl &>/dev/null; then
+          timedatectl set-timezone "$old_timezone" 2>/dev/null && \
+            echo "已应用时区到 Live 环境: $old_timezone"
+        fi
+        
+        # 保存到环境变量（供图形安装器使用）
+        export INSTALLER_TIMEZONE="$old_timezone"
+        echo "INSTALLER_TIMEZONE=$old_timezone" >> /etc/environment
+        
+        timezone_copied=true
+      else
+        echo "警告: 时区 '$old_timezone' 无效，跳过"
+      fi
+    fi
+  elif [ -L "$mount_point/etc/localtime" ]; then
+    # 如果只有 localtime 符号链接，尝试从链接路径提取时区
+    local tz_link=$(readlink "$mount_point/etc/localtime")
+    local old_timezone=$(echo "$tz_link" | sed 's|.*/zoneinfo/||')
+    
+    if [ -n "$old_timezone" ] && [ -f "/usr/share/zoneinfo/$old_timezone" ]; then
+      echo "从 localtime 符号链接检测到时区: $old_timezone"
+      
+      # 创建时区配置
+      echo "$old_timezone" > /etc/timezone
+      rm -f /etc/localtime
+      ln -sf "/usr/share/zoneinfo/$old_timezone" /etc/localtime
+      
+      if command -v timedatectl &>/dev/null; then
+        timedatectl set-timezone "$old_timezone" 2>/dev/null && \
+          echo "已应用时区到 Live 环境: $old_timezone"
+      fi
+      
+      export INSTALLER_TIMEZONE="$old_timezone"
+      echo "INSTALLER_TIMEZONE=$old_timezone" >> /etc/environment
+      
+      timezone_copied=true
+    fi
+  fi
+  
+  if [ "$timezone_copied" = false ]; then
+    echo "现有系统中未找到有效的时区配置"
+  fi
+  
   # 复制网络配置
   local net_src_dir="$mount_point/etc/NetworkManager/system-connections"
   local net_dst_dir="/etc/NetworkManager/system-connections"
