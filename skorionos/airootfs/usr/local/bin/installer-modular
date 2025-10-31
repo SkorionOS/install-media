@@ -54,38 +54,30 @@ if [ -z "$XDG_RUNTIME_DIR" ]; then
     export XDG_RUNTIME_DIR="/tmp/runtime-${USER}"
     mkdir -p "$XDG_RUNTIME_DIR"
     chmod 700 "$XDG_RUNTIME_DIR"
-    echo "✅ Created XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+    echo "  Created XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
 fi
 
 # Detect screen resolution
-WIDTH=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 1 || echo "1280")
-HEIGHT=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 2 || echo "800")
+SCREEN_WIDTH=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 1 || echo "1280")
+SCREEN_HEIGHT=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 2 || echo "800")
 
 # Fallback to xrandr if fb0 doesn't exist
 if [ "$WIDTH" == "1280" ] && command -v xrandr &> /dev/null; then
     RESOLUTION=$(xrandr 2>/dev/null | grep '*' | awk '{print $1}' | head -n1)
     if [ -n "$RESOLUTION" ]; then
-        WIDTH=$(echo "$RESOLUTION" | cut -d 'x' -f 1)
-        HEIGHT=$(echo "$RESOLUTION" | cut -d 'x' -f 2)
+        SCREEN_WIDTH=$(echo "$RESOLUTION" | cut -d 'x' -f 1)
+        SCREEN_HEIGHT=$(echo "$RESOLUTION" | cut -d 'x' -f 2)
     fi
 fi
 
-echo "📺 Detected resolution: ${WIDTH}x${HEIGHT}"
+echo " resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
 
-# GDK_SCALE is optional - you can set it manually for testing
-# It will work combined with CSS scaling
-# export GDK_SCALE=2
-
-# Pass actual resolution to Python app (UI will auto-scale via CSS)
-export INSTALLER_WIDTH="$WIDTH"
-export INSTALLER_HEIGHT="$HEIGHT"
-echo "📐 Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
 
 # Source device quirks for screen orientation and output
 QUIRKS_FILE="/usr/share/installer/device-quirks"
 if [ -f "$QUIRKS_FILE" ]; then
     echo ""
-    echo "🔍 Loading device quirks..."
+    echo "  Loading device quirks..."
     source "$QUIRKS_FILE"
     echo "   Device: $(cat /sys/class/dmi/id/product_name 2>/dev/null || echo 'Unknown')"
     [ -n "$ORIENTATION" ] && echo "   Orientation: $ORIENTATION"
@@ -97,43 +89,56 @@ if [ -f "$QUIRKS_FILE" ]; then
 fi
 
 # Swap width and height for 90/270 degree rotations
-if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" || "$HEIGHT" -gt "$WIDTH" ]]; then
+if [[ "$ORIENTATION" == "left" || "$ORIENTATION" == "right" || "$SCREEN_HEIGHT" -gt "$SCREEN_WIDTH" ]]; then
     echo ""
     echo "Swapping width/height for ${ORIENTATION} rotation"
-    echo "   Original: ${WIDTH}x${HEIGHT}"
-    TEMP=$WIDTH
-    WIDTH=$HEIGHT
-    HEIGHT=$TEMP
-    echo "   Adjusted: ${WIDTH}x${HEIGHT}"
-    
-    # Recalculate dimensions
-    export INSTALLER_WIDTH="$WIDTH"
-    export INSTALLER_HEIGHT="$HEIGHT"
+    echo "   Original: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+    TEMP=$SCREEN_WIDTH
+    SCREEN_WIDTH=$SCREEN_HEIGHT
+    SCREEN_HEIGHT=$TEMP
+    echo "   Adjusted screen size: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
 fi
 
-INNER_WIDTH=1280
-INNER_HEIGHT=$(awk "BEGIN {printf \"%.0f\", $INSTALLER_HEIGHT * 1280 / $INSTALLER_WIDTH}")
+export SCREEN_WIDTH
+export SCREEN_HEIGHT
+echo "Screen size: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
 
-INNER_WIDTH=""
-INNER_HEIGHT=""
+# INNER_WIDTH=1280
+# INNER_HEIGHT=$(awk "BEGIN {printf \"%.0f\", $INSTALLER_HEIGHT * 1280 / $INSTALLER_WIDTH}")
 
-export INNER_WIDTH
-export INNER_HEIGHT
-echo "   Inner size: ${INNER_WIDTH}x${INNER_HEIGHT}"
+# INNER_WIDTH=""
+# INNER_HEIGHT=""
+
+# export INNER_WIDTH
+# export INNER_HEIGHT
+# echo "   Inner size: ${INNER_WIDTH}x${INNER_HEIGHT}"
 
 # UI_SCALE can be set manually (default: 1.0)
-if [ "$INSTALLER_HEIGHT" -ge 1440 ]; then
+GDK_SCALE=1
+UI_SCALE=1
+if [ "$SCREEN_HEIGHT" -ge 1440 ]; then
     GDK_SCALE=2
-    # UI_SCALE=2.5
-elif [ "$INSTALLER_HEIGHT" -ge 720 ]; then
-    UI_SCALE=$(awk "BEGIN {printf \"%.2f\", $INSTALLER_HEIGHT / 720}")
-else
-    UI_SCALE=1
+elif [ "$SCREEN_HEIGHT" -ge 720 ]; then
+    UI_SCALE=$(awk "BEGIN {printf \"%.2f\", $SCREEN_HEIGHT / 720}")
 fi
 
 export UI_SCALE
 export GDK_SCALE
-echo "   UI scale: ${UI_SCALE}"
+echo "   UI scale: ${UI_SCALE}, GDK scale: ${GDK_SCALE}"
+
+
+if [ "$GDK_SCALE" -gt 1 ]; then
+    INSTALLER_WIDTH=$((SCREEN_WIDTH / GDK_SCALE))
+    INSTALLER_HEIGHT=$((SCREEN_HEIGHT / GDK_SCALE))
+else
+    INSTALLER_WIDTH=$SCREEN_WIDTH
+    INSTALLER_HEIGHT=$SCREEN_HEIGHT
+fi
+
+# Pass actual resolution to Python app (UI will auto-scale via CSS)
+export INSTALLER_WIDTH
+export INSTALLER_HEIGHT
+echo "Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
 
 echo ""
 echo "Starting gamescope with socket detection..."
@@ -183,9 +188,8 @@ echo "Socket created at: $socket"
     echo "=========================================="
     echo "Installer Modular Log - $(date)"
     echo "=========================================="
-    echo "Resolution: ${WIDTH}x${HEIGHT}"
-    echo "INSTALLER_WIDTH: $INSTALLER_WIDTH"
-    echo "INSTALLER_HEIGHT: $INSTALLER_HEIGHT"
+    echo "Resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+    echo "Window size: ${INSTALLER_WIDTH}x${INSTALLER_HEIGHT}"
     echo "UI_SCALE: ${UI_SCALE:-1.0}"
     echo "GDK_SCALE: ${GDK_SCALE:-1}"
     echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"

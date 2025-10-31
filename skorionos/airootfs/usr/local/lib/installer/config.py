@@ -13,10 +13,10 @@ class Config:
     
     def __init__(self):
         # Get screen resolution from environment
-        inner_width = os.environ.get('INSTALLER_WIDTH', '1280')
-        inner_height = os.environ.get('INSTALLER_HEIGHT', '720')
-        self.screen_width = int(inner_width) if inner_width else 1280
-        self.screen_height = int(inner_height) if inner_height else 720
+        self.screen_width = os.environ.get('SCREEN_WIDTH', '1280')
+        self.screen_height = os.environ.get('SCREEN_HEIGHT', '720')
+        self.windows_width = int(os.environ.get('INSTALLER_WIDTH', '1280'))
+        self.windows_height = int(os.environ.get('INSTALLER_HEIGHT', '720'))
         
         # Get scaling factors
         self.gdk_scale = os.environ.get('GDK_SCALE', '1')
@@ -44,7 +44,8 @@ class Config:
         self.device_product = self._read_file('/sys/devices/virtual/dmi/id/product_name')
         self.device_cpu = self._get_cpu_vendor()
         
-        print(f"[CONFIG] Screen: {self.screen_width}x{self.screen_height}")
+        print(f"[CONFIG] Window size: {self.windows_width}x{self.windows_height}")
+        print(f"[CONFIG] Screen size: {self.screen_width}x{self.screen_height}")
         print(f"[CONFIG] GDK_SCALE: {self.gdk_scale}")
         print(f"[CONFIG] UI scale: {self.ui_scale:.2f}x")
         print(f"[CONFIG] Device: {self.device_vendor} {self.device_product} ({self.device_cpu})")

@@ -210,8 +210,8 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Window setup
         self.set_title("SkorionOS Installer PoC")
-        self.set_default_size(config.screen_width, config.screen_height)
-        self.set_size_request(config.screen_width, config.screen_height)  # Force minimum/maximum size
+        self.set_default_size(config.windows_width, config.windows_height)
+        self.set_size_request(config.windows_width, config.windows_height)  # Force minimum/maximum size
         self.set_resizable(False)  # Prevent user resizing
         
         # Navigation state
@@ -541,8 +541,8 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # 5. Screen resolution
         try:
-            width = os.environ.get('SCREEN_WIDTH', config.screen_width)
-            height = os.environ.get('SCREEN_HEIGHT', config.screen_height)
+            width = os.environ.get('SCREEN_WIDTH', config.windows_width)
+            height = os.environ.get('SCREEN_HEIGHT', config.windows_height)
             ui_scale = float(os.environ.get('UI_SCALE', '1.0'))
             gdk_scale = float(os.environ.get('GDK_SCALE', '1.0'))
             total_scale = ui_scale * gdk_scale
