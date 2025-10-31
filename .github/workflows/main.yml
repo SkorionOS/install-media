@@ -38,6 +38,53 @@ jobs:
       - name: Update submodules
         run: git submodule update --init --recursive
 
+      - name: Download UEFI Controller Drivers
+        run: |
+          echo "📥 Downloading UEFI drivers from honjow/UsbXbox360Dxe..."
+          
+          # Get latest release info with GitHub token
+          LATEST_RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/honjow/UsbXbox360Dxe/releases/latest)
+          
+          # Extract all .efi file URLs
+          EFI_URLS=$(echo "$LATEST_RELEASE" | grep -o 'https://[^"]*\.efi')
+          
+          if [ -z "$EFI_URLS" ]; then
+            echo "⚠️  No .efi files found in latest release, skipping..."
+            exit 0
+          fi
+          
+          # Create target directory
+          TARGET_DIR="skorionos/efiboot/EFI/systemd/drivers"
+          mkdir -p "$TARGET_DIR"
+          
+          # Download each .efi file
+          COUNT=0
+          while IFS= read -r url; do
+            if [ -n "$url" ]; then
+              # Extract filename from URL
+              FILENAME=$(basename "$url")
+              echo "Downloading: $FILENAME"
+              
+              if curl -L -o "$TARGET_DIR/$FILENAME" "$url"; then
+                FILE_SIZE=$(stat -c%s "$TARGET_DIR/$FILENAME")
+                echo "  ✅ $FILENAME ($FILE_SIZE bytes)"
+                COUNT=$((COUNT + 1))
+              else
+                echo "  ❌ Failed to download $FILENAME"
+              fi
+            fi
+          done <<< "$EFI_URLS"
+          
+          if [ $COUNT -gt 0 ]; then
+            echo ""
+            echo "✅ Downloaded $COUNT UEFI driver(s) to $TARGET_DIR"
+            ls -lh "$TARGET_DIR"
+          else
+            echo "❌ No drivers were downloaded"
+            exit 1
+          fi
+
       - name: Download Steam Custom
         if: matrix.download_steam_custom
         run: |
