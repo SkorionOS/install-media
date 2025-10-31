@@ -25,6 +25,7 @@ from .ui.pages.version import create_version_page
 from .ui.pages.advanced import create_advanced_options_page
 from .ui.pages.install import create_install_page
 from .ui.pages.complete import CompletePage
+from .ui.pages.message import create_message_page
 
 
 class StatusBar:
@@ -364,6 +365,9 @@ class InstallerApp(Gtk.ApplicationWindow):
         }
         self.use_advanced_options = False  # Toggle for showing advanced page
         
+        # Message page (for warnings/errors)
+        self._message_page = None
+        
         # Setup keyboard/gamepad controller
         self.setup_input_controller()
         
@@ -426,6 +430,7 @@ class InstallerApp(Gtk.ApplicationWindow):
             'advanced': 8,
             'install': 9,
             'complete': 10,
+            'message': 11,  # Generic message/warning/error page
         }
         
         # Convert string to number if needed
@@ -452,6 +457,7 @@ class InstallerApp(Gtk.ApplicationWindow):
             lambda: create_advanced_options_page(self),     # 8: Advanced options
             lambda: create_install_page(self),              # 9: Installation
             lambda: self.create_complete_page(),            # 10: Complete
+            lambda: create_message_page(self),              # 11: Message/warning/error
         ]
         
         if page_num < len(pages):

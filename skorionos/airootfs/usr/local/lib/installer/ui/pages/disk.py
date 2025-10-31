@@ -17,6 +17,7 @@ from ...backend.disk_utils import (
     is_disk_external
 )
 from ..components.base import BasePage, UIComponents
+from .message import MessagePage
 from ...logger import get_logger
 
 logger = get_logger('disk')
@@ -346,28 +347,28 @@ def _show_mode_dialog(app, disk):
 
 def _show_cleanup_dialog(app, disk):
     """Show cleanup dialog for incomplete installation"""
-    dialog = Gtk.MessageDialog(
-        transient_for=app,
-        modal=True,
-        message_type=Gtk.MessageType.WARNING,
-        buttons=Gtk.ButtonsType.OK_CANCEL,
-        text="检测到不完整的 frzr 安装残留"
-    )
-    dialog.set_secondary_text(
-        f"磁盘 /dev/{disk} 上有不完整的 frzr 分区。\n"
-        "这可能是之前安装失败的结果。\n\n"
-        "建议清理残留分区后重新安装。\n"
-        "是否清理残留分区？"
+    # Use MessagePage for unified UI
+    if not hasattr(app, '_message_page') or not app._message_page:
+        app._message_page = MessagePage(app)
+    
+    app._message_page.configure(
+        message_type=MessagePage.TYPE_WARNING,
+        icon="dialog-warning-symbolic",
+        title="检测到不完整的 frzr 安装残留",
+        color="orange",
+        main_msg=f"磁盘 /dev/{disk} 上有不完整的 frzr 分区。",
+        details=[
+            "这可能是之前安装失败的结果。",
+            "建议清理残留分区后重新安装。"
+        ],
+        question="是否清理残留分区？",
+        buttons=[
+            ("取消", "process-stop-symbolic", lambda b: app.go_back(), None),
+            ("清理", "edit-clear-symbolic", lambda b: _show_mode_dialog(app, disk), "suggested-action")
+        ]
     )
     
-    def on_response(dialog, response):
-        dialog.close()
-        if response == Gtk.ResponseType.OK:
-            # User confirmed cleanup - proceed with mode selection
-            _show_mode_dialog(app, disk)
-    
-    dialog.connect("response", on_response)
-    dialog.present()
+    app.show_page('message')
 
 
 def _on_mode_selected(app, dialog, repair_btn, fresh_btn, dual_btn):
@@ -560,85 +561,94 @@ def _on_partition_operation_selected(app, dialog, list_box, shrink_btn, delete_b
 
 def _show_no_disk_error(app):
     """Show error when no disks are available"""
-    dialog = Gtk.MessageDialog(
-        transient_for=app,
-        modal=True,
-        message_type=Gtk.MessageType.ERROR,
-        buttons=Gtk.ButtonsType.OK,
-        text="未找到可用磁盘"
+    # Use MessagePage for unified UI
+    if not hasattr(app, '_message_page') or not app._message_page:
+        app._message_page = MessagePage(app)
+    
+    app._message_page.configure(
+        message_type=MessagePage.TYPE_ERROR,
+        icon="dialog-error-symbolic",
+        title="未找到可用磁盘",
+        color="red",
+        main_msg="系统未检测到任何可用的安装磁盘。",
+        buttons=[
+            ("退出", "application-exit-symbolic", lambda b: app.close(), "destructive-action")
+        ]
     )
-    dialog.set_secondary_text("系统未检测到任何可用的安装磁盘。")
     
-    def on_response(dialog, response):
-        dialog.close()
-        app.close()
-    
-    dialog.connect("response", on_response)
-    dialog.present()
+    app.show_page('message')
 
 
 def _show_error(app, message):
-    """Show error dialog"""
-    dialog = Gtk.MessageDialog(
-        transient_for=app,
-        modal=True,
-        message_type=Gtk.MessageType.ERROR,
-        buttons=Gtk.ButtonsType.OK,
-        text="错误"
+    """Show error page"""
+    # Use MessagePage for unified UI
+    if not hasattr(app, '_message_page') or not app._message_page:
+        app._message_page = MessagePage(app)
+    
+    app._message_page.configure(
+        message_type=MessagePage.TYPE_ERROR,
+        icon="dialog-error-symbolic",
+        title="错误",
+        color="red",
+        main_msg=message,
+        buttons=[
+            ("返回", "go-previous-symbolic", lambda b: app.go_back(), None)
+        ]
     )
-    dialog.set_secondary_text(message)
-    dialog.connect("response", lambda d, r: d.close())
-    dialog.present()
+    
+    app.show_page('message')
 
 
 def _show_disk_too_small_dialog(app, disk):
     """Show error when disk is too small"""
     from ...config import config
     
-    dialog = Gtk.MessageDialog(
-        transient_for=app,
-        modal=True,
-        message_type=Gtk.MessageType.ERROR,
-        buttons=Gtk.ButtonsType.OK,
-        text="磁盘空间不足"
-    )
-    dialog.set_secondary_text(
-        f"磁盘 {disk} 小于 {config.min_disk_size}GB，无法安装 SkorionOS。\n\n"
-        f"SkorionOS 需要至少 {config.min_disk_size}GB 的可用空间。\n"
-        "请选择更大的磁盘。"
+    # Use MessagePage for unified UI
+    if not hasattr(app, '_message_page') or not app._message_page:
+        app._message_page = MessagePage(app)
+    
+    app._message_page.configure(
+        message_type=MessagePage.TYPE_ERROR,
+        icon="dialog-error-symbolic",
+        title="磁盘空间不足",
+        color="red",
+        main_msg=f"磁盘 {disk} 小于 {config.min_disk_size}GB，无法安装 SkorionOS。",
+        details=[
+            f"SkorionOS 需要至少 {config.min_disk_size}GB 的可用空间。",
+            "请选择更大的磁盘。"
+        ],
+        buttons=[
+            ("返回", "go-previous-symbolic", lambda b: app.go_back(), None)
+        ]
     )
     
-    def on_response(dialog, response):
-        dialog.close()
-    
-    dialog.connect("response", on_response)
-    dialog.present()
+    app.show_page('message')
 
 
 def _show_external_disk_warning(app, disk):
     """Show warning when selecting external disk"""
-    dialog = Gtk.MessageDialog(
-        transient_for=app,
-        modal=True,
-        message_type=Gtk.MessageType.WARNING,
-        buttons=Gtk.ButtonsType.YES_NO,
-        text="外部磁盘警告"
-    )
-    dialog.set_secondary_text(
-        f"磁盘 {disk} 似乎是外部设备（USB/SD卡等）。\n\n"
-        "在外部磁盘上安装可能导致：\n"
-        "• 系统性能不佳\n"
-        "• 启动速度缓慢\n"
-        "• 磁盘易损坏或丢失\n\n"
-        "强烈建议安装到内置磁盘。\n\n"
-        "是否仍要继续安装到此磁盘？"
+    # Use MessagePage for unified UI
+    if not hasattr(app, '_message_page') or not app._message_page:
+        app._message_page = MessagePage(app)
+    
+    app._message_page.configure(
+        message_type=MessagePage.TYPE_WARNING,
+        icon="dialog-warning-symbolic",
+        title="外部磁盘警告",
+        color="orange",
+        main_msg=f"磁盘 {disk} 似乎是外部设备（USB/SD卡等）。",
+        details=[
+            "在外部磁盘上安装可能导致：",
+            "• 系统性能不佳",
+            "• 启动速度缓慢",
+            "• 磁盘易损坏或丢失"
+        ],
+        additional='<span foreground="orange" weight="bold">强烈建议安装到内置磁盘。</span>',
+        question="是否仍要继续安装到此磁盘？",
+        buttons=[
+            ("返回", "go-previous-symbolic", lambda b: app.go_back(), None),
+            ("继续", "go-next-symbolic", lambda b: _continue_to_mode_selection(app, disk), "destructive-action")
+        ]
     )
     
-    def on_response(dialog, response):
-        dialog.close()
-        if response == Gtk.ResponseType.YES:
-            # User confirmed, continue with installation
-            _continue_to_mode_selection(app, disk)
-    
-    dialog.connect("response", on_response)
-    dialog.present()
+    app.show_page('message')

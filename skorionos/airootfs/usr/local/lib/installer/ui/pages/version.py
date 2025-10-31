@@ -422,12 +422,24 @@ class VersionPage(BasePage):
                 is_online = self.app.nm.is_online()
             
             if not is_online:
-                # Show error dialog
-                dialog = Gtk.AlertDialog()
-                dialog.set_message("网络连接已断开")
-                dialog.set_detail("在线安装需要稳定的网络连接。请连接网络后重试，或选择本地安装。")
-                dialog.set_buttons(["确定"])
-                dialog.choose(self.app, None, lambda d, r: None)
+                # Show error page using MessagePage
+                from .message import MessagePage
+                if not hasattr(self.app, '_message_page') or not self.app._message_page:
+                    self.app._message_page = MessagePage(self.app)
+                
+                self.app._message_page.configure(
+                    message_type=MessagePage.TYPE_ERROR,
+                    icon="network-error-symbolic",
+                    title="网络连接已断开",
+                    color="red",
+                    main_msg="在线安装需要稳定的网络连接。",
+                    details=["请连接网络后重试，或选择本地安装。"],
+                    buttons=[
+                        ("返回", "go-previous-symbolic", lambda b: self.app.go_back(), None)
+                    ]
+                )
+                
+                self.app.show_page('message')
                 return
         
         target = self._build_target(self.app.version_selections)
