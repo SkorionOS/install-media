@@ -30,32 +30,48 @@ def copy_network_config(mount_path):
     target_dir = f"{mount_path}{sys_conn_dir}"
     
     try:
+        logger.info("Starting network configuration copy")
+        
         # Check if source directory exists and has files
         if not os.path.isdir(sys_conn_dir):
-            print("Source network config directory does not exist")
+            logger.info(f"Source network config directory does not exist: {sys_conn_dir}")
+            print("  没有网络配置需要复制")
             return True  # Not an error, just no config to copy
         
         files = os.listdir(sys_conn_dir)
         if not files:
-            print("No network config files to copy")
+            logger.info("Network config directory is empty")
+            print("  没有网络配置需要复制")
             return True
         
+        logger.info(f"Found {len(files)} network configuration file(s)")
+        print(f"  发现 {len(files)} 个网络配置文件")
+        
         # Create target directory
+        logger.debug(f"Creating target directory: {target_dir}")
         os.makedirs(target_dir, exist_ok=True)
         os.chmod(target_dir, 0o700)
         
         # Copy all files
+        copied_count = 0
         for file in files:
             src = os.path.join(sys_conn_dir, file)
             dst = os.path.join(target_dir, file)
-            shutil.copy2(src, dst)
-            print(f"Copied network config: {file}")
+            try:
+                shutil.copy2(src, dst)
+                logger.debug(f"Copied: {file}")
+                copied_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to copy {file}: {e}")
+                print(f"  [警告] 无法复制配置文件: {file}")
         
-        print(f"Successfully copied {len(files)} network config files")
+        logger.info(f"Successfully copied {copied_count}/{len(files)} network config files")
+        print(f"  ✓ 已复制 {copied_count} 个网络配置文件")
         return True
         
     except Exception as e:
         logger.exception(f"Error copying network config: {e}")
+        print(f"  [错误] 复制网络配置失败: {e}")
         return False
 
 
@@ -71,8 +87,11 @@ def copy_timezone_config(mount_path, timezone=None):
         bool: True if successful, False otherwise
     """
     try:
+        logger.info("Starting timezone configuration copy")
+        
         # Get current timezone if not specified
         if not timezone:
+            logger.debug("Detecting current system timezone")
             result = subprocess.run(
                 ['timedatectl', 'show', '--property=Timezone', '--value'],
                 capture_output=True,
@@ -81,10 +100,13 @@ def copy_timezone_config(mount_path, timezone=None):
             )
             if result.returncode == 0:
                 timezone = result.stdout.strip()
+                logger.debug(f"Detected timezone: {timezone}")
             else:
                 timezone = 'UTC'  # Fallback to UTC
+                logger.warning(f"Failed to detect timezone, using fallback: UTC")
         
-        logger.info(f"Copying timezone config: {timezone}")
+        logger.info(f"Configuring timezone: {timezone}")
+        print(f"  配置时区: {timezone}")
         
         # Method 1: Create symlink (recommended, follows system standard)
         zoneinfo_source = f'/usr/share/zoneinfo/{timezone}'
@@ -93,26 +115,32 @@ def copy_timezone_config(mount_path, timezone=None):
         # Check if timezone file exists
         if not os.path.exists(zoneinfo_source):
             logger.error(f"Timezone file does not exist: {zoneinfo_source}")
+            print(f"  [错误] 时区文件不存在: {zoneinfo_source}")
             return False
         
         # Remove old localtime (may be file or symlink)
         if os.path.exists(localtime_target) or os.path.islink(localtime_target):
+            logger.debug(f"Removing old localtime: {localtime_target}")
             os.remove(localtime_target)
         
         # Create symlink
+        logger.debug(f"Creating symlink: {localtime_target} -> /usr/share/zoneinfo/{timezone}")
         os.symlink(f'/usr/share/zoneinfo/{timezone}', localtime_target)
-        print(f"✓ Set /etc/localtime -> /usr/share/zoneinfo/{timezone}")
+        print(f"  ✓ 设置 /etc/localtime 符号链接")
         
         # Method 2: Write /etc/timezone (some distros need this)
         timezone_file = os.path.join(mount_path, 'etc/timezone')
+        logger.debug(f"Writing timezone file: {timezone_file}")
         with open(timezone_file, 'w') as f:
             f.write(f"{timezone}\n")
-        print(f"✓ Written /etc/timezone: {timezone}")
+        print(f"  ✓ 写入 /etc/timezone 文件")
         
+        logger.info(f"Successfully configured timezone: {timezone}")
         return True
         
     except Exception as e:
         logger.exception(f"Error copying timezone config: {e}")
+        print(f"  [错误] 复制时区配置失败: {e}")
         return False
 
 
@@ -522,7 +550,11 @@ def post_install(mount_path):
         bool: True if successful
     """
     try:
+        logger.info("=== Starting post-installation configuration ===")
+        print("正在扫描系统部署...")
+        
         # List btrfs subvolumes
+        logger.info(f"Listing btrfs subvolumes in {mount_path}")
         result = subprocess.run(
             ['btrfs', 'subvolume', 'list', mount_path],
             capture_output=True,
@@ -530,7 +562,8 @@ def post_install(mount_path):
         )
         
         if result.returncode != 0:
-            print(f"Failed to list btrfs subvolumes: {result.stderr}")
+            logger.error(f"Failed to list btrfs subvolumes: {result.stderr}")
+            print(f"[错误] 无法列出 btrfs 子卷: {result.stderr}")
             return False
         
         # Find deployment subvolumes
@@ -542,57 +575,88 @@ def post_install(mount_path):
                 if parts:
                     deploy_path = parts[-1]
                     deployments.append(deploy_path)
+                    logger.debug(f"Found deployment: {deploy_path}")
         
         if not deployments:
-            print("No deployment subvolumes found")
+            logger.warning("No deployment subvolumes found")
+            print("[警告] 未找到部署子卷")
             return True
         
-        print(f"Found {len(deployments)} deployment(s)")
+        logger.info(f"Found {len(deployments)} deployment(s)")
+        print(f"发现 {len(deployments)} 个系统部署")
         
         # Process each deployment
-        for deploy_subvol in deployments:
-            print(f"Processing deployment: {deploy_subvol}")
+        for idx, deploy_subvol in enumerate(deployments, 1):
+            logger.info(f"Processing deployment {idx}/{len(deployments)}: {deploy_subvol}")
+            print(f"正在优化部署 [{idx}/{len(deployments)}]: {deploy_subvol}")
             deploy_path = os.path.join(mount_path, deploy_subvol)
             
             # Set read-write
-            subprocess.run(
+            logger.debug(f"Setting deployment to read-write: {deploy_path}")
+            result = subprocess.run(
                 ['btrfs', 'property', 'set', '-fts', deploy_path, 'ro', 'false'],
+                capture_output=True,
                 check=False
             )
+            if result.returncode == 0:
+                logger.debug("Successfully set to read-write")
+            else:
+                logger.warning(f"Failed to set read-write: {result.stderr}")
             
             # Modify Steam session file
+            logger.debug("Modifying Steam session file...")
             _modify_steam_session(deploy_path)
             
             # Modify steamos-update script
+            logger.debug("Modifying steamos-update script...")
             _modify_steamos_update(deploy_path)
             
             # Set read-only
-            subprocess.run(
+            logger.debug(f"Setting deployment back to read-only: {deploy_path}")
+            result = subprocess.run(
                 ['btrfs', 'property', 'set', '-fts', deploy_path, 'ro', 'true'],
+                capture_output=True,
                 check=False
             )
+            if result.returncode == 0:
+                logger.debug("Successfully set to read-only")
+                print(f"  ✓ 部署优化完成: {deploy_subvol}")
+            else:
+                logger.warning(f"Failed to set read-only: {result.stderr}")
         
         # Process /source file
         source_file = os.path.join(mount_path, 'source')
         if os.path.exists(source_file):
             try:
+                logger.info("Processing /source file")
+                print("正在处理系统源文件...")
+                
                 with open(source_file, 'r') as f:
-                    content = f.read().strip()
+                    original_content = f.read().strip()
+                
+                logger.debug(f"Original source content: {original_content}")
                 
                 # Remove file extension (e.g., .img)
-                content = re.sub(r'\.[^:]*$', '', content)
+                new_content = re.sub(r'\.[^:]*$', '', original_content)
                 
                 with open(source_file, 'w') as f:
-                    f.write(content)
+                    f.write(new_content)
                 
-                print(f"Processed /source file: {content}")
+                logger.info(f"Processed /source file: {original_content} -> {new_content}")
+                print(f"  ✓ 源文件已更新: {new_content}")
             except Exception as e:
                 logger.exception(f"Error processing /source file: {e}")
+                print(f"[警告] 处理源文件失败: {e}")
+        else:
+            logger.debug(f"Source file not found: {source_file}")
         
+        logger.info("=== Post-installation configuration completed successfully ===")
+        print("系统优化配置完成")
         return True
         
     except Exception as e:
         logger.exception(f"Error in post_install: {e}")
+        print(f"[错误] 系统优化失败: {e}")
         return False
 
 
@@ -604,14 +668,17 @@ def _modify_steam_session(deploy_path):
     )
     
     if not os.path.exists(steam_sessions):
-        print(f"Steam session file not found: {steam_sessions}")
+        logger.warning(f"Steam session file not found: {steam_sessions}")
+        print(f"  [跳过] Steam 会话文件不存在")
         return
     
     try:
+        logger.debug(f"Reading Steam session file: {steam_sessions}")
         with open(steam_sessions, 'r') as f:
             content = f.read()
         
         modified = False
+        modifications = []
         
         # Add -nobootstrapupdate to CLIENTCMD if not already present
         if 'nobootstrapupdate' not in content:
@@ -624,6 +691,10 @@ def _modify_steam_session(deploy_path):
                     f'echo "set_bootstrap=1" >>\n{add_line}'
                 )
                 modified = True
+                modifications.append("添加 nobootstrapupdate 标志")
+                logger.debug("Added nobootstrapupdate flag to Steam session")
+        else:
+            logger.debug("nobootstrapupdate flag already present")
         
         # Add loginusers.vdf check if not present
         if 'loginusers' not in content:
@@ -637,14 +708,23 @@ fi'''
                     f'{add_line_2}\n\nif command -v steam_notif_daemon'
                 )
                 modified = True
+                modifications.append("添加 loginusers.vdf 检查")
+                logger.debug("Added loginusers.vdf check to Steam session")
+        else:
+            logger.debug("loginusers check already present")
         
         if modified:
             with open(steam_sessions, 'w') as f:
                 f.write(content)
-            print(f"Modified Steam session file: {steam_sessions}")
+            logger.info(f"Modified Steam session file: {', '.join(modifications)}")
+            print(f"    • Steam 会话配置: {', '.join(modifications)}")
+        else:
+            logger.debug("Steam session file already configured, no changes needed")
+            print(f"    • Steam 会话配置: 已是最新")
     
     except Exception as e:
         logger.exception(f"Error modifying Steam session file: {e}")
+        print(f"    [错误] 修改 Steam 会话文件失败: {e}")
 
 
 def _modify_steamos_update(deploy_path):
@@ -652,10 +732,12 @@ def _modify_steamos_update(deploy_path):
     steamos_update = os.path.join(deploy_path, 'usr/bin/steamos-update')
     
     if not os.path.exists(steamos_update):
-        print(f"steamos-update script not found: {steamos_update}")
+        logger.warning(f"steamos-update script not found: {steamos_update}")
+        print(f"  [跳过] steamos-update 脚本不存在")
         return
     
     try:
+        logger.debug(f"Reading steamos-update script: {steamos_update}")
         with open(steamos_update, 'r') as f:
             content = f.read()
         
@@ -671,10 +753,18 @@ def _modify_steamos_update(deploy_path):
                 
                 with open(steamos_update, 'w') as f:
                     f.write(content)
-                print(f"Modified steamos-update script: {steamos_update}")
+                logger.info("Added Steam running check to steamos-update script")
+                print(f"    • 系统更新脚本: 添加 Steam 运行检查")
+            else:
+                logger.warning("Target line 'if command -v frzr-deploy' not found in steamos-update")
+                print(f"    [警告] 系统更新脚本: 未找到目标配置行")
+        else:
+            logger.debug("steamos-update script already configured")
+            print(f"    • 系统更新脚本: 已是最新")
     
     except Exception as e:
         logger.exception(f"Error modifying steamos-update script: {e}")
+        print(f"    [错误] 修改系统更新脚本失败: {e}")
 
 
 def verify_boot_config(mount_path, result_code):
