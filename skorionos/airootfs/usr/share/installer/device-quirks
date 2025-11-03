@@ -36,13 +36,26 @@ if [[ ":$OXP_120_LIST:" =~ ":$SYS_ID:" ]]; then
 fi
 
 # OXP X1 series (Left orientation)
-OXP_X1_LIST="ONEXPLAYER X1 i:ONEXPLAYER X1Pro EVA-02:ONEXPLAYER X1Air:ONEXPLAYER X1 A:ONEXPLAYER X1 mini"
+OXP_X1_LIST="ONEXPLAYER X1 i:ONEXPLAYER X1Pro EVA-02:ONEXPLAYER X1Air"
 if [[ ":$OXP_X1_LIST:" =~ ":$SYS_ID:" ]]; then
+  USE_ROTATION_SHADER="1"
+  ORIENTATION="left"
+fi
+
+# OXP X1 A (Left orientation, no shader rotation)
+if [[ ":ONEXPLAYER X1 A:" =~ ":$SYS_ID:" ]]; then
+  ORIENTATION="left"
+fi
+
+# OXP X1 mini (Left orientation, no shader rotation)
+if [[ ":ONEXPLAYER X1 mini:" =~ ":$SYS_ID:" ]]; then
   ORIENTATION="left"
 fi
 
 # OXP G1 (Left orientation)
 if [[ ":$SYS_ID:" =~ :ONEXPLAYER\ G1\ (A|i): ]]; then
+  # Intel version needs shader rotation
+  [[ ":$SYS_ID:" =~ ":ONEXPLAYER G1 i:" ]] && USE_ROTATION_SHADER="1"
   ORIENTATION="left"
 fi
 
@@ -104,6 +117,7 @@ fi
 # GPD Win devices (Right orientation, DSI output)
 GDP_LIST="G1619-01:G1621-02:MicroPC:G1618-03"
 if [[ ":$GDP_LIST:" =~ ":$SYS_ID:" ]]; then
+  USE_ROTATION_SHADER="1"
   ORIENTATION="right"
   OUTPUT_CONNECTOR='*,DSI-1'
 fi

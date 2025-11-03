@@ -13,6 +13,10 @@ echo ""
 REQUIRED_BINS=("gamescope" "python3")
 MISSING_BINS=()
 
+get_gamescope_binary() {
+    command -v gamescope
+}
+
 gamescope_has_option() {
     if ($(get_gamescope_binary) --help 2>&1 | grep -e "$1" > /dev/null); then
         return 0
