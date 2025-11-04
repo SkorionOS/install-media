@@ -3,7 +3,7 @@
 
 iso_name="skorionos${VARIANT_SUFFIX:-}"
 iso_label="SKORIONOS_$(date +%Y%m)"
-iso_publisher="SkorionOS <https://github.com/3003n/SkorionOS>"
+iso_publisher="SkorionOS <https://github.com/SkorionOS/SkorionOS>"
 iso_application="SkorionOS Installer"
 iso_version=$(date +%Y.%m.%d)
 install_dir="arch"

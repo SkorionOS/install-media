@@ -128,6 +128,62 @@ main() {
     rm -rf /tmp/*
     rm -rf /var/tmp/*
     
+    # 清理文档和本地化文件以减小ISO体积
+    log "清理文档文件..."
+    rm -rf /usr/share/doc/* 2>/dev/null || true
+    rm -rf /usr/share/gtk-doc/* 2>/dev/null || true
+    rm -rf /usr/share/info/* 2>/dev/null || true
+    
+    log "清理多余的本地化文件（保留中文和英文）..."
+    # 只保留中文(zh)和英文(en)本地化，删除其他语言
+    find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+        ! -name 'zh_*' ! -name 'zh' ! -name 'en_*' ! -name 'en' ! -name 'locale.alias' \
+        -exec rm -rf {} + 2>/dev/null || true
+    
+    log "清理多余的 man 手册页（保留英文）..."
+    # 只保留英文 man 页面的核心部分
+    find /usr/share/man -mindepth 1 -maxdepth 1 -type d \
+        ! -name 'man[1-9]' ! -name 'man[1-9]p' \
+        -exec rm -rf {} + 2>/dev/null || true
+    
+    log "清理静态库和 libtool 文件..."
+    # 删除静态库（.a 文件）- Live CD 不需要编译链接
+    find /usr/lib -name "*.a" -delete 2>/dev/null || true
+    # 删除 libtool 文件（.la 文件）- 现代系统不需要
+    find /usr/lib -name "*.la" -delete 2>/dev/null || true
+    
+    log "清理图标缓存和无用主题..."
+    # 删除图标缓存（会自动重建）
+    find /usr/share/icons -name "icon-theme.cache" -delete 2>/dev/null || true
+    # 只保留需要的图标主题，删除其他（根据实际使用调整）
+    # Adwaita 是 GTK4 必需的，保留
+    cd /usr/share/icons 2>/dev/null && \
+    ls -1 | grep -v "^Adwaita$" | grep -v "^hicolor$" | \
+    xargs -r rm -rf 2>/dev/null || true
+    
+    log "清理字体缓存..."
+    # 删除字体缓存（会自动重建）
+    rm -rf /usr/share/fonts/*/.uuid 2>/dev/null || true
+    rm -rf /var/cache/fontconfig/* 2>/dev/null || true
+    
+    log "清理 systemd 日志和缓存..."
+    # 清理 systemd 日志
+    rm -rf /var/log/journal/* 2>/dev/null || true
+    # 清理 systemd 缓存
+    rm -rf /var/lib/systemd/catalog/database 2>/dev/null || true
+    
+    log "清理 Python 字节码..."
+    # 删除所有 Python 缓存和字节码
+    find /usr -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+    find /usr -type f -name "*.pyc" -delete 2>/dev/null || true
+    find /usr -type f -name "*.pyo" -delete 2>/dev/null || true
+    
+    log "清理编译器缓存和临时文件..."
+    # 清理 GCC 预编译头文件
+    find /usr -type f -name "*.gch" -delete 2>/dev/null || true
+    # 清理备份文件
+    find /usr -type f \( -name "*~" -o -name "*.bak" -o -name "*.orig" \) -delete 2>/dev/null || true
+    
     # 清理日志文件（可选）
     # truncate -s 0 /var/log/*.log 2>/dev/null || true
     
