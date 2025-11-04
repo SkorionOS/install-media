@@ -92,37 +92,22 @@ if [ -f /boot/initramfs-linux-skchos.img ]; then
         bash /usr/local/bin/optimize-initramfs.sh || echo "Optimizer failed"
     fi
     
-    # Rebuild initramfs without firmware to save space
-    echo "Rebuilding initramfs without firmware..."
+    # Firmware optimization is DISABLED
+    # Reason: Cannot find a way to reduce initramfs size without breaking GPU
+    # - Removing all firmware breaks GPU (tested)
+    # - Selective removal doesn't work (mkinitcpio auto-fetches from cache)
+    # 
+    # Accept the 200MB increase from new kernel, use .iso.xz compression for releases
     
-    # Temporarily exclude firmware directory
-    if [ -d /usr/lib/firmware ]; then
-        mv /usr/lib/firmware /usr/lib/firmware.backup
-        echo "Firmware temporarily moved"
-    fi
+    echo "⚠️ Initramfs firmware optimization: DISABLED"
+    echo "New kernel (6.17.7) includes 143M firmware in initramfs (vs 32M in old kernel)"
+    echo "This is expected and ensures hardware compatibility"
     
-    # Regenerate initramfs
-    mkinitcpio -P 2>&1 | tail -20
-    
-    # Restore firmware
-    if [ -d /usr/lib/firmware.backup ]; then
-        mv /usr/lib/firmware.backup /usr/lib/firmware
-        echo "Firmware restored"
-    fi
-    
-    # Show new size
+    # Show final initramfs size
     if [ -f /boot/initramfs-linux-skchos.img ]; then
-        NEW_SIZE=$(du -h /boot/initramfs-linux-skchos.img | cut -f1)
-        echo "Optimized initramfs size: $NEW_SIZE"
-        echo "Size reduction: $(echo "$INITRAMFS_SIZE -> $NEW_SIZE")"
+        FINAL_SIZE=$(du -h /boot/initramfs-linux-skchos.img | cut -f1)
+        echo "Final initramfs size: $FINAL_SIZE"
     fi
-fi
-
-if [ -f /boot/initramfs-linux-skchos-fallback.img ]; then
-    FALLBACK_SIZE=$(du -h /boot/initramfs-linux-skchos-fallback.img | cut -f1)
-    echo "⚠️  WARNING: Fallback initramfs exists! Size: $FALLBACK_SIZE"
-    echo "Removing fallback to save space..."
-    rm -f /boot/initramfs-linux-skchos-fallback.img
 fi
 
 echo "============================"
