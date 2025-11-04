@@ -19,6 +19,7 @@ file_permissions=(
   ["/root/install.sh"]="0:0:755"
   ["/root/install-init.sh"]="0:0:755"
   ["/root/.automated_script.sh"]="0:0:755"
+  ["/root/customize_airootfs.sh"]="0:0:755"
   ["/root/bin"]="0:0:755"
   ["/root/bin/update-frzr"]="0:0:755"
   ["/usr/local/bin/choose-mirror"]="0:0:755"

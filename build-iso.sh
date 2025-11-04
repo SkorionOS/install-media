@@ -109,6 +109,17 @@ sed "s|LOCAL_REPO|$LOCAL_REPO|g" $script_dir/pacman.conf.template > $script_dir/
 # make the container build the iso
 mkarchiso -v -w "${temp_dir}" -o "${output_dir}" "${script_dir}"
 
+# Copy build_info.txt from the built airootfs to output directory
+echo "Copying package list to output directory..."
+if [ -f "${temp_dir}/x86_64/airootfs/root/build_info.txt" ]; then
+    cp "${temp_dir}/x86_64/airootfs/root/build_info.txt" "${output_dir}/"
+    echo "Package list copied successfully"
+    cat "${output_dir}/build_info.txt" | head -n 10
+    echo "... (showing first 10 packages)"
+else
+    echo "Warning: build_info.txt not found in airootfs"
+fi
+
 # allow git command to work
 git config --global --add safe.directory "${work_dir}"
 
