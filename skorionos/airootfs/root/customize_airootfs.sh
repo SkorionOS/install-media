@@ -92,22 +92,52 @@ if [ -f /boot/initramfs-linux-skchos.img ]; then
         bash /usr/local/bin/optimize-initramfs.sh || echo "Optimizer failed"
     fi
     
-    # Rebuild initramfs without firmware to save space
-    echo "Rebuilding initramfs without firmware..."
+    # Optimize initramfs by rebuilding with selective firmware
+    # Key insight: Must move entire /usr/lib/firmware directory, not just subdirectories
+    # Otherwise mkinitcpio will auto-fetch firmware from pacman cache
     
-    # Temporarily exclude firmware directory
+    echo "Optimizing initramfs - keeping only GPU and critical firmware..."
+    
     if [ -d /usr/lib/firmware ]; then
+        # Move ALL firmware temporarily
         mv /usr/lib/firmware /usr/lib/firmware.backup
-        echo "Firmware temporarily moved"
-    fi
-    
-    # Regenerate initramfs
-    mkinitcpio -P 2>&1 | tail -20
-    
-    # Restore firmware
-    if [ -d /usr/lib/firmware.backup ]; then
+        
+        # Recreate firmware directory with ONLY essential firmware
+        mkdir -p /usr/lib/firmware
+        
+        echo "Restoring critical firmware for initramfs..."
+        # GPU firmware (REQUIRED for graphics - tested)
+        [ -d /usr/lib/firmware.backup/nvidia ] && cp -r /usr/lib/firmware.backup/nvidia /usr/lib/firmware/
+        [ -d /usr/lib/firmware.backup/amdgpu ] && cp -r /usr/lib/firmware.backup/amdgpu /usr/lib/firmware/
+        [ -d /usr/lib/firmware.backup/radeon ] && cp -r /usr/lib/firmware.backup/radeon /usr/lib/firmware/
+        [ -d /usr/lib/firmware.backup/i915 ] && cp -r /usr/lib/firmware.backup/i915 /usr/lib/firmware/
+        
+        # Intel graphics firmware
+        if [ -d /usr/lib/firmware.backup/intel ]; then
+            mkdir -p /usr/lib/firmware/intel
+            # Copy non-WiFi Intel firmware
+            find /usr/lib/firmware.backup/intel -maxdepth 1 -type f -exec cp {} /usr/lib/firmware/intel/ \; 2>/dev/null || true
+            # Copy Intel GPU-related directories but skip iwlwifi
+            for dir in /usr/lib/firmware.backup/intel/*/; do
+                dirname=$(basename "$dir")
+                if [ "$dirname" != "iwlwifi" ]; then
+                    cp -r "$dir" /usr/lib/firmware/intel/ 2>/dev/null || true
+                fi
+            done
+        fi
+        
+        KEPT_SIZE=$(du -sh /usr/lib/firmware 2>/dev/null | cut -f1)
+        echo "Firmware kept for initramfs: $KEPT_SIZE (GPU + critical drivers)"
+        
+        # Regenerate initramfs with minimal firmware
+        echo "Regenerating initramfs..."
+        mkinitcpio -P 2>&1 | tail -20
+        
+        # Restore ALL firmware for runtime use
+        echo "Restoring all firmware for runtime..."
+        rm -rf /usr/lib/firmware
         mv /usr/lib/firmware.backup /usr/lib/firmware
-        echo "Firmware restored"
+        echo "All firmware available for runtime"
     fi
     
     # Show new size
