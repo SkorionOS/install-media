@@ -26,6 +26,7 @@ file_permissions=(
   ["/usr/local/bin/Installation_guide"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   ["/usr/local/bin/cleanup-packages.sh"]="0:0:755"
+  ["/usr/local/bin/optimize-initramfs.sh"]="0:0:755"
   ["/usr/local/bin/installer-poc"]="0:0:755"
   ["/usr/local/bin/installer-poc.py"]="0:0:755"
   ["/usr/local/bin/installer-modular"]="0:0:755"

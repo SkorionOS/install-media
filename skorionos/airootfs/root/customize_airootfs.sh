@@ -78,6 +78,27 @@ pacman -Qi | awk '
 echo "--- Kernel package info ---"
 pacman -Qi linux-skchos 2>/dev/null | grep -E "Name|Version|Installed Size"
 
+echo "--- Boot files size ---"
+ls -lh /boot/ 2>/dev/null || echo "No /boot directory"
+
+echo "--- Initramfs analysis ---"
+if [ -f /boot/initramfs-linux-skchos.img ]; then
+    INITRAMFS_SIZE=$(du -h /boot/initramfs-linux-skchos.img | cut -f1)
+    echo "Initramfs size: $INITRAMFS_SIZE"
+    
+    # Detailed analysis
+    if [ -f /usr/local/bin/optimize-initramfs.sh ]; then
+        echo "Running initramfs optimizer/analyzer..."
+        bash /usr/local/bin/optimize-initramfs.sh || echo "Optimizer failed"
+    fi
+fi
+
+if [ -f /boot/initramfs-linux-skchos-fallback.img ]; then
+    FALLBACK_SIZE=$(du -h /boot/initramfs-linux-skchos-fallback.img | cut -f1)
+    echo "⚠️  WARNING: Fallback initramfs exists! Size: $FALLBACK_SIZE"
+    echo "This should not exist in Live ISO and wastes space!"
+fi
+
 echo "============================"
 
 echo "=================================="

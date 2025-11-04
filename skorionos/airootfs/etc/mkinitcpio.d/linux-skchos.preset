@@ -2,10 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # mkinitcpio preset file for the 'linux' package on archiso
+# Optimized to reduce initramfs size for Live ISO
 
 PRESETS=('archiso')
 
 ALL_kver='/boot/vmlinuz-linux-skchos'
 ALL_config='/etc/mkinitcpio.conf'
 
+# Main initramfs - only include necessary modules
 archiso_image="/boot/initramfs-linux-skchos.img"
+
+# Explicitly disable fallback to save ~100MB
+# fallback_image="/boot/initramfs-linux-skchos-fallback.img"
+# fallback_options="-S autodetect"
