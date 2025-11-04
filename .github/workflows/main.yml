@@ -88,7 +88,7 @@ jobs:
       - name: Download Steam Custom
         if: matrix.download_steam_custom
         run: |
-          TAG="1757452101.1"
+          TAG="1759461205"
           URL="https://github.com/honjow/steam-bootstraplinux/releases/download/${TAG}/steam-bootstraplinux-${TAG}.tar.xz"
           BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"
           BOOTSTRAP_PKG_DIR="skorionos/airootfs/root/packages"
