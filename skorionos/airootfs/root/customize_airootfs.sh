@@ -92,22 +92,47 @@ if [ -f /boot/initramfs-linux-skchos.img ]; then
         bash /usr/local/bin/optimize-initramfs.sh || echo "Optimizer failed"
     fi
     
-    # Rebuild initramfs without firmware to save space
-    echo "Rebuilding initramfs without firmware..."
+    # Optimize initramfs by removing WiFi firmware only (GPU firmware is needed!)
+    echo "Optimizing initramfs - removing WiFi firmware only..."
     
-    # Temporarily exclude firmware directory
     if [ -d /usr/lib/firmware ]; then
-        mv /usr/lib/firmware /usr/lib/firmware.backup
-        echo "Firmware temporarily moved"
-    fi
-    
-    # Regenerate initramfs
-    mkinitcpio -P 2>&1 | tail -20
-    
-    # Restore firmware
-    if [ -d /usr/lib/firmware.backup ]; then
-        mv /usr/lib/firmware.backup /usr/lib/firmware
-        echo "Firmware restored"
+        # Only remove WiFi firmware (not needed for boot)
+        # GPU firmware MUST be kept for graphics initialization
+        mkdir -p /tmp/firmware_removed
+        
+        echo "Removing WiFi firmware (not needed for boot)..."
+        # WiFi firmware - these are large and only needed after system boots
+        [ -d /usr/lib/firmware/intel ] && [ -d /usr/lib/firmware/intel/iwlwifi ] && \
+            mv /usr/lib/firmware/intel/iwlwifi /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/ath10k ] && mv /usr/lib/firmware/ath10k /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/ath11k ] && mv /usr/lib/firmware/ath11k /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/brcm ] && mv /usr/lib/firmware/brcm /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/rtl_nic ] && mv /usr/lib/firmware/rtl_nic /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/rtlwifi ] && mv /usr/lib/firmware/rtlwifi /tmp/firmware_removed/
+        [ -d /usr/lib/firmware/mediatek ] && mv /usr/lib/firmware/mediatek /tmp/firmware_removed/
+        
+        REMOVED_SIZE=$(du -sh /tmp/firmware_removed 2>/dev/null | cut -f1 || echo "0")
+        echo "Removed WiFi firmware: $REMOVED_SIZE"
+        echo "GPU firmware: KEPT (required for graphics)"
+        
+        # Regenerate initramfs
+        echo "Regenerating initramfs..."
+        mkinitcpio -P 2>&1 | tail -20
+        
+        # Restore WiFi firmware for runtime use
+        echo "Restoring WiFi firmware for runtime..."
+        if [ -d /tmp/firmware_removed/iwlwifi ]; then
+            mkdir -p /usr/lib/firmware/intel
+            mv /tmp/firmware_removed/iwlwifi /usr/lib/firmware/intel/
+        fi
+        [ -d /tmp/firmware_removed/ath10k ] && mv /tmp/firmware_removed/ath10k /usr/lib/firmware/
+        [ -d /tmp/firmware_removed/ath11k ] && mv /tmp/firmware_removed/ath11k /usr/lib/firmware/
+        [ -d /tmp/firmware_removed/brcm ] && mv /tmp/firmware_removed/brcm /usr/lib/firmware/
+        [ -d /tmp/firmware_removed/rtl_nic ] && mv /tmp/firmware_removed/rtl_nic /usr/lib/firmware/
+        [ -d /tmp/firmware_removed/rtlwifi ] && mv /tmp/firmware_removed/rtlwifi /usr/lib/firmware/
+        [ -d /tmp/firmware_removed/mediatek ] && mv /tmp/firmware_removed/mediatek /usr/lib/firmware/
+        rm -rf /tmp/firmware_removed
+        echo "WiFi firmware available for runtime"
     fi
     
     # Show new size
