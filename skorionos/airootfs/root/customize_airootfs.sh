@@ -84,19 +84,45 @@ ls -lh /boot/ 2>/dev/null || echo "No /boot directory"
 echo "--- Initramfs analysis ---"
 if [ -f /boot/initramfs-linux-skchos.img ]; then
     INITRAMFS_SIZE=$(du -h /boot/initramfs-linux-skchos.img | cut -f1)
-    echo "Initramfs size: $INITRAMFS_SIZE"
+    echo "Original initramfs size: $INITRAMFS_SIZE"
     
     # Detailed analysis
     if [ -f /usr/local/bin/optimize-initramfs.sh ]; then
         echo "Running initramfs optimizer/analyzer..."
         bash /usr/local/bin/optimize-initramfs.sh || echo "Optimizer failed"
     fi
+    
+    # Rebuild initramfs without firmware to save space
+    echo "Rebuilding initramfs without firmware..."
+    
+    # Temporarily exclude firmware directory
+    if [ -d /usr/lib/firmware ]; then
+        mv /usr/lib/firmware /usr/lib/firmware.backup
+        echo "Firmware temporarily moved"
+    fi
+    
+    # Regenerate initramfs
+    mkinitcpio -P 2>&1 | tail -20
+    
+    # Restore firmware
+    if [ -d /usr/lib/firmware.backup ]; then
+        mv /usr/lib/firmware.backup /usr/lib/firmware
+        echo "Firmware restored"
+    fi
+    
+    # Show new size
+    if [ -f /boot/initramfs-linux-skchos.img ]; then
+        NEW_SIZE=$(du -h /boot/initramfs-linux-skchos.img | cut -f1)
+        echo "Optimized initramfs size: $NEW_SIZE"
+        echo "Size reduction: $(echo "$INITRAMFS_SIZE -> $NEW_SIZE")"
+    fi
 fi
 
 if [ -f /boot/initramfs-linux-skchos-fallback.img ]; then
     FALLBACK_SIZE=$(du -h /boot/initramfs-linux-skchos-fallback.img | cut -f1)
     echo "⚠️  WARNING: Fallback initramfs exists! Size: $FALLBACK_SIZE"
-    echo "This should not exist in Live ISO and wastes space!"
+    echo "Removing fallback to save space..."
+    rm -f /boot/initramfs-linux-skchos-fallback.img
 fi
 
 echo "============================"
