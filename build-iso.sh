@@ -110,7 +110,7 @@ sed "s|LOCAL_REPO|$LOCAL_REPO|g" $script_dir/pacman.conf.template > $script_dir/
 mkarchiso -v -w "${temp_dir}" -o "${output_dir}" "${script_dir}"
 
 # Copy build_info.txt from the built airootfs to output directory
-echo "Copying package list to output directory..."
+echo "Copying package lists to output directory..."
 if [ -f "${temp_dir}/x86_64/airootfs/root/build_info.txt" ]; then
     cp "${temp_dir}/x86_64/airootfs/root/build_info.txt" "${output_dir}/"
     echo "Package list copied successfully"
@@ -118,6 +118,14 @@ if [ -f "${temp_dir}/x86_64/airootfs/root/build_info.txt" ]; then
     echo "... (showing first 10 packages)"
 else
     echo "Warning: build_info.txt not found in airootfs"
+fi
+
+# Copy detailed package list with sizes
+if [ -f "${temp_dir}/x86_64/airootfs/root/build_info_detailed.txt" ]; then
+    cp "${temp_dir}/x86_64/airootfs/root/build_info_detailed.txt" "${output_dir}/"
+    echo "Detailed package list with sizes copied successfully"
+else
+    echo "Warning: build_info_detailed.txt not found in airootfs"
 fi
 
 # allow git command to work

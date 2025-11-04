@@ -135,7 +135,7 @@ jobs:
           path: |
             output/*.iso
             output/sha256sum*.txt
-            output/build_info.txt
+            output/build_info*.txt
 
   release:
     name: Create release
