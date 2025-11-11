@@ -29,15 +29,7 @@ AUR_PACKAGES="\
     frzr-sk \
     gamescope-sk \
     hid-msi-claw-dkms-git \
-    inputplumber-bin \
     pikaur \
-    rtl88x2bu-dkms-git \
-    rtw89-dkms-git \
-    r8152-dkms \
-    rtl8812au-dkms-git \
-    rtl8814au-dkms-git \
-    rtl8821au-dkms-git \
-    rz608-fix-git \
 "
 
 ADDITIONAL_PACKAGES="\
