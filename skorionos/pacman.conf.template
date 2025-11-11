@@ -73,6 +73,10 @@ LocalFileSigLevel = Optional
 #[testing]
 #Include = /etc/pacman.d/mirrorlist
 
+[skorion]
+SigLevel = Optional TrustAll
+Server = https://github.com/SkorionOS/skorion-packages/releases/download/latest
+
 [core]
 Include = /etc/pacman.d/mirrorlist
 

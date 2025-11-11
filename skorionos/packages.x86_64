@@ -45,7 +45,7 @@ zsh
 networkmanager
 
 # Graphical installer dependencies
-gamescope
+gamescope-sk
 gtk4
 libadwaita
 python-gobject
