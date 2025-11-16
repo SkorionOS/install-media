@@ -13,23 +13,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [lite, standard, full]
+        variant: [online, standard]
         include:
-          - variant: lite
+          - variant: online
             download_steam: false
             download_steam_custom: false
-            iso_suffix: "-lite"
-            sha256_name: "sha256sum-lite.txt"
+            iso_suffix: "-online"
+            sha256_name: "sha256sum-online.txt"
           - variant: standard
             download_steam: true
             download_steam_custom: false
             iso_suffix: ""
             sha256_name: "sha256sum.txt"
-          - variant: full
-            download_steam: false
-            download_steam_custom: true
-            iso_suffix: "-full"
-            sha256_name: "sha256sum-full.txt"
+          # - variant: full
+          #   download_steam: false
+          #   download_steam_custom: true
+          #   iso_suffix: "-full"
+          #   sha256_name: "sha256sum-full.txt"
     outputs:
       version: ${{ steps.build_iso.outputs.version }}
       id: ${{ steps.build_iso.outputs.id }}
