@@ -24,17 +24,12 @@ mkdir -p "${temp_dir}"
 
 # add AUR packages to the build
 AUR_PACKAGES="\
-    aic8800d80-dkms \
-    fpaste \
-    frzr-sk \
-    gamescope-sk \
-    hid-msi-claw-dkms-git \
     pikaur \
 "
 
 ADDITIONAL_PACKAGES="\
-    https://github.com/3003n/linux-chimeraos/releases/download/v6.15.9-4/linux-skchos-6.15.9-4-x86_64.pkg.tar.zst	 \
-	https://github.com/3003n/linux-chimeraos/releases/download/v6.15.9-4/linux-skchos-headers-6.15.9-4-x86_64.pkg.tar.zst \
+    https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-114/linux-skchos-6.16.4-114-x86_64.pkg.tar.zst \
+	https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-114/linux-skchos-headers-6.16.4-114-x86_64.pkg.tar.zst \
 "
 
 # create repo directory if it doesn't exist yet
