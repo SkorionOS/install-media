@@ -106,7 +106,7 @@ jobs:
       - name: Download Steam
         if: matrix.download_steam
         run: |
-          URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
+          URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.85-2-x86_64.pkg.tar.zst"
           STM_PKG="steam-jupiter-stable.pkg.tar.zst"
           BOOTSTRAP_PKG="bootstraplinux_ubuntu12_32.tar.xz"
           BOOTSTRAP_PATH="usr/lib/steam/bootstraplinux_ubuntu12_32.tar.xz"

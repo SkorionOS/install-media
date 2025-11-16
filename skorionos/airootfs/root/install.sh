@@ -831,7 +831,7 @@ function grab_steam_bootstrap() {
     fi
   fi
 
-  local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.81-2.6-x86_64.pkg.tar.zst"
+  local STEAM_URL="https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steam-jupiter-stable-1.0.0.85-2-x86_64.pkg.tar.zst"
   local STEAM_TMP_PKG="${tmp_dir}/package.pkg.tar.zst"
 
   if [ ! -f "$STM_PKG" ]; then
