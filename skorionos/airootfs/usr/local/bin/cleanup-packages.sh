@@ -27,7 +27,7 @@ PACKAGES_TO_REMOVE=(
     "pkg-config"
     
     "linux-headers"
-    "linux-skchos-headers"
+    # "linux-skchos-headers"
     "dkms"
     
     # 文档包（如果要减小体积）
