@@ -28,8 +28,8 @@ AUR_PACKAGES="\
 "
 
 ADDITIONAL_PACKAGES="\
-    https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-1/linux-skchos-6.16.4-1-x86_64.pkg.tar.zst \
-	https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-1/linux-skchos-headers-6.16.4-1-x86_64.pkg.tar.zst \
+    https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-101/linux-skchos-6.16.4-101-x86_64.pkg.tar.zst \
+	https://github.com/SkorionOS/linux-skorion/releases/download/v6.16.4-101/linux-skchos-headers-6.16.4-101-x86_64.pkg.tar.zst \
 "
 
 # create repo directory if it doesn't exist yet
