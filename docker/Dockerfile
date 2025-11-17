@@ -12,7 +12,7 @@ RUN pacman-key --init && \
 RUN pacman --noconfirm -S --needed archiso lynx git pyalpm python-commonmark python-markdown-it-py python-wheel python-build python-installer python-setuptools python-hatchling
 RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     useradd build -G wheel -m
-RUN su - build -c "git clone https://github.com/archlinux/aur.git -b pikaur /tmp/pikaur" && \
+RUN su - build -c "git clone https://github.com/archlinux/aur.git --depth 1 -b pikaur /tmp/pikaur" && \
     su - build -c "cd /tmp/pikaur && makepkg -f" && \
     pacman --noconfirm -U /tmp/pikaur/pikaur-*.pkg.tar.zst
 
