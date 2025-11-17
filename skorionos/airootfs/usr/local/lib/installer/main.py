@@ -495,7 +495,7 @@ class InstallerApp(Gtk.ApplicationWindow):
         box.add_css_class("page-container")
         
         # Logo/Icon - Skorion logo
-        logo = Gtk.Image.new_from_file("/usr/share/installer/Skorion.svg")
+        logo = Gtk.Image.new_from_file("/usr/share/installer/SkorionG.svg")
         logo.set_pixel_size(config.scaled(128))
         box.append(logo)
         
