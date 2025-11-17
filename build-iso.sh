@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2086
 
 set -xe
 
@@ -83,7 +84,7 @@ done
 echo "✅ All AUR packages built successfully (${#BUILT_PACKAGES[@]}/$total_packages)"
 
 # copy all built packages to the repo
-cp /tmp/temp_repo/* ${LOCAL_REPO}
+cp -f /tmp/temp_repo/* ${LOCAL_REPO} || true
 
 # download additional packages to the repo
 curl -L --remote-name-all --output-dir ${LOCAL_REPO} ${ADDITIONAL_PACKAGES}
