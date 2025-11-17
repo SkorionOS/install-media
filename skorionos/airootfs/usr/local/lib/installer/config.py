@@ -24,7 +24,7 @@ class Config:
         self.ui_scale = float(ui_scale)
         
         # Version
-        self.version = "3.0.0"
+        self.version = "3.1.0"
         
         # Installation paths
         self.mount_path = "/tmp/frzr_root"
