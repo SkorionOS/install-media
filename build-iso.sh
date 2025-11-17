@@ -24,7 +24,6 @@ mkdir -p "${temp_dir}"
 
 # add AUR packages to the build
 AUR_PACKAGES="\
-    pikaur \
 "
 
 ADDITIONAL_PACKAGES="\
