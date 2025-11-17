@@ -27,7 +27,7 @@ PACKAGES_TO_REMOVE=(
     "pkg-config"
     
     "linux-headers"
-    # "linux-skchos-headers"
+    "linux-skchos-headers"
     "dkms"
     
     # 文档包（如果要减小体积）
@@ -101,6 +101,11 @@ safe_remove_package() {
 # 主清理流程
 main() {
     log "开始卸载指定的包..."
+
+    # delete dkms hooks before removing linux-headers
+    rm -f /usr/share/libalpm/hooks/70-dkms-install.hook
+    rm -f /usr/share/libalpm/hooks/70-dkms-upgrade.hook
+    rm -f /usr/share/libalpm/hooks/71-dkms-remove.hook
     
     # 逐个处理要卸载的包
     for pkg in "${PACKAGES_TO_REMOVE[@]}"; do
