@@ -157,10 +157,46 @@ UNIFIED_LOG="/tmp/frzr.log"  # 统一日志文件
 echo "Logging to: $LOGFILE (and $UNIFIED_LOG)"
 echo ""
 
+########################################################
+# envs
+########################################################
+export INTEL_DEBUG=norbc
+export mesa_glthread=true
+
+if /usr/local/bin/gamescope-sdl-workaround; then
+	# Skip on legacy hardware
+	export ENABLE_GAMESCOPE_WSI=0
+else
+	export ENABLE_GAMESCOPE_WSI=1
+fi
+
+# Force Qt applications to run under xwayland
+export QT_QPA_PLATFORM=xcb
+
+# Some environment variables by default (taken from Deck session)
+export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
+
+# Don't wait for buffers to idle on the client side before sending them to gamescope
+export vk_xwayland_wait_ready=false
+
+# Handle Nvidia GPUs
+if lsmod | grep -q '^nvidia'; then
+    # https://github.com/ValveSoftware/gamescope/pull/1671
+    export GAMESCOPE_WSI_HIDE_PRESENT_WAIT_EXT=1
+    export ENABLE_GAMESCOPE_HDR=1
+fi
+
+
+########################################################
+# gamescope command
+########################################################
+
 # Build gamescope command with device-specific options
 GAMESCOPE_CMD="gamescope \
   -f \
   -F fsr \
+  --xwayland-count 2 \
+  --default-touch-mode 4 \
   --force-grab-cursor \
   --expose-wayland \
   "
