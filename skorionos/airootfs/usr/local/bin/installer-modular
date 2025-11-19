@@ -4,6 +4,9 @@
 
 set -e
 
+# Configuration
+GAMESCOPE_STARTUP_TIMEOUT=30  # Seconds to wait for gamescope startup
+
 echo "=========================================="
 echo "SkorionOS Installer - Modular Version"
 echo "=========================================="
@@ -66,7 +69,7 @@ SCREEN_WIDTH=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ','
 SCREEN_HEIGHT=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null | cut -d ',' -f 2 || echo "800")
 
 # Fallback to xrandr if fb0 doesn't exist
-if [ "$WIDTH" == "1280" ] && command -v xrandr &> /dev/null; then
+if [ "$SCREEN_WIDTH" == "1280" ] && command -v xrandr &> /dev/null; then
     RESOLUTION=$(xrandr 2>/dev/null | grep '*' | awk '{print $1}' | head -n1)
     if [ -n "$RESOLUTION" ]; then
         SCREEN_WIDTH=$(echo "$RESOLUTION" | cut -d 'x' -f 1)
@@ -232,10 +235,10 @@ echo "Socket created at: $socket"
     gamescope_pid=$!
     
     echo "Gamescope started with PID: $gamescope_pid"
-    echo "Waiting for socket response (timeout: 15s)..."
+    echo "Waiting for socket response (timeout: ${GAMESCOPE_STARTUP_TIMEOUT}s)..."
     
-    # Check socket (15 second timeout)
-    if read -r -t 15 response_x_display response_wl_display <> "$socket"; then
+    # Check socket with timeout
+    if read -r -t $GAMESCOPE_STARTUP_TIMEOUT response_x_display response_wl_display <> "$socket"; then
         export DISPLAY="$response_x_display"
         export GAMESCOPE_WAYLAND_DISPLAY="$response_wl_display"
         echo "✅ Gamescope started successfully"
@@ -247,7 +250,14 @@ echo "Socket created at: $socket"
         wait $gamescope_pid
         EXIT_CODE=$?
     else
-        echo "❌ Gamescope failed to start within 15 seconds"
+        echo "❌ Gamescope failed to start within ${GAMESCOPE_STARTUP_TIMEOUT} seconds"
+        echo ""
+        echo "Possible solutions:"
+        echo "  1. Check if your GPU supports Vulkan: vulkaninfo"
+        echo "  2. Check DRM devices: ls -la /dev/dri/"
+        echo "  3. Review the log file: $LOGFILE"
+        echo "  4. Try running 'gamescope --help' to verify installation"
+        echo ""
         echo "   Killing gamescope process..."
         kill -9 $gamescope_pid 2>/dev/null
         wait $gamescope_pid 2>/dev/null
@@ -264,4 +274,7 @@ echo "Socket created at: $socket"
     
     exit $EXIT_CODE
 } 2>&1 | tee "$LOGFILE" | tee -a "$UNIFIED_LOG"
+
+# Preserve exit code from the command block (not from tee)
+exit ${PIPESTATUS[0]}
 
