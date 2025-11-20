@@ -160,4 +160,68 @@ jobs:
           prerelease: true
           fail_on_unmatched_files: true
           generate_release_notes: true
+          body: |
+            ## 📀 Installation Media Variants
+            
+            This release provides two variants of the installation media:
+            
+            ### 🌐 Online Version (`*-online.iso`)
+            - **Steam Bootstrap**: Requires online download during installation
+            - **System Image**: Not included, must be downloaded online or provided offline
+            - **Size**: Smaller download (~smaller ISO size)
+            - **Best for**: Users with stable internet connection
+            
+            ### 📦 Standard Version (`*.iso`)
+            - **Steam Bootstrap**: Pre-bundled in the ISO
+            - **System Image**: Not included, must be downloaded online or provided offline
+            - **Size**: Larger download (~includes Steam bootstrap)
+            - **Best for**: Faster installation or unreliable network access
+            
+            ## 💿 System Image Installation Options
+            
+            Both variants require a system image for installation:
+            
+            1. **Online Installation**: System image will be downloaded automatically during installation (requires internet)
+            2. **Offline Installation**: 
+               - Download the system image from: https://github.com/SkorionOS/skorionos/releases/latest
+               - Place it in `FRZR_UPDATE/` directory at the root of a readable drive
+               - The installer will detect and use it automatically
+            
+            ## 📋 Release Files
+            - `skorionos-*.iso` - Installation media
+            - `sha256sum*.txt` - Checksums for verification
+            - `build_info*.txt` - Build metadata
+            
+            ---
+            
+            ## 📀 安装介质版本说明
+            
+            本次发布提供两个版本的安装介质：
+            
+            ### 🌐 在线版本 (`*-online.iso`)
+            - **Steam 引导文件**：安装过程中需要在线下载
+            - **系统镜像**：未包含，需要在线下载或提供离线镜像
+            - **大小**：较小的下载体积
+            - **适合**：网络连接稳定的用户
+            
+            ### 📦 标准版本 (`*.iso`)
+            - **Steam 引导文件**：已内置在 ISO 中
+            - **系统镜像**：未包含，需要在线下载或提供离线镜像
+            - **大小**：较大的下载体积
+            - **适合**：希望更快安装或网络不稳定的用户
+            
+            ## 💿 系统镜像安装方式
+            
+            两个版本都需要系统镜像才能完成安装：
+            
+            1. **在线安装**：安装过程中自动下载系统镜像（需要互联网连接）
+            2. **离线安装**：
+               - 从此处下载系统镜像：https://github.com/SkorionOS/skorionos/releases/latest
+               - 将镜像文件放置在可读取驱动器根目录的 `FRZR_UPDATE/` 目录中
+               - 安装程序将自动检测并使用
+            
+            ## 📋 发布文件
+            - `skorionos-*.iso` - 安装介质文件
+            - `sha256sum*.txt` - 校验和文件
+            - `build_info*.txt` - 构建元数据
           files: artifacts/*
