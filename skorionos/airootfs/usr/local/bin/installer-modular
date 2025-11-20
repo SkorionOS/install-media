@@ -195,10 +195,7 @@ fi
 GAMESCOPE_CMD="gamescope \
   -f \
   -F fsr \
-  --xwayland-count 2 \
-  --default-touch-mode 4 \
   --force-grab-cursor \
-  --expose-wayland \
   "
 
 # Add device-specific options
