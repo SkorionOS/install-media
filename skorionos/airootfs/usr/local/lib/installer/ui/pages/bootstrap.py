@@ -288,6 +288,78 @@ class BootstrapPage(ExecutionPage):
         self.append_log("\n点击下方「继续」按钮进入下一步\n")
         return False
     
+    def on_cancel_clicked(self, button):
+        """Handle cancel button click during bootstrap - clean up and go back."""
+        if not self.is_executing:
+            self.app.go_back()
+            return
+        
+        # Show cancellation in progress
+        GLib.idle_add(self.update_status, '<span size="large">正在取消初始化...</span>')
+        GLib.idle_add(self.append_log, "\n" + "="*60 + "\n")
+        GLib.idle_add(self.append_log, "用户请求取消磁盘初始化\n")
+        GLib.idle_add(self.append_log, "="*60 + "\n\n")
+        
+        # Execute cleanup in background thread
+        def cleanup_thread():
+            try:
+                # 1. Terminate bootstrap process if exists
+                if hasattr(self, 'bootstrap_process') and self.bootstrap_process:
+                    try:
+                        if self.bootstrap_process.poll() is None:
+                            GLib.idle_add(self.append_log, "正在终止 frzr-bootstrap 进程...\n")
+                            self.bootstrap_process.terminate()
+                            try:
+                                self.bootstrap_process.wait(timeout=5)
+                                GLib.idle_add(self.append_log, "✓ 进程已终止\n")
+                            except subprocess.TimeoutExpired:
+                                self.bootstrap_process.kill()
+                                self.bootstrap_process.wait()
+                                GLib.idle_add(self.append_log, "✓ 进程已强制终止\n")
+                    except Exception as e:
+                        GLib.idle_add(self.append_log, f"[警告] 进程终止出错: {e}\n")
+                
+                # 2. Wait for process to release resources
+                import time
+                time.sleep(2)
+                
+                # 3. Check and cleanup mounts if they exist
+                GLib.idle_add(self.append_log, "\n检查挂载状态...\n")
+                result = subprocess.run(['mount'], capture_output=True, text=True)
+                
+                if '/tmp/frzr_root' in result.stdout:
+                    GLib.idle_add(self.append_log, "发现未完成的挂载点，正在清理...\n")
+                    self._cleanup_mounts()
+                else:
+                    GLib.idle_add(self.append_log, "未发现挂载点，跳过清理\n")
+                
+                # 4. Reset state flags
+                self.is_executing = False
+                self.execution_completed = False
+                self.execution_failed = False
+                
+                # Clear bootstrap_completed flag to allow restart
+                if hasattr(self.app, 'bootstrap_completed'):
+                    delattr(self.app, 'bootstrap_completed')
+                
+                GLib.idle_add(self.append_log, "\n" + "="*60 + "\n")
+                GLib.idle_add(self.append_log, "清理完成\n")
+                GLib.idle_add(self.append_log, "="*60 + "\n\n")
+                GLib.idle_add(self.append_log, "[提示] 磁盘可能处于部分初始化状态\n")
+                GLib.idle_add(self.append_log, "建议：重新选择「全新安装」模式来完全重新初始化磁盘\n")
+                
+                # Show cancelled completion page
+                GLib.idle_add(self._show_cancelled_page)
+                
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"\n[错误] 清理过程出错: {e}\n")
+                GLib.idle_add(self._show_cancelled_page)
+        
+        # Start cleanup thread
+        import threading
+        cleanup_thread_obj = threading.Thread(target=cleanup_thread, daemon=True)
+        cleanup_thread_obj.start()
+    
     def on_continue_clicked(self, button):
         """Navigate to version selection page after successful bootstrap."""
         self.app.show_page('version')
@@ -319,6 +391,68 @@ class BootstrapPage(ExecutionPage):
         
         self.continue_btn.set_visible(True)
         
+        return False
+    
+    def _cleanup_mounts(self):
+        """Unmount frzr_root mounts if they exist."""
+        mount_path = config.mount_path
+        
+        # Unmount in reverse order (deepest first)
+        mount_points = [
+            f"{mount_path}/boot/efi",
+            f"{mount_path}/boot",
+            mount_path
+        ]
+        
+        for mount_point in mount_points:
+            try:
+                # Check if mounted
+                result = subprocess.run(
+                    ['mountpoint', '-q', mount_point],
+                    timeout=2
+                )
+                
+                if result.returncode == 0:  # Is mounted
+                    GLib.idle_add(self.append_log, f"  卸载: {mount_point}\n")
+                    
+                    # Sync to ensure data is written
+                    subprocess.run(['sync'], timeout=5)
+                    
+                    # Try normal unmount
+                    result = subprocess.run(
+                        ['umount', mount_point],
+                        timeout=10,
+                        capture_output=True
+                    )
+                    
+                    if result.returncode == 0:
+                        GLib.idle_add(self.append_log, f"  ✓ 已卸载\n")
+                    else:
+                        # Force unmount
+                        GLib.idle_add(self.append_log, f"  使用强制卸载...\n")
+                        subprocess.run(['umount', '-f', mount_point], timeout=5)
+                        GLib.idle_add(self.append_log, f"  ✓ 已强制卸载\n")
+            
+            except subprocess.TimeoutExpired:
+                # Use lazy unmount as last resort
+                try:
+                    subprocess.run(['umount', '-l', mount_point])
+                    GLib.idle_add(self.append_log, f"  ⚠ 使用 lazy unmount: {mount_point}\n")
+                except:
+                    pass
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"  [跳过] {mount_point}: {str(e)}\n")
+        
+        GLib.idle_add(self.append_log, "✓ 挂载点清理完成\n\n")
+    
+    def _show_cancelled_page(self):
+        """Show cancelled completion page."""
+        from .complete import CompletePage
+        self.app.show_complete_page(
+            CompletePage.STATUS_CANCELLED,
+            "磁盘初始化已取消",
+            "您可以重新开始安装流程"
+        )
         return False
 
 

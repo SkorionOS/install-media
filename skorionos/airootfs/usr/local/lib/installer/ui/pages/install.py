@@ -74,11 +74,67 @@ class InstallPage(ExecutionPage):
         self.start_execution()
     
     def on_cancel_clicked(self, button):
-        """Handle cancel button click - go back to previous page."""
-        if self.is_executing and self.install_process:
-            # TODO: Implement process termination
-            pass
-        self.app.go_back()
+        """Handle cancel button click - terminate process and clean up."""
+        if not self.is_executing:
+            self.app.go_back()
+            return
+        
+        # Show cancellation in progress
+        GLib.idle_add(self.update_status, '<span size="large">正在取消安装...</span>')
+        GLib.idle_add(self.append_log, "\n" + "="*60 + "\n")
+        GLib.idle_add(self.append_log, "用户请求取消安装\n")
+        GLib.idle_add(self.append_log, "="*60 + "\n\n")
+        
+        # Execute cleanup in background thread
+        def cleanup_thread():
+            try:
+                # 1. Terminate process
+                self._terminate_process()
+                
+                # 2. Wait for process to release file handles
+                import time
+                time.sleep(3)
+                
+                # 3. Clean up mounts (allows frzr-deploy to remount on retry)
+                GLib.idle_add(self.append_log, "正在清理挂载点...\n")
+                self._cleanup_mounts()
+                
+                # 4. Clean up partial deployment
+                GLib.idle_add(self.append_log, "正在清理未完成的系统部署...\n")
+                self._cleanup_partial_deployment()
+                
+                # 5. Clean up temporary files
+                GLib.idle_add(self.append_log, "正在清理临时文件...\n")
+                self._cleanup_temp_files()
+                
+                # 6. Reset state flags
+                self.is_executing = False
+                self.execution_completed = False
+                self.execution_failed = False
+                self.install_process = None
+                
+                # Clear install_completed flag to allow retry
+                if hasattr(self.app, 'install_completed'):
+                    delattr(self.app, 'install_completed')
+                
+                GLib.idle_add(self.append_log, "\n" + "="*60 + "\n")
+                GLib.idle_add(self.append_log, "清理完成，您可以选择：\n")
+                GLib.idle_add(self.append_log, "• 重试安装 - frzr-deploy 会自动重新挂载磁盘\n")
+                GLib.idle_add(self.append_log, "• 返回重新配置安装选项\n")
+                GLib.idle_add(self.append_log, "• 退出安装程序\n")
+                GLib.idle_add(self.append_log, "="*60 + "\n")
+                
+                # Show retry UI
+                GLib.idle_add(self._show_retry_ui)
+                
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"\n[错误] 清理过程出错: {e}\n")
+                GLib.idle_add(self._show_retry_ui)
+        
+        # Start cleanup thread
+        import threading
+        cleanup_thread_obj = threading.Thread(target=cleanup_thread, daemon=True)
+        cleanup_thread_obj.start()
     
     def execute(self):
         """Execute the actual installation process."""
@@ -457,6 +513,199 @@ class InstallPage(ExecutionPage):
         
         if self.continue_btn:
             self.continue_btn.set_visible(True)
+        
+        return False
+    
+    def _terminate_process(self):
+        """Terminate frzr-deploy process."""
+        if self.install_process and self.install_process.poll() is None:
+            try:
+                GLib.idle_add(self.append_log, "正在终止 frzr-deploy 进程...\n")
+                self.install_process.terminate()
+                try:
+                    self.install_process.wait(timeout=5)
+                    GLib.idle_add(self.append_log, "✓ 进程已优雅终止\n")
+                except subprocess.TimeoutExpired:
+                    GLib.idle_add(self.append_log, "进程未响应，强制终止...\n")
+                    self.install_process.kill()
+                    self.install_process.wait()
+                    GLib.idle_add(self.append_log, "✓ 进程已强制终止\n")
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"[警告] 进程终止出错: {e}\n")
+    
+    def _cleanup_mounts(self):
+        """Unmount all frzr_root mounts - allows frzr-deploy to remount on retry."""
+        mount_path = config.mount_path
+        
+        # Unmount in reverse order (deepest first)
+        mount_points = [
+            f"{mount_path}/boot/efi",
+            f"{mount_path}/boot",
+            mount_path
+        ]
+        
+        for mount_point in mount_points:
+            try:
+                # Check if mounted
+                result = subprocess.run(
+                    ['mountpoint', '-q', mount_point],
+                    timeout=2
+                )
+                
+                if result.returncode == 0:  # Is mounted
+                    GLib.idle_add(self.append_log, f"  卸载: {mount_point}\n")
+                    
+                    # Sync to ensure data is written
+                    subprocess.run(['sync'], timeout=5)
+                    
+                    # Try normal unmount
+                    result = subprocess.run(
+                        ['umount', mount_point],
+                        timeout=10,
+                        capture_output=True
+                    )
+                    
+                    if result.returncode == 0:
+                        GLib.idle_add(self.append_log, f"  ✓ 已卸载\n")
+                    else:
+                        # Force unmount
+                        GLib.idle_add(self.append_log, f"  使用强制卸载...\n")
+                        subprocess.run(['umount', '-f', mount_point], timeout=5)
+                        GLib.idle_add(self.append_log, f"  ✓ 已强制卸载\n")
+            
+            except subprocess.TimeoutExpired:
+                # Use lazy unmount as last resort
+                try:
+                    subprocess.run(['umount', '-l', mount_point])
+                    GLib.idle_add(self.append_log, f"  ⚠ 使用 lazy unmount: {mount_point}\n")
+                except:
+                    pass
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"  [跳过] {mount_point}: {str(e)}\n")
+        
+        GLib.idle_add(self.append_log, "✓ 挂载点清理完成\n\n")
+    
+    def _cleanup_partial_deployment(self):
+        """Clean up partially created btrfs subvolumes."""
+        mount_path = config.mount_path
+        
+        try:
+            # Check if mount path is still mounted
+            result = subprocess.run(['mountpoint', '-q', mount_path])
+            if result.returncode != 0:
+                GLib.idle_add(self.append_log, "  磁盘已卸载，跳过子卷清理\n\n")
+                return
+            
+            # List all deployment subvolumes
+            result = subprocess.run(
+                ['btrfs', 'subvolume', 'list', mount_path],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and result.stdout:
+                # Find incomplete deployments (exclude currently running system)
+                current_release = None
+                try:
+                    current_release = subprocess.run(
+                        ['frzr-release'],
+                        capture_output=True,
+                        text=True,
+                        timeout=2
+                    ).stdout.strip()
+                except:
+                    pass
+                
+                deleted_count = 0
+                for line in result.stdout.split('\n'):
+                    if 'deployments/' in line:
+                        parts = line.split()
+                        if parts:
+                            subvol_path = parts[-1]
+                            full_path = f"{mount_path}/{subvol_path}"
+                            
+                            # Don't delete currently running system
+                            if current_release and current_release in subvol_path:
+                                continue
+                            
+                            try:
+                                GLib.idle_add(self.append_log, f"  删除未完成的部署: {subvol_path}\n")
+                                # Set to read-write
+                                subprocess.run(
+                                    ['btrfs', 'property', 'set', '-fts', full_path, 'ro', 'false'],
+                                    timeout=5
+                                )
+                                # Delete subvolume
+                                subprocess.run(
+                                    ['btrfs', 'subvolume', 'delete', full_path],
+                                    timeout=10
+                                )
+                                GLib.idle_add(self.append_log, f"  ✓ 已删除\n")
+                                deleted_count += 1
+                            except Exception as e:
+                                GLib.idle_add(self.append_log, f"  [警告] 删除失败: {e}\n")
+                
+                if deleted_count > 0:
+                    GLib.idle_add(self.append_log, f"✓ 已清理 {deleted_count} 个未完成的部署\n\n")
+                else:
+                    GLib.idle_add(self.append_log, "  未发现需要清理的部署\n\n")
+        
+        except Exception as e:
+            GLib.idle_add(self.append_log, f"[信息] 子卷清理跳过: {e}\n\n")
+    
+    def _cleanup_temp_files(self):
+        """Clean up temporary files from interrupted installation."""
+        import glob
+        import shutil
+        
+        temp_patterns = [
+            f'{config.mount_path}/*.img.*',
+            '/tmp/frzr_*.img',
+            '/tmp/frzr_download/*',
+        ]
+        
+        deleted_count = 0
+        for pattern in temp_patterns:
+            try:
+                for path in glob.glob(pattern):
+                    try:
+                        if os.path.isfile(path):
+                            os.remove(path)
+                            GLib.idle_add(self.append_log, f"  删除临时文件: {os.path.basename(path)}\n")
+                            deleted_count += 1
+                        elif os.path.isdir(path):
+                            shutil.rmtree(path)
+                            GLib.idle_add(self.append_log, f"  删除临时目录: {os.path.basename(path)}\n")
+                            deleted_count += 1
+                    except Exception as e:
+                        logger.debug(f"Failed to delete {path}: {e}")
+            except Exception as e:
+                logger.debug(f"Error processing pattern {pattern}: {e}")
+        
+        if deleted_count > 0:
+            GLib.idle_add(self.append_log, f"✓ 已清理 {deleted_count} 个临时文件\n\n")
+        else:
+            GLib.idle_add(self.append_log, "  未发现需要清理的临时文件\n\n")
+    
+    def _show_retry_ui(self):
+        """Show UI with retry option after cancellation."""
+        self.update_status('<span size="large">安装已取消</span>')
+        self.update_progress(0.0, "已取消")
+        
+        # Show back, retry, and exit buttons
+        self.show_buttons(back=True, cancel=False, exit=True, start=True)
+        
+        # Update start button text to "重试安装"
+        if self.start_btn:
+            child = self.start_btn.get_child()
+            if isinstance(child, Gtk.Box):
+                widget = child.get_first_child()
+                while widget:
+                    if isinstance(widget, Gtk.Label):
+                        widget.set_text("重试安装")
+                        break
+                    widget = widget.get_next_sibling()
         
         return False
 
