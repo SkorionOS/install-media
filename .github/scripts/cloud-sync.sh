@@ -1,6 +1,10 @@
 #!/bin/bash
 # shellcheck disable=SC2155
-# mobile-cloud-sync.sh - SkorionOS移动云盘同步脚本
+# cloud-sync.sh - SkorionOS 多云盘同步脚本
+#
+# 支持云盘类型:
+# - mobile: 移动云盘(139Yun)
+# - quark: 夸克网盘
 #
 # 支持两种下载模式:
 # 1. 多线程批量下载（默认）: USE_BATCH_DOWNLOAD=true
@@ -11,6 +15,9 @@
 #    - 逐个文件下载，兼容原有逻辑
 #
 # 可配置项:
+# - CLOUD_PROVIDER: "mobile"(移动云盘) 或 "quark"(夸克网盘)
+# - CLOUD_AUTH: 云盘认证信息
+# - TARGET_FOLDER: 目标文件夹路径
 # - TABLE_LANGUAGE: "zh"(中文) 或 "en"(英文)
 # - USE_EMOJI: true(显示emoji) 或 false(纯文本)
 # - BATCH_DOWNLOAD_THREADS: 下载线程数
@@ -20,14 +27,37 @@ set -e
 
 # 配置变量
 ALIST_URL="http://localhost:5244"
-STORAGE_MOUNT_PATH="/移动云盘"
-TARGET_FOLDER="Public/ISO"  # 目标文件夹路径
+
+# 云盘配置 - 通过环境变量指定
+CLOUD_PROVIDER="${CLOUD_PROVIDER:-mobile}"  # mobile 或 quark
+CLOUD_AUTH="${CLOUD_AUTH}"  # 统一的认证信息环境变量
+
+# 根据云盘类型设置配置
+case "$CLOUD_PROVIDER" in
+    "quark")
+        STORAGE_MOUNT_PATH="/Quark"
+        CLOUD_DRIVER="Quark"
+        TARGET_FOLDER="${TARGET_FOLDER:-SkorionOS_Github/ISO}"
+        AUTH_FIELD="cookie"
+        ;;
+    "mobile")
+        STORAGE_MOUNT_PATH="/139Yun"
+        CLOUD_DRIVER="139Yun"
+        TARGET_FOLDER="${TARGET_FOLDER:-Public/ISO}"
+        AUTH_FIELD="authorization"
+        ;;
+    *)
+        echo "❌ 不支持的云盘类型: $CLOUD_PROVIDER" >&2
+        echo "支持的类型: mobile, quark" >&2
+        exit 1
+        ;;
+esac
 
 # 配置变量 - 优先使用环境变量，否则使用默认值
 USE_BATCH_DOWNLOAD="${USE_BATCH_DOWNLOAD:-true}"  # true: 多线程批量下载, false: 单文件下载
-BATCH_DOWNLOAD_THREADS="${BATCH_DOWNLOAD_THREADS:-3}"   # 批量下载线程数
-BATCH_TRANSFER_THREADS="${BATCH_TRANSFER_THREADS:-3}"   # 批量传输线程数
-TABLE_LANGUAGE="${TABLE_LANGUAGE:-en}"      # 表格语言: zh(中文) 或 en(英文)
+BATCH_DOWNLOAD_THREADS="${BATCH_DOWNLOAD_THREADS:-5}"   # 批量下载线程数
+BATCH_TRANSFER_THREADS="${BATCH_TRANSFER_THREADS:-5}"   # 批量传输线程数
+TABLE_LANGUAGE="${TABLE_LANGUAGE:-zh}"      # 表格语言: zh(中文) 或 en(英文)
 USE_EMOJI="${USE_EMOJI:-true}"           # 是否在状态中显示emoji
 FORCE_SYNC="${FORCE_SYNC:-false}"       # 强制同步模式
 
@@ -314,6 +344,7 @@ get_release_info() {
         echo "$latest_tag"
     fi
 }
+
 # 文件过滤函数
 filter_file() {
     local filename="$1"
@@ -490,7 +521,7 @@ deploy_alist() {
         --name=temp-alist \
         -p 5244:5244 \
         -v /tmp/alist-data:/opt/alist/data \
-        xhofe/alist:latest >/dev/null
+        xhofe/alist:v3.45.0 >/dev/null
     
     # 等待启动完成
     log_info "等待Alist启动..."
@@ -576,32 +607,47 @@ get_alist_token() {
     fi
 }
 
-# 挂载移动云盘
-mount_mobile_cloud() {
+# 挂载云盘存储（支持多种云盘）
+mount_cloud_storage() {
     local alist_token="$1"
-    local mobile_authorization="$2"
     
-    log_info "挂载移动云盘..."
+    log_info "挂载${CLOUD_PROVIDER}云盘..."
     log_info "调试: 使用token: ${alist_token:0:20}..."
     
-    if [ -z "$mobile_authorization" ]; then
-        log_error "未找到移动云盘认证信息"
+    if [ -z "$CLOUD_AUTH" ]; then
+        log_error "未找到云盘认证信息"
         exit 1
     fi
+    
+    # 根据云盘类型构建 addition JSON 字符串
+    local addition_str
+    case "$CLOUD_PROVIDER" in
+        "quark")
+            addition_str=$(jq -n --arg cookie "$CLOUD_AUTH" \
+                '{cookie: $cookie, root_folder_id: "0", order_by: "file_name", order_direction: "asc"}' | jq -c .)
+            ;;
+        "mobile")
+            addition_str=$(jq -n --arg auth "$CLOUD_AUTH" \
+                '{authorization: $auth, root_folder_id: "/", type: "personal_new", cloud_id: "", custom_upload_part_size: 0, report_real_size: true, use_large_thumbnail: false}' | jq -c .)
+            ;;
+        *)
+            log_error "不支持的云盘类型: $CLOUD_PROVIDER"
+            exit 1
+            ;;
+    esac
+    
+    # 使用 jq 构建完整的请求 JSON
+    local request_json=$(jq -n \
+        --arg mount_path "$STORAGE_MOUNT_PATH" \
+        --arg driver "$CLOUD_DRIVER" \
+        --arg remark "SkorionOS Release同步 - ${CLOUD_PROVIDER}" \
+        --arg addition "$addition_str" \
+        '{mount_path: $mount_path, driver: $driver, order: 0, remark: $remark, addition: $addition}')
     
     local mount_response=$(curl -s -w "HTTP_CODE:%{http_code}" -X POST "$ALIST_URL/api/admin/storage/create" \
         -H "Authorization: $alist_token" \
         -H "Content-Type: application/json" \
-        -d @- << EOF
-{
-    "mount_path": "$STORAGE_MOUNT_PATH",
-    "driver": "139Yun", 
-    "order": 0,
-    "remark": "SkorionOS Release同步",
-    "addition": "{\"authorization\":\"${mobile_authorization}\",\"root_folder_id\":\"/\",\"type\":\"personal_new\",\"cloud_id\":\"\",\"custom_upload_part_size\":0,\"report_real_size\":true,\"use_large_thumbnail\":false}"
-}
-EOF
-    )
+        -d "$request_json")
     
     # 分离HTTP状态码和响应体
     local http_code=$(echo "$mount_response" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
@@ -616,16 +662,16 @@ EOF
     fi
     
     # 检查响应是否为有效JSON
-    if ! check_api_response "$response_body" "挂载移动云盘"; then
+    if ! check_api_response "$response_body" "挂载${CLOUD_PROVIDER}"; then
         exit 1
     fi
     
     if echo "$response_body" | jq -e '.code == 200' > /dev/null; then
         local storage_id=$(echo "$response_body" | jq -r '.data.id')
-        log_success "移动云盘挂载成功 (ID: $storage_id)"
+        log_success "${CLOUD_PROVIDER}云盘挂载成功 (ID: $storage_id)"
         echo "$storage_id"
     else
-        log_error "移动云盘挂载失败: $(echo "$response_body" | jq -r '.message // "未知错误"')"
+        log_error "${CLOUD_PROVIDER}云盘挂载失败: $(echo "$response_body" | jq -r '.message // "未知错误"')"
         exit 1
     fi
 }
@@ -1017,13 +1063,13 @@ monitor_download_task() {
     return 1
 }
 
-# 上传文件到移动云盘
+# 上传文件到云盘
 upload_files() {
     local alist_token="$1"
     local target_path="$2"
     local download_list_file="$3"
     
-    log_info "开始上传文件到移动云盘..."
+    log_info "开始上传文件到${CLOUD_PROVIDER}云盘..."
     
     local file_index=0
     local success_count=0
@@ -1114,13 +1160,13 @@ upload_files() {
     echo "$success_count"
 }
 
-# 批量上传文件到移动云盘（多线程）
+# 批量上传文件到云盘（多线程）
 upload_files_batch() {
     local alist_token="$1"
     local target_path="$2"
     local download_list_file="$3"
     
-    log_info "开始批量上传文件到移动云盘（多线程模式）..."
+    log_info "开始批量上传文件到${CLOUD_PROVIDER}云盘（多线程模式）..."
     
     local total_files=$(cat "$download_list_file" | wc -l)
     if [ "$total_files" -eq 0 ]; then
@@ -1452,9 +1498,9 @@ cleanup() {
     # 恢复原始线程配置
     restore_alist_threads "$alist_token"
     
-    # 删除移动云盘存储
+    # 删除云盘存储
     if [ -n "$storage_id" ]; then
-        log_info "删除临时存储..."
+        log_info "删除临时存储(${CLOUD_PROVIDER})..."
         curl -s -X POST "$ALIST_URL/api/admin/storage/delete" \
             -H "Authorization: $alist_token" \
             -H "Content-Type: application/json" \
@@ -1478,13 +1524,15 @@ cleanup() {
 # 主函数
 main() {
     local tag_name="$1"
-    local github_token="$2"
-    local mobile_authorization="$3"
     
-    # force_sync现在通过环境变量传递，在文件开头已经处理
+    # 使用环境变量中的GITHUB_TOKEN和CLOUD_AUTH
+    local github_token="${GITHUB_TOKEN}"
     
-    echo "🚀 SkorionOS移动云盘同步开始"
+    echo "🚀 SkorionOS ${CLOUD_PROVIDER}云盘同步开始"
     echo "================================================"
+    log_info "云盘类型: ${CLOUD_PROVIDER}"
+    log_info "挂载路径: ${STORAGE_MOUNT_PATH}"
+    log_info "目标文件夹: ${TARGET_FOLDER}"
     
     # 显示下载模式
     if [ "$USE_BATCH_DOWNLOAD" = "true" ]; then
@@ -1509,8 +1557,8 @@ main() {
     # 获取token
     local alist_token=$(get_alist_token "$admin_password")
     
-    # 挂载移动云盘
-    local storage_id=$(mount_mobile_cloud "$alist_token" "$mobile_authorization")
+    # 挂载云盘
+    local storage_id=$(mount_cloud_storage "$alist_token")
     
     # 配置线程数（仅在批量模式下）
     configure_alist_threads "$alist_token" "$BATCH_DOWNLOAD_THREADS" "$BATCH_TRANSFER_THREADS"
@@ -1542,7 +1590,7 @@ main() {
     echo ""
     echo "================================================"
     log_success "SkorionOS $release_tag 同步完成！"
-    log_success "📱 目标: 中国移动云盘"
+    log_success "📱 目标: ${CLOUD_PROVIDER}云盘 (${CLOUD_DRIVER})"
     log_success "📁 路径: $target_path"
     log_success "📊 成功文件数: $final_count"
     log_success "🎯 文件过滤: $FILE_FILTER_RULES"
@@ -1551,19 +1599,29 @@ main() {
     else
         log_success "📝 下载模式: 单文件下载"
     fi
-    echo "🇨🇳 国内用户现在可以通过移动云盘快速下载了！"
+    echo "用户现在可以通过${CLOUD_PROVIDER}云盘快速下载了！"
 }
 
 # 检查必需参数
-if [ $# -lt 3 ]; then
-    echo "Usage: $0 <tag_name> <github_token> <mobile_authorization>"
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <tag_name>"
     echo "  tag_name: Release标签 (留空使用最新)"
-    echo "  github_token: GitHub Token"
-    echo "  mobile_authorization: 移动云盘认证"
     echo ""
-    echo "Note: force_sync, batch_download等配置现在通过环境变量传递"
+    echo "Required Environment Variables:"
+    echo "  GITHUB_TOKEN: GitHub访问令牌"
+    echo "  CLOUD_PROVIDER: 云盘类型 (mobile/quark)"
+    echo "  CLOUD_AUTH: 云盘认证信息 (mobile用authorization, quark用cookie)"
+    echo ""
+    echo "Optional Environment Variables:"
+    echo "  TARGET_FOLDER: 目标文件夹路径"
+    echo "  USE_BATCH_DOWNLOAD: 批量下载模式 (true/false)"
+    echo "  BATCH_DOWNLOAD_THREADS: 下载线程数"
+    echo "  BATCH_TRANSFER_THREADS: 传输线程数"
+    echo "  TABLE_LANGUAGE: 表格语言 (zh/en)"
+    echo "  USE_EMOJI: 显示Emoji (true/false)"
+    echo "  FORCE_SYNC: 强制同步 (true/false)"
     exit 1
 fi
 
 # 执行主函数
-main "$1" "$2" "$3"
+main "$1"

@@ -1,4 +1,4 @@
-name: Sync to Cloud
+name: Sync to Mobile Cloud (139Yun)
 
 on:
   # 自动触发：当release创建workflow完成时
@@ -27,12 +27,12 @@ on:
         description: '下载线程数'
         required: false
         type: string
-        default: '3'
+        default: '5'
       transfer_threads:
         description: '传输线程数'
         required: false
         type: string
-        default: '3'
+        default: '5'
       table_language:
         description: '表格语言 (zh/en)'
         required: false
@@ -57,25 +57,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # - name: Free up disk space
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     # this might remove tools that are actually needed,
-      #     # if set to "true" but frees about 6 GB
-      #     tool-cache: false
-          
-      #     # all of these default to true, but feel free to set to
-      #     # "false" if necessary for your workflow
-      #     android: true
-      #     dotnet: true
-      #     haskell: true
-      #     large-packages: true
-      #     docker-images: true
-      #     swap-storage: true
-
-      - name: Run mobile cloud sync script
+      - name: Sync to Mobile Cloud
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUD_PROVIDER: "mobile"
+          CLOUD_AUTH: ${{ secrets.MOBILE_CLOUD_AUTHORIZATION }}
+          TARGET_FOLDER: "Public/ISO"
           MOBILE_CLOUD_AUTHORIZATION: ${{ secrets.MOBILE_CLOUD_AUTHORIZATION }}
           # 下载模式配置环境变量
           USE_BATCH_DOWNLOAD: ${{ inputs.use_batch_download }}
@@ -85,15 +72,14 @@ jobs:
           USE_EMOJI: ${{ inputs.use_emoji }}
           FORCE_SYNC: ${{ inputs.force_sync }}
         run: |
-          
           # 检查必需的环境变量
-          if [ -z "$MOBILE_CLOUD_AUTHORIZATION" ]; then
+          if [ -z "$CLOUD_AUTH" ]; then
             echo "❌ 未找到移动云盘认证信息"
             echo "请在仓库Secrets中设置 MOBILE_CLOUD_AUTHORIZATION"
             exit 1
           fi
 
-          # 根据触发方式设置参数
+          # 根据触发方式设置参数（自动触发时强制同步）
           if [ "${{ github.event_name }}" == "workflow_run" ]; then
             FORCE_SYNC=true
           fi
@@ -102,8 +88,8 @@ jobs:
           TAG_NAME="${{ inputs.tag_name }}"
 
           USE_BATCH_DOWNLOAD="${USE_BATCH_DOWNLOAD:-true}"  # true: 多线程批量下载, false: 单文件下载
-          BATCH_DOWNLOAD_THREADS="${BATCH_DOWNLOAD_THREADS:-3}"   # 批量下载线程数
-          BATCH_TRANSFER_THREADS="${BATCH_TRANSFER_THREADS:-3}"   # 批量传输线程数
+          BATCH_DOWNLOAD_THREADS="${BATCH_DOWNLOAD_THREADS:-5}"   # 批量下载线程数
+          BATCH_TRANSFER_THREADS="${BATCH_TRANSFER_THREADS:-5}"   # 批量传输线程数
           TABLE_LANGUAGE="${TABLE_LANGUAGE:-en}"      # 表格语言: zh(中文) 或 en(英文)
           USE_EMOJI="${USE_EMOJI:-true}"           # 是否在状态中显示emoji
           FORCE_SYNC="${FORCE_SYNC:-false}"       # 强制同步模式
@@ -117,7 +103,9 @@ jobs:
           
           # 显示配置
           echo "🔧 同步配置:"
+          echo "  📱 云盘类型: 移动云盘(139Yun)"
           echo "  📁 Release标签: ${TAG_NAME:-'最新版本'}"
+          echo "  📂 目标路径: $TARGET_FOLDER"
           echo "  🔄 强制同步: $FORCE_SYNC"
           echo "  ⚡ 批量下载: $USE_BATCH_DOWNLOAD"
           echo "  📥 下载线程: $BATCH_DOWNLOAD_THREADS"
@@ -127,4 +115,5 @@ jobs:
           echo ""
           
           # 运行同步脚本
-          ./.github/scripts/mobile-cloud-sync.sh "$TAG_NAME" "$GITHUB_TOKEN" "$MOBILE_CLOUD_AUTHORIZATION"
+          ./.github/scripts/cloud-sync.sh "$TAG_NAME"
+
