@@ -408,7 +408,7 @@ select_disk() {
                     if [ -z "$description" ]; then
                             continue
                     fi
-                    device_list+=($name)
+                    device_list+=("$name")
                     device_list+=("$description")
             done <<< "$device_output"
 
