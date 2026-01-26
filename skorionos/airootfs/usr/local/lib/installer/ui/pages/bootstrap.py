@@ -19,6 +19,9 @@ logger = get_logger('bootstrap')
 class BootstrapPage(ExecutionPage):
     """Bootstrap page that initializes disk partitions and prepares for installation."""
     
+    # Class-level lock to prevent concurrent executions
+    _execution_lock = None
+    
     def __init__(self, app):
         super().__init__(app)
         self.log_file_path = config.log_file
@@ -65,6 +68,14 @@ class BootstrapPage(ExecutionPage):
     
     def execute(self):
         """Execute frzr-bootstrap and scan for local files."""
+        # Prevent concurrent executions using class-level lock
+        if BootstrapPage._execution_lock is not None:
+            logger.warning("Bootstrap execution already in progress, ignoring duplicate call")
+            GLib.idle_add(self.append_log, "[WARNING] 检测到重复执行请求，已忽略\n")
+            return
+        
+        BootstrapPage._execution_lock = True
+        
         try:
             disk = self.app.selected_disk
             mode = self.app.install_mode
@@ -203,6 +214,9 @@ class BootstrapPage(ExecutionPage):
             
         except Exception as e:
             self.on_execution_error(f"Bootstrap错误: {str(e)}")
+        finally:
+            # Release lock when done
+            BootstrapPage._execution_lock = None
     
     def _scan_frzr_update_files(self):
         """

@@ -110,16 +110,26 @@ class LocalFileManager:
         """
         # Check if device is already mounted
         result = subprocess.run(
-            ['findmnt', '-n', '-o', 'TARGET', device],
+            ['findmnt', '-n', '-o', 'TARGET,OPTIONS', device],
             capture_output=True,
             text=True
         )
         
         if result.returncode == 0 and result.stdout.strip():
             # Device is already mounted - use it, don't track
-            existing_mount = result.stdout.strip().split('\n')[0]
-            print(f"[LocalFileManager] Using existing mount: {device} -> {existing_mount}")
-            return existing_mount
+            lines = result.stdout.strip().split('\n')
+            parts = lines[0].split()
+            if len(parts) >= 2:
+                existing_mount = parts[0]
+                mount_options = parts[1]
+                
+                # Check if mounted read-only
+                if 'ro' in mount_options.split(','):
+                    print(f"[LocalFileManager] WARNING: {device} is mounted read-only at {existing_mount}")
+                    logger.warning(f"Device {device} is read-only, files may be corrupted or filesystem has errors")
+                
+                print(f"[LocalFileManager] Using existing mount: {device} -> {existing_mount}")
+                return existing_mount
         
         # Device not mounted - create temporary mount
         mount_suffix = device.replace('/', '_').replace('_dev_', '')
@@ -136,6 +146,19 @@ class LocalFileManager:
             )
             
             if result.returncode == 0:
+                # Verify mount is actually read-write
+                verify_result = subprocess.run(
+                    ['findmnt', '-n', '-o', 'OPTIONS', mount_point],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if verify_result.returncode == 0:
+                    mount_options = verify_result.stdout.strip()
+                    if 'ro' in mount_options.split(','):
+                        print(f"[LocalFileManager] WARNING: {device} auto-mounted as read-only (filesystem may have errors)")
+                        logger.warning(f"Device {device} is read-only, files may be corrupted")
+                
                 # Track this mount for cleanup
                 self.mounted_by_us.append((device, mount_point))
                 print(f"[LocalFileManager] Mounted (rw): {device} -> {mount_point}")
@@ -172,9 +195,21 @@ class LocalFileManager:
                 
                 file_path = os.path.join(update_dir, filename)
                 
-                # Get file size
+                # Get file size and validate readability
                 try:
+                    # Check if file is accessible
+                    if not os.access(file_path, os.R_OK):
+                        print(f"[LocalFileManager] WARNING: File not readable: {filename}")
+                        logger.warning(f"File {filename} is not readable, skipping")
+                        continue
+                    
                     size_bytes = os.path.getsize(file_path)
+                    
+                    # Sanity check: file should be at least 100MB
+                    if size_bytes < 100 * 1024 * 1024:
+                        print(f"[LocalFileManager] WARNING: File too small ({size_bytes} bytes): {filename}")
+                        logger.warning(f"File {filename} is suspiciously small ({size_bytes} bytes), may be corrupted")
+                    
                     size_gb = size_bytes / (1024**3)
                     
                     if size_gb >= 1:
@@ -196,6 +231,10 @@ class LocalFileManager:
                     self.scanned_files.append(file_info)
                     print(f"[LocalFileManager] Found: {file_info['display']}")
                     
+                except OSError as e:
+                    # I/O error - likely filesystem corruption
+                    print(f"[LocalFileManager] ERROR: Cannot read file {filename}: {e}")
+                    logger.error(f"I/O error reading {filename} on {device}: {e} - filesystem may be corrupted")
                 except Exception as e:
                     logger.exception(f"[LocalFileManager] Error reading file {filename}: {e}")
         

@@ -18,6 +18,9 @@ logger = get_logger('install')
 class InstallPage(ExecutionPage):
     """Installation page that executes the system installation process."""
     
+    # Class-level lock to prevent concurrent executions
+    _execution_lock = None
+    
     def __init__(self, app):
         super().__init__(app)
         self.install_thread = None
@@ -138,6 +141,14 @@ class InstallPage(ExecutionPage):
     
     def execute(self):
         """Execute the actual installation process."""
+        # Prevent concurrent executions using class-level lock
+        if InstallPage._execution_lock is not None:
+            logger.warning("Installation already in progress, ignoring duplicate call")
+            GLib.idle_add(self.append_log, "[WARNING] 检测到重复执行请求，已忽略\n")
+            return
+        
+        InstallPage._execution_lock = True
+        
         try:
             # Get version selections
             version_selections = getattr(self.app, 'version_selections', {})
@@ -227,6 +238,9 @@ class InstallPage(ExecutionPage):
             
         except Exception as e:
             self.on_execution_error(f"安装错误: {str(e)}")
+        finally:
+            # Release lock when done
+            InstallPage._execution_lock = None
     
     def _build_install_command(self, selections):
         """
