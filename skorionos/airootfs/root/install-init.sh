@@ -4,10 +4,10 @@
 source "$HOME/.dialog"
 source "$HOME/.install"
 
-INSTALL_SCRIPT="$HOME/install.sh"
+INSTALL_SCRIPT="$HOME/installer-text.sh"
 
-SCRIPT_URL="https://github.com/3003n/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
-SCRIPT_URL_FALLBACK="https://gitee.com/honjow/install-media/raw/skorionos/skorionos/airootfs/root/install.sh"
+SCRIPT_URL="https://github.com/3003n/install-media/raw/skorionos/skorionos/airootfs/root/installer-text.sh"
+SCRIPT_URL_FALLBACK="https://gitee.com/honjow/install-media/raw/skorionos/skorionos/airootfs/root/installer-text.sh"
 
 # ===== Controller Support (InputPlumber) =====
 function setup_controller_support() {
