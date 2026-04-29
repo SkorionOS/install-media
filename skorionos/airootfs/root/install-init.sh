@@ -191,15 +191,15 @@ setup_controller_support
 # ===== Graphical Installer with Smart Fallback =====
 FAILURE_TRACKER="/tmp/installer-failures"
 MIN_RUN_DURATION=15  # 如果运行<15秒，认为是启动失败
-MAX_FAILURES=2       # 失败2次后自动降级到文本安装器
+MAX_FAILURES=4       # 失败4次后自动降级到文本安装器
 
 # 检查启动参数是否强制文本模式
 if grep -q "installer=text" /proc/cmdline; then
     echo "检测到启动参数 installer=text，使用文本安装器"
     check_internet_connection
     [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    eval "$INSTALL_SCRIPT"
-    exit 0
+    "$INSTALL_SCRIPT"
+    exit $?
 fi
 
 # 检查图形安装器是否可用
@@ -210,8 +210,8 @@ if ! command -v gamescope &> /dev/null || \
     echo "图形安装器不可用，使用文本安装器"
     check_internet_connection
     [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    eval "$INSTALL_SCRIPT"
-    exit 0
+    "$INSTALL_SCRIPT"
+    exit $?
 fi
 
 # 检查失败次数
@@ -227,8 +227,8 @@ if [ "$failure_count" -ge "$MAX_FAILURES" ]; then
     rm -f "$FAILURE_TRACKER"
     check_internet_connection
     [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    eval "$INSTALL_SCRIPT"
-    exit 0
+    "$INSTALL_SCRIPT"
+    exit $?
 fi
 
 # 启动图形安装器
@@ -291,7 +291,8 @@ if [ "$IS_FAILURE" = true ]; then
         rm -f "$FAILURE_TRACKER"
         check_internet_connection
         [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-        eval "$INSTALL_SCRIPT"
+        "$INSTALL_SCRIPT"
+        exit $?
     else
         # 还有重试机会，自动重试
         sleep 2

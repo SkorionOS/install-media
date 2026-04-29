@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.1.2
+# Version: 2.1.3
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -10,14 +10,14 @@ source $HOME/.install
 
 LOG_FILE="${LOG_FILE:-/tmp/frzr.log}"
 
-echo "" > $LOG_FILE
-
 if [ -z "$SCRIPT_LOGGED" ]; then
     export SCRIPT_LOGGED=1
-    exec script -f "$LOG_FILE" -c "$0 $*"
+    echo "" > "$LOG_FILE"
+    bash "$0" "$@" 2>&1 | tee "$LOG_FILE"
+    exit ${PIPESTATUS[0]}
 fi
 
-VERSION="2.1.2"
+VERSION="2.1.3"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
@@ -67,8 +67,6 @@ exit_gpm() {
     kill $GPM_PID 2>/dev/null
   fi
 }
-
-source $HOME/.dialog
 
 # 显示帮助信息
 show_help_old() {
@@ -640,8 +638,9 @@ post_install() {
 }
 
 # 设置trap
-trap 'cleanup_all 1' SIGINT SIGTERM
-trap 'cleanup_all 0' EXIT
+cleanup_triggered=false
+trap 'if [ "$cleanup_triggered" = false ]; then cleanup_triggered=true; cleanup_all 1; fi' SIGINT SIGTERM
+trap 'if [ "$cleanup_triggered" = false ]; then cleanup_triggered=true; cleanup_all 0; fi' EXIT
 
 
 if [ $EUID -ne 0 ]; then
@@ -1070,14 +1069,16 @@ else
   DIALOG_PID=$!
   
   # 在前台运行安装并记录日志
-  frzr-deploy "3003n/skorionos:${TARGET}" | tee -a $LOG_FILE
+  frzr-deploy "3003n/skorionos:${TARGET}" 2>&1 | tee -a $LOG_FILE
   RESULT=$?
   
   # 关闭提示框
   kill $DIALOG_PID 2>/dev/null
 fi
 
-post_install $MOUNT_PATH
+if [ "${RESULT}" == "0" ]; then
+  post_install $MOUNT_PATH
+fi
 
 MSG="安装失败."
 if [ "${RESULT}" == "0" ]; then
