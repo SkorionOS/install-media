@@ -1,0 +1,45 @@
+---
+description: Text installer must keep a real TTY for dialog; never wrap with bash|tee
+globs: skorionos/airootfs/root/**/*.sh
+alwaysApply: true
+---
+
+# Text installer TTY / logging
+
+`dialog` (ncurses) on the Live ISO runs on a Linux VT. It needs a real TTY on stdout/stderr for arrow keys and button focus.
+
+## Required logging wrapper
+
+```bash
+# ✅ GOOD — script(1) allocates a PTY; dialog left/right works
+if [ -z "$SCRIPT_LOGGED" ]; then
+    export SCRIPT_LOGGED=1
+    echo "" > "$LOG_FILE"
+    exec script -f "$LOG_FILE" -c "$0 $*"
+fi
+```
+
+```bash
+# ❌ BAD — pipes steal the TTY; arrow keys echo as ^[[A/^[[B/^[[C/^[[D
+if [ -z "$SCRIPT_LOGGED" ]; then
+    export SCRIPT_LOGGED=1
+    echo "" > "$LOG_FILE"
+    bash "$0" "$@" 2>&1 | tee "$LOG_FILE"
+    exit ${PIPESTATUS[0]}
+fi
+```
+
+## Rules
+
+- Never wrap the whole text installer (`installer-text.sh`) with `bash ... 2>&1 | tee` to capture logs.
+- `frzr-bootstrap` / `frzr-deploy` may still use `| tee -a "$LOG_FILE"` for **command output only** (no interactive `dialog` on those fds).
+- If log capture must change, prove arrow keys still work on a real VT (`openvt` + keyboard), not only inside a desktop PTY.
+- Regression: after 2026-04-29 (`tee` wrapper) users could not left/right on the disk confirm yes/no; 3.18 (`script`) was fine. Fixed in installer-text.sh 2.1.4.
+
+## Local repro / check
+
+```bash
+# Broken topology symptom on VT: flood of ^[[C/^[[D over the buttons
+bash /tmp/dialog-verify/confirm_demo.sh tee
+bash /tmp/dialog-verify/confirm_demo.sh script
+```

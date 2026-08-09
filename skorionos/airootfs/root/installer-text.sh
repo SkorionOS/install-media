@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.1.3
+# Version: 2.1.4
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -10,14 +10,15 @@ source $HOME/.install
 
 LOG_FILE="${LOG_FILE:-/tmp/frzr.log}"
 
+# Keep a real TTY for dialog/ncurses. Do NOT replace this with `bash ... | tee`:
+# piping stdout/stderr breaks arrow-key handling on Linux VTs (keys echo as ^[[A/B/C/D).
 if [ -z "$SCRIPT_LOGGED" ]; then
     export SCRIPT_LOGGED=1
     echo "" > "$LOG_FILE"
-    bash "$0" "$@" 2>&1 | tee "$LOG_FILE"
-    exit ${PIPESTATUS[0]}
+    exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.1.3"
+VERSION="2.1.4"
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 
