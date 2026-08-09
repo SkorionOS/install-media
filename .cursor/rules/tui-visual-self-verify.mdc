@@ -1,0 +1,27 @@
+---
+description: TUI changes require agent to open PNG screenshots and visually self-review before claiming done
+alwaysApply: true
+---
+
+# TUI visual self-verification (mandatory)
+
+After any Textual TUI / window-shot change, the agent MUST:
+
+1. Produce real evidence (gnome-terminal + portal PNG, or Textual export rendered to PNG). Never claim PASS from logs alone.
+2. **Open the PNG with the Read tool** (images are described to the model). Do not skim filenames.
+3. Self-review every page shot for: missing buttons vs GUI, clipped/overflow content, huge empty voids, wrong nav alignment, status-bar content, keyboard focus visibly moving.
+4. `INSTALLER_SIM_AUTO` is NOT keyboard proof. Arrow-key coverage needs real key injection + focus assertions + looking at before/after shots.
+5. Never delete or rmtree `.sim/window-shots/` (baseline). Write new dirs only:
+   - `.sim/full-flow-HHMMSS/` portal full flow (script updates `.sim/shots-latest`)
+   - `.sim/keyboard-flow-HHMMSS/` keyboard-driven
+   - Scratch (`ui-review-*`, `btn-check`) is not acceptance evidence.
+   Index: `.sim/SHOTS-INDEX.txt`. Aliases: `.sim/shots-ref`, `.sim/shots-latest`.
+6. Do not invent a different bug (e.g. “focus contrast”) when the user points at a layout/missing-control problem — re-open the shots they mean first.
+
+If you cannot open/see the PNGs, say so and stop; do not declare UI fixed.
+
+## RED LINE — no large rollback
+
+- **Forbidden:** restoring whole `app.py` from old backups / “half-hour rollback” / L479 / restore-0258 / exact479 wholesale.
+- **Required:** fix forward from the last agreed shot dir (see `.sim/shots-latest`).
+- Example: if `full-flow-040819` is bad and `full-flow-040644` is the previous run, revert **only** the delta that broke 040819 — never throw away the whole evening.

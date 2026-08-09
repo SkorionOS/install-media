@@ -1,0 +1,42 @@
+---
+description: Install business logic belongs in installer/engine, not Gtk/Textual/shell UI
+globs: skorionos/airootfs/usr/local/lib/installer/**/*.{py},skorionos/airootfs/root/installer*.sh,scripts/installer-stubs/**,tests/installer/**
+alwaysApply: true
+---
+
+# Installer engine boundaries
+
+## Layers
+
+1. **Execution**: `frzr-bootstrap` / `frzr-deploy` noninteractive only (`FRZR_NONINTERACTIVE=1`).
+2. **InstallEngine** (`installer/engine/`): `InstallPlan`, argv/env builders, runners, progress events. **No** `gi` / Gtk / Textual / dialog imports.
+3. **UI adapters** (GTK `ui/`, future Textual `tui/`): read/write `InstallPlan`, subscribe to `ProgressEvent`. Do not assemble `FRZR_*` or `Popen(frzr-*)` in pages.
+
+## Do / Don't
+
+```python
+# ✅ GOOD — page uses engine
+plan = InstallPlan.from_app_state(self.app)
+BootstrapService(on_event=...).run(plan, log_file=...)
+
+# ❌ BAD — page owns frzr contract
+env["FRZR_NONINTERACTIVE"] = "1"
+subprocess.Popen(["frzr-bootstrap", ...], env=env)
+```
+
+```bash
+# ❌ BAD — grow business logic in installer-text.sh
+# ✅ GOOD — shell launches Python TUI/engine; hot-update is optional shim only
+```
+
+## Local verify (no ISO)
+
+```bash
+PYTHONPATH=skorionos/airootfs/usr/local/lib \
+  INSTALLER_FRZR_BOOTSTRAP=scripts/installer-stubs/frzr-bootstrap \
+  ./scripts/dev-run-engine-bootstrap.sh dual nvme0n1 shrink /dev/nvme0n1p3 60
+
+pytest tests/installer -q
+```
+
+Never run real frzr against a host disk from agent sessions unless the user explicitly requests it and sets `INSTALLER_ALLOW_REAL_FRZR=1`.

@@ -188,6 +188,24 @@ copy_system_configs
 # ===== Setup controller support before selecting installer =====
 setup_controller_support
 
+# Prefer Textual TUI (InstallEngine); fall back to classic dialog on failure/missing.
+run_text_installer() {
+    check_internet_connection
+    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
+
+    if [ -z "${INSTALLER_FORCE_CLASSIC_TEXT:-}" ] \
+        && [ -x /usr/local/bin/installer-tui ] \
+        && python3 -c "import textual" 2>/dev/null; then
+        echo "启动 Textual 文本安装器 (InstallEngine)..."
+        if /usr/local/bin/installer-tui; then
+            exit 0
+        fi
+        echo "Textual TUI 退出异常，回退到经典文本安装器..."
+    fi
+    "$INSTALL_SCRIPT"
+    exit $?
+}
+
 # ===== Graphical Installer with Smart Fallback =====
 FAILURE_TRACKER="/tmp/installer-failures"
 MIN_RUN_DURATION=15  # 如果运行<15秒，认为是启动失败
@@ -196,10 +214,7 @@ MAX_FAILURES=4       # 失败4次后自动降级到文本安装器
 # 检查启动参数是否强制文本模式
 if grep -q "installer=text" /proc/cmdline; then
     echo "检测到启动参数 installer=text，使用文本安装器"
-    check_internet_connection
-    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    "$INSTALL_SCRIPT"
-    exit $?
+    run_text_installer
 fi
 
 # 检查图形安装器是否可用
@@ -208,10 +223,7 @@ if ! command -v gamescope &> /dev/null || \
    ! python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1')" 2>/dev/null || \
    ! [ -f /usr/local/bin/installer-modular ]; then
     echo "图形安装器不可用，使用文本安装器"
-    check_internet_connection
-    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    "$INSTALL_SCRIPT"
-    exit $?
+    run_text_installer
 fi
 
 # 检查失败次数
@@ -225,10 +237,7 @@ if [ "$failure_count" -ge "$MAX_FAILURES" ]; then
     echo "=========================================="
     sleep 2
     rm -f "$FAILURE_TRACKER"
-    check_internet_connection
-    [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-    "$INSTALL_SCRIPT"
-    exit $?
+    run_text_installer
 fi
 
 # 启动图形安装器
@@ -289,10 +298,7 @@ if [ "$IS_FAILURE" = true ]; then
         echo "=========================================="
         sleep 2
         rm -f "$FAILURE_TRACKER"
-        check_internet_connection
-        [ "$OFFLINE_MODE" != "true" ] && check_and_update_install_script
-        "$INSTALL_SCRIPT"
-        exit $?
+        run_text_installer
     else
         # 还有重试机会，自动重试
         sleep 2

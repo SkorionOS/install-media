@@ -44,6 +44,9 @@ wget
 zsh
 networkmanager
 
+# Textual TUI installer (NV / no-gamescope path)
+python-textual
+
 # Graphical installer dependencies
 gamescope-sk
 gtk4

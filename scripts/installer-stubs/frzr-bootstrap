@@ -1,0 +1,45 @@
+#!/bin/bash
+# Safe stub for frzr-bootstrap — never touches disks.
+# Records argv + FRZR_* env for assertions.
+
+set -euo pipefail
+
+RECORD="${INSTALLER_STUB_RECORD:-/tmp/installer-stub-bootstrap.json}"
+EXIT_CODE="${INSTALLER_STUB_EXIT:-0}"
+
+mkdir -p "$(dirname "$RECORD")"
+
+python3 - <<'PY' "$RECORD" "$EXIT_CODE" "$@"
+import json, os, sys, time
+
+record_path = sys.argv[1]
+exit_code = int(sys.argv[2])
+argv = sys.argv[3:]
+
+frzr_env = {k: v for k, v in os.environ.items() if k.startswith("FRZR_")}
+payload = {
+    "argv": argv,
+    "env": frzr_env,
+    "cwd": os.getcwd(),
+}
+with open(record_path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+
+print(f"[stub frzr-bootstrap] argv={argv!r}", flush=True)
+for k in sorted(frzr_env):
+    print(f"[stub frzr-bootstrap] {k}={frzr_env[k]}", flush=True)
+
+steps = [
+    "Preparing disk...",
+    "Creating partitions...",
+    "Formatting filesystems...",
+    "Installing bootloader...",
+    "Bootstrap complete.",
+]
+for i, msg in enumerate(steps, 1):
+    print(f"[stub] ({i}/{len(steps)}) {msg}", flush=True)
+    time.sleep(float(os.environ.get("INSTALLER_STUB_SLEEP", "0.05")))
+
+raise SystemExit(exit_code)
+PY

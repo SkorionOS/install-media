@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 2.1.4
+# Version: 2.1.5
 # shellcheck disable=SC2034,SC2086,SC2155,SC1091,SC2016,SC2317
 
 set -o pipefail
@@ -18,7 +18,16 @@ if [ -z "$SCRIPT_LOGGED" ]; then
     exec script -f "$LOG_FILE" -c "$0 $*"
 fi
 
-VERSION="2.1.4"
+VERSION="2.1.5"
+
+# Prefer InstallEngine Textual TUI (text product path). Classic dialog fallback:
+#   INSTALLER_FORCE_CLASSIC_TEXT=1
+if [ -z "${INSTALLER_FORCE_CLASSIC_TEXT:-}" ] \
+    && [ -x /usr/local/bin/installer-tui ] \
+    && python3 -c "import textual" 2>/dev/null; then
+    echo "Handing off to Installer TUI (InstallEngine)..."
+    exec /usr/local/bin/installer-tui "$@"
+fi
 
 echo "-------------time: $(date +%Y-%m-%d\ %H:%M:%S) v$VERSION-----------"
 

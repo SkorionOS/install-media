@@ -11,6 +11,7 @@ import os
 from ...config import config
 from ..components.base import ExecutionPage, UIComponents
 from ...logger import get_logger
+from ...engine import InstallPlan, DeployService, EventKind
 
 logger = get_logger('install')
 
@@ -25,6 +26,7 @@ class InstallPage(ExecutionPage):
         super().__init__(app)
         self.install_thread = None
         self.install_process = None
+        self.deploy_service = None
     
     def get_title_text(self) -> str:
         return "安装系统"
@@ -150,134 +152,51 @@ class InstallPage(ExecutionPage):
         InstallPage._execution_lock = True
         
         try:
-            # Get version selections
-            version_selections = getattr(self.app, 'version_selections', {})
-            install_mode = version_selections.get('install_mode', 'online')
-            
-            # Get installation parameters from version_selections
-            channel = version_selections.get('channel', 'stable')      # stable/testing/unstable
-            desktop = version_selections.get('desktop', 'gnome')       # gnome/kde
-            nvidia = version_selections.get('nvidia', False)           # True/False
-            
-            # Use unified log file (append mode, bootstrap already wrote to it)
+            plan = InstallPlan.from_app_state(self.app)
+            self.app.plan = plan
             log_path = config.log_file
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            
-            # Write log header
-            with open(log_path, 'a') as f:
-                f.write(f"\n{'='*60}\n")
-                f.write("=== frzr-deploy started ===\n")
-                f.write(f"{'='*60}\n")
-                f.write(f"Install mode: {install_mode}\n")
-                if install_mode == 'local':
-                    local_file = version_selections.get('local_file')
-                    f.write(f"Local file: {local_file}\n\n")
-                else:
-                    f.write(f"Channel: {channel}\n")
-                    f.write(f"Desktop: {desktop}\n")
-                    f.write(f"NVIDIA: {nvidia}\n\n")
-            
-            # Update status based on mode
-            if install_mode == 'local':
-                local_file = version_selections.get('local_file')
-                if not local_file or not os.path.exists(local_file):
-                    raise Exception(f"本地镜像文件不存在: {local_file}")
-                
-                filename = os.path.basename(local_file)
+
+            if plan.source == 'local':
+                if not plan.local_file or not os.path.exists(plan.local_file):
+                    raise Exception(f"本地镜像文件不存在: {plan.local_file}")
+                filename = os.path.basename(str(plan.local_file))
                 GLib.idle_add(self.update_status, '<span size="large">正在从本地镜像安装...</span>')
                 GLib.idle_add(self.append_log, f"使用本地镜像: {filename}\n\n")
             else:
                 GLib.idle_add(self.update_status, '<span size="large">正在下载系统镜像...</span>')
-            
+
             GLib.idle_add(self.update_progress, 0.1, "准备中")
-            
-            # Apply advanced options before installation
             self._apply_advanced_options()
-            
-            # Build install command
-            cmd = self._build_install_command(version_selections)
-            
-            GLib.idle_add(self.append_log, f"=== Executing: {' '.join(cmd)} ===\n\n")
-            
-            # Set environment variables from advanced options
-            env = os.environ.copy()
-            if self.app.advanced_options.get('debug', False):
-                env['DEBUG'] = '1'
+
+            def on_engine_event(event):
+                if event.kind == EventKind.LOG and event.message:
+                    GLib.idle_add(self.append_log, event.message)
+                    self._update_progress_from_output(event.message)
+                elif event.kind == EventKind.STAGE and event.message:
+                    GLib.idle_add(self.append_log, f"[stage:{event.stage}] {event.message}\n")
+
+            if plan.advanced.get('debug'):
                 GLib.idle_add(self.append_log, "[信息] Debug 模式已启用\n")
-            
-            # Execute installation
-            self.install_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env  # Pass environment variables
-            )
-            
-            # Read output line by line
-            with open(log_path, 'a') as log_file:
-                for line in self.install_process.stdout:
-                    log_file.write(line)
-                    log_file.flush()
-                    GLib.idle_add(self.append_log, line)
-                    
-                    # Update progress based on output
-                    self._update_progress_from_output(line)
-            
-            # Wait for completion
-            self.install_process.wait()
-            
-            if self.install_process.returncode != 0:
-                GLib.idle_add(self.append_log, f"\n[ERROR] 安装失败 (退出码: {self.install_process.returncode})\n")
-                self.on_execution_error(f"安装失败 (退出码: {self.install_process.returncode})")
+
+            self.deploy_service = DeployService(on_event=on_engine_event)
+            result = self.deploy_service.run(plan, log_file=log_path)
+            self.install_process = self.deploy_service.process
+
+            if result.returncode != 0:
+                GLib.idle_add(self.append_log, f"\n[ERROR] 安装失败 (退出码: {result.returncode})\n")
+                self.on_execution_error(f"安装失败 (退出码: {result.returncode})")
                 return
-            
+
             GLib.idle_add(self.append_log, "\n[SUCCESS] 安装完成\n")
             self.on_execution_success()
-            
+
         except Exception as e:
             self.on_execution_error(f"安装错误: {str(e)}")
         finally:
             # Release lock when done
             InstallPage._execution_lock = None
-    
-    def _build_install_command(self, selections):
-        """
-        Build the installation command based on user selections.
-        
-        Format matches install.sh:
-        - Local: frzr-deploy /path/to/file.img.tar.zst
-        - Online: frzr-deploy "3003n/skorionos:channel:desktop[-nv]"
-        
-        Examples:
-        - frzr-deploy "3003n/skorionos:stable:gnome"
-        - frzr-deploy "3003n/skorionos:testing:kde-nv"
-        """
-        install_mode = selections.get('install_mode', 'online')
-        
-        if install_mode == 'local':
-            # Local installation - use local file
-            local_file = selections.get('local_file')
-            if not local_file or not os.path.exists(local_file):
-                raise Exception(f"本地镜像文件不存在: {local_file}")
-            
-            return ['frzr-deploy', local_file]
-        else:
-            # Online installation - build TARGET string
-            channel = selections.get('channel', 'stable')     # stable/testing/unstable
-            desktop = selections.get('desktop', 'gnome')      # gnome/kde
-            nvidia = selections.get('nvidia', False)          # True/False
-            
-            # Build TARGET: channel:desktop or channel:desktop-nv
-            if nvidia:
-                target = f"{channel}:{desktop}-nv"
-            else:
-                target = f"{channel}:{desktop}"
-            
-            # Build full command: frzr-deploy "3003n/skorionos:TARGET"
-            return ['frzr-deploy', f'3003n/skorionos:{target}']
-    
+
     def _update_progress_from_output(self, line):
         """Update progress bar based on installation output."""
         line_lower = line.lower()
@@ -532,6 +451,14 @@ class InstallPage(ExecutionPage):
     
     def _terminate_process(self):
         """Terminate frzr-deploy process."""
+        if self.deploy_service:
+            try:
+                GLib.idle_add(self.append_log, "正在终止 frzr-deploy 进程...\n")
+                self.deploy_service.cancel()
+                GLib.idle_add(self.append_log, "✓ 进程已终止\n")
+                return
+            except Exception as e:
+                GLib.idle_add(self.append_log, f"[警告] 进程终止出错: {e}\n")
         if self.install_process and self.install_process.poll() is None:
             try:
                 GLib.idle_add(self.append_log, "正在终止 frzr-deploy 进程...\n")

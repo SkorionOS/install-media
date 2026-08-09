@@ -5,3 +5,13 @@ skorionos/work/
 skorionos/pacman.conf
 *.pyc
 __pycache__/
+
+# Local installer simulation / verification artifacts (never commit)
+.sim/
+PROOF_*/
+AB_VT_PROOF/
+UI_COMPARE/
+UI_STEPS/
+FULL_VDISK_VERIFY/
+PROOF_UI_*.png
+PROOF_*.png

@@ -12,6 +12,7 @@ from ...config import config
 from ..components.base import ExecutionPage, UIComponents
 from ...logger import get_logger
 from ...backend.timezone_utils import auto_detect_timezone, apply_timezone_to_live
+from ...engine import InstallPlan, BootstrapService, EventKind
 
 logger = get_logger('bootstrap')
 
@@ -122,7 +123,7 @@ class BootstrapPage(ExecutionPage):
             GLib.idle_add(self.update_status, '<span size="large">正在同步系统时间...</span>')
             subprocess.run(['timedatectl', 'set-ntp', 'true'], check=False)
             
-            # Step 2: Execute frzr-bootstrap in non-interactive mode
+            # Step 2: Execute frzr-bootstrap via InstallEngine (non-interactive)
             if mode == 'repair':
                 status_msg = f'<span size="large">正在修复 /dev/{disk} 上的安装...</span>'
             elif mode == 'fresh':
@@ -133,68 +134,25 @@ class BootstrapPage(ExecutionPage):
                 status_msg = f'<span size="large">正在初始化磁盘 /dev/{disk}...</span>'
             
             GLib.idle_add(self.update_status, status_msg)
-            
-            # Initialize log file
-            os.makedirs(os.path.dirname(self.log_file_path), exist_ok=True)
-            with open(self.log_file_path, 'w') as f:
-                f.write(f"=== frzr-bootstrap started (non-interactive mode) ===\n")
-                f.write(f"Mode: {mode}\n")
-                f.write(f"Disk: /dev/{disk}\n")
-            
-            # Build frzr-bootstrap command
-            cmd = ['frzr-bootstrap', 'gamer', f'/dev/{disk}', mode]
-            
-            # Set up environment variables
-            env = os.environ.copy()
-            env['FRZR_NONINTERACTIVE'] = '1'
-            
-            # Add dual-boot specific parameters
-            if mode == 'dual':
-                dual_mode = getattr(self.app, 'dual_mode', 'auto')
-                
-                if dual_mode == 'shrink':
-                    env['FRZR_SHRINK_PARTITION'] = self.app.shrink_partition
-                    env['FRZR_SHRINK_SIZE'] = str(self.app.shrink_size)
-                    with open(self.log_file_path, 'a') as f:
-                        f.write(f"Dual mode: shrink {self.app.shrink_partition} by {self.app.shrink_size}GB\n")
-                
-                elif dual_mode == 'delete':
-                    env['FRZR_DELETE_PARTITION'] = self.app.delete_partition
-                    with open(self.log_file_path, 'a') as f:
-                        f.write(f"Dual mode: delete {self.app.delete_partition}\n")
-                
-                else:  # auto
-                    with open(self.log_file_path, 'a') as f:
-                        f.write(f"Dual mode: auto (use available free space)\n")
-            
-            # Run frzr-bootstrap and capture output in real-time
-            GLib.idle_add(self.append_log, f"=== Executing: {' '.join(cmd)} ===\n")
-            
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env
-            )
-            
-            # Read output line by line and update UI
-            with open(self.log_file_path, 'a') as log_file:
-                log_file.write(f"\n=== Executing: {' '.join(cmd)} ===\n\n")
-                for line in process.stdout:
-                    # Write to log file
-                    log_file.write(line)
-                    log_file.flush()
-                    # Update UI
-                    GLib.idle_add(self.append_log, line)
-            
-            # Wait for process to complete
-            process.wait()
-            
-            if process.returncode != 0:
-                GLib.idle_add(self.append_log, f"\n[ERROR] frzr-bootstrap 失败 (退出码: {process.returncode})\n")
-                self.on_execution_error(f"frzr-bootstrap 失败 (退出码: {process.returncode})")
+
+            plan = InstallPlan.from_app_state(self.app)
+            # Keep app.plan in sync for later stages / future TUI parity checks
+            self.app.plan = plan
+
+            def on_engine_event(event):
+                if event.kind == EventKind.LOG and event.message:
+                    GLib.idle_add(self.append_log, event.message)
+                elif event.kind == EventKind.STAGE and event.message:
+                    GLib.idle_add(self.append_log, f"[stage:{event.stage}] {event.message}\n")
+
+            self.bootstrap_service = BootstrapService(on_event=on_engine_event)
+            # Expose process handle for cancel path
+            result = self.bootstrap_service.run(plan, log_file=self.log_file_path)
+            self.bootstrap_process = self.bootstrap_service.process
+
+            if result.returncode != 0:
+                GLib.idle_add(self.append_log, f"\n[ERROR] frzr-bootstrap 失败 (退出码: {result.returncode})\n")
+                self.on_execution_error(f"frzr-bootstrap 失败 (退出码: {result.returncode})")
                 return
             
             GLib.idle_add(self.append_log, "\n[SUCCESS] frzr-bootstrap 完成\n")
@@ -318,7 +276,14 @@ class BootstrapPage(ExecutionPage):
         def cleanup_thread():
             try:
                 # 1. Terminate bootstrap process if exists
-                if hasattr(self, 'bootstrap_process') and self.bootstrap_process:
+                if hasattr(self, 'bootstrap_service') and self.bootstrap_service:
+                    try:
+                        GLib.idle_add(self.append_log, "正在终止 frzr-bootstrap 进程...\n")
+                        self.bootstrap_service.cancel()
+                        GLib.idle_add(self.append_log, "✓ 进程已终止\n")
+                    except Exception as e:
+                        GLib.idle_add(self.append_log, f"[警告] 进程终止出错: {e}\n")
+                elif hasattr(self, 'bootstrap_process') and self.bootstrap_process:
                     try:
                         if self.bootstrap_process.poll() is None:
                             GLib.idle_add(self.append_log, "正在终止 frzr-bootstrap 进程...\n")
