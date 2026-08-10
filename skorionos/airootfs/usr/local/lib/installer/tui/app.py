@@ -21,13 +21,50 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
+from textual.theme import Theme
 from textual.widgets import (
     Button,
+    Input,
     Label,
+    OptionList,
     ProgressBar,
     RadioButton,
     RadioSet,
+    Rule,
     Static,
+)
+from textual.widgets.option_list import Option
+
+# dialog(1) 16-color theme — matches dialog --create-rc defaults on VT.
+# ansi=True → native SGR 30–47; truecolor is crushed on fbcon.
+SKORION_CONSOLE = Theme(
+    name="skorion-console",
+    primary="ansi_blue",
+    secondary="ansi_bright_white",
+    accent="ansi_bright_yellow",
+    foreground="ansi_bright_white",
+    background="ansi_blue",
+    surface="ansi_bright_white",
+    panel="ansi_bright_white",
+    boost="ansi_bright_blue",
+    success="ansi_green",
+    warning="ansi_bright_yellow",
+    error="ansi_red",
+    dark=True,
+    ansi=True,
+    variables={
+        "block-cursor-background": "ansi_blue",
+        "block-cursor-foreground": "ansi_bright_white",
+        "block-cursor-blurred-background": "ansi_blue",
+        "block-cursor-blurred-foreground": "ansi_bright_yellow",
+        "border": "ansi_bright_white",
+        "border-blurred": "ansi_bright_white",
+        "footer-key-foreground": "ansi_bright_yellow",
+        "input-selection-background": "ansi_blue",
+        "input-selection-foreground": "ansi_bright_white",
+        "button-foreground": "ansi_black",
+        "button-color-foreground": "ansi_bright_white",
+    },
 )
 
 from installer.engine import (
@@ -37,6 +74,8 @@ from installer.engine import (
     InstallPlan,
     ProgressEvent,
 )
+from installer.tui.chrome import DIALOG_CSS, compose_dialog
+from installer.tui.wifi import WifiNetwork, WifiService
 
 VERSION = "2.1.5"
 MODE_CN = {"fresh": "全新安装", "repair": "修复安装", "dual": "双系统"}
@@ -88,8 +127,8 @@ class SystemStatusBar(Static):
         width: 100%;
         height: 1;
         min-height: 1;
-        background: #243044;
-        color: #e8eaed;
+        background: ansi_blue;
+        color: ansi_bright_cyan;
         padding: 0 1;
     }
     """
@@ -405,175 +444,178 @@ def _capture_when_ready(screen: Screen, label: str, tries: int = 12) -> None:
 
 
 class PageFrame(Vertical):
-    DEFAULT_CSS = """
+    """Blue screen shell; dialog chrome CSS lives in installer.tui.chrome."""
+
+    DEFAULT_CSS = (
+        """
     PageFrame {
         width: 100%;
         height: 100%;
-        background: #14161a;
-        padding: 0 1 1 1;
-    }
-    #title {
-        text-style: bold;
-        color: #f2f4f7;
-        width: 100%;
-        text-align: center;
-        height: 1;
-        padding: 0 1;
-    }
-    #subtitle {
-        color: #9aa0a6;
-        width: 100%;
-        text-align: center;
-        height: 1;
-        padding: 0 1;
-        margin-bottom: 1;
-    }
-    /* 040644 layout: content fills, #nav docked bottom (do NOT undo). */
-    #content {
-        width: 100%;
-        height: 1fr;
-        border: solid #2a303a;
-        background: #1a1d23;
-        padding: 1 2;
-    }
-    #nav {
-        dock: bottom;
-        width: 100%;
-        height: 3;
-        align: center middle;
-        align-horizontal: center;
+        background: ansi_blue;
         padding: 0;
-        content-align: center middle;
+        color: ansi_bright_white;
     }
-    /* Flat buttons — no Textual tall borders (they shatter glyphs). */
-    #nav Button {
-        margin: 0 1;
-        min-width: 14;
-        height: 3;
-        border: none;
-        background: #2a303a;
-        color: #c5cad3;
-        text-style: bold;
-        content-align: center middle;
-        text-align: center;
-    }
-    #nav Button:hover {
-        background: #3a424e;
-        color: #f2f4f7;
-    }
-    #nav Button:focus {
-        background: #ffffff;
-        color: #101014;
-        text-style: bold;
-        border: none;
-    }
-    #nav Button.-primary {
-        background: #2f4a3c;
-        color: #b8e6c9;
-    }
-    #nav Button.-primary:focus {
-        background: #7dd3a0;
-        color: #101014;
-        text-style: bold;
-    }
-    #nav Button:disabled {
-        background: #1a1d23;
-        color: #5a616c;
-    }
-    /* RadioSet default tall borders shred into |/- ghosts — force borderless. */
+    """
+        + DIALOG_CSS
+        + """
+    /* RadioSet: Textual default uses border:tall which paints black slabs
+       above/below the set on VT — kill ALL border edges. */
     RadioSet {
         width: 100%;
         height: auto;
-        background: #12151b;
+        background: ansi_bright_white !important;
         border: none !important;
-        padding: 0 1;
+        border-top: none !important;
+        border-bottom: none !important;
+        padding: 0;
+        color: ansi_black;
+        background-tint: 0%;
     }
     RadioSet:focus,
-    RadioSet:focus-within {
+    RadioSet:focus-within,
+    RadioSet:blur {
         border: none !important;
-        background-tint: 0%;
-        background: #1a2220;
+        border-top: none !important;
+        border-bottom: none !important;
+        background-tint: 0% !important;
+        background: ansi_bright_white !important;
     }
     RadioSet > RadioButton {
         width: 100%;
-        background: transparent;
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        background: ansi_bright_white !important;
         border: none !important;
+        border-top: none !important;
+        border-bottom: none !important;
+        color: ansi_black !important;
+        padding: 0 1;
     }
-    RadioSet > RadioButton.-selected {
+    RadioSet > RadioButton:hover {
+        background: ansi_blue !important;
+        color: ansi_bright_white !important;
+    }
+    RadioSet > RadioButton.-selected,
+    RadioSet > RadioButton.-on {
         width: 100%;
-        background: #2a3540;
+        background: ansi_blue !important;
+        color: ansi_bright_white !important;
+        text-style: bold;
+    }
+    RadioSet:focus > RadioButton.-selected,
+    RadioSet:focus-within > RadioButton.-selected {
+        background: ansi_blue !important;
+        color: ansi_bright_yellow !important;
+        text-style: bold;
+    }
+    /* Toggle glyph — no $panel black chips under labels. */
+    RadioSet > RadioButton > .toggle--button {
+        background: transparent !important;
+        color: ansi_black !important;
+        text-style: none;
+    }
+    RadioSet > RadioButton.-selected > .toggle--button,
+    RadioSet > RadioButton.-on > .toggle--button {
+        background: transparent !important;
+        color: ansi_bright_yellow !important;
+        text-style: bold;
+    }
+    RadioSet > RadioButton.-selected > .toggle--label,
+    RadioSet > RadioButton.-on > .toggle--label,
+    RadioSet:focus > RadioButton.-selected > .toggle--label {
+        background: transparent !important;
+        color: ansi_bright_white !important;
+    }
+    RadioSet:focus > RadioButton.-selected > .toggle--label {
+        color: ansi_bright_yellow !important;
+    }
+    #wifi_list {
+        height: 1fr;
+        min-height: 8;
+        border: solid ansi_black;
+        background: ansi_bright_white;
+        color: ansi_black;
+        padding: 0 1;
+    }
+    #wifi_list:focus {
+        border: solid ansi_blue;
+        background: ansi_bright_white;
+    }
+    #wifi_list > .option-list--option {
+        color: ansi_black;
+        padding: 0 1;
+    }
+    #wifi_list > .option-list--option-highlighted {
+        background: ansi_blue;
+        color: ansi_bright_white;
+        text-style: bold;
+    }
+    #wifi_list:focus > .option-list--option-highlighted {
+        background: ansi_blue;
+        color: ansi_bright_yellow;
+        text-style: bold;
+    }
+    #wifi_status {
+        height: auto;
+        margin-bottom: 1;
+        width: 100%;
+        color: ansi_black;
+    }
+    #wifi_hint {
+        color: ansi_black;
+        height: 1;
+        width: 100%;
+    }
+    Input {
+        width: 100%;
+        margin: 1 0;
+        background: ansi_bright_white;
+        color: ansi_black;
+        border: solid ansi_black;
+        padding: 0 1;
+    }
+    Input:focus {
+        border: solid ansi_blue;
+        background: ansi_bright_white;
+        color: ansi_black;
     }
     .section-label {
-        color: #7dd3a0;
-        text-style: bold;
+        color: ansi_black;
+        text-style: bold underline;
         margin: 1 0 0 0;
         width: 100%;
+        text-align: left;
     }
     #version_cols {
         width: 100%;
         height: auto;
+        margin-top: 1;
     }
-    #version_cols Vertical {
+    #version_cols .ver_col {
         width: 1fr;
         height: auto;
-        padding-right: 1;
+        margin: 0 1 0 0;
+        padding: 0 1 1 1;
+        border: solid ansi_blue;
+        background: ansi_bright_white;
+        color: ansi_black;
+    }
+    #version_cols .ver_col:last-child {
+        margin-right: 0;
     }
     #config_preview {
-        color: #c5cad3;
+        color: ansi_black;
         margin-top: 1;
         width: 100%;
-    }
-        /* Welcome stack: status → compact card → buttons under card (GUI order) */
-    #welcome_center {
-        width: 100%;
-        height: 1fr;
-        align: center middle;
-        padding: 0 2;
-    }
-    #welcome_card {
-        width: 70;
-        max-width: 100%;
-        height: auto;
-        border: solid #2a303a;
-        background: #1a1d23;
-        padding: 1 2 1 2;
-        align: center top;
-    }
-    #welcome_logo {
-        width: 100%;
-        height: 1;
-        text-align: center;
-        color: #7dd3a0;
         text-style: bold;
-    }
-    #welcome_device {
-        width: 100%;
-        text-align: center;
-        color: #9aa0a6;
-        margin: 0 0 1 0;
-    }
-    #welcome_info {
-        width: 100%;
-        height: auto;
-        color: #e8eaed;
-        padding: 0;
-        border: none;
-        background: transparent;
-    }
-    /* Welcome buttons stay under the card — must NOT inherit dock:bottom. */
-    #welcome_center #nav {
-        dock: initial;
-        width: 70;
-        max-width: 100%;
-        height: 3;
-        margin-top: 1;
     }
     #log {
         height: 1fr;
         width: 100%;
-        background: #0a0c10;
-        color: #b8c0cc;
-        border: solid #2a303a;
+        background: ansi_black;
+        color: ansi_bright_white;
+        border: solid ansi_black;
         padding: 0 1;
     }
     #bar {
@@ -585,18 +627,40 @@ class PageFrame(Vertical):
     #bar Bar {
         width: 1fr;
         height: 1;
+        color: ansi_green;
+        background: ansi_black;
+    }
+    #body {
+        color: ansi_black;
+        width: 100%;
     }
     """
+    )
 
 
 class WizardScreen(Screen):
-    """GTK BasePage shape: system status bar / title / content / centered buttons."""
+    """GTK BasePage shape: system status bar / title / content / centered buttons.
+
+    Navigation basis:
+      - dialog(1) radiolist: ↑↓ in list; leave list to reach buttons
+      - Textual RadioSet: one focus stop per group; arrows inside; Tab between groups
+      - Gamepad (MS): D-pad=arrows, A=Enter; 掌机 has no Tab
+
+    Handheld mapping:
+      ↑↓  move+select inside current list (dialog: highlight = choice)
+      ←→  next/prev list (Textual Tab); single list → jump to #nav buttons
+      list bottom ↓ / #nav ↑  list ↔ buttons
+      #nav ←→  cycle buttons; Enter activates focused button
+      OptionList Enter = connect (Textual default); Esc = back
+    """
 
     BINDINGS = [
         Binding("escape", "go_back", show=False, priority=True),
-        # priority over RadioSet left/right (those steal keys → "can't operate")
-        Binding("left", "nav_left", show=False, priority=True),
-        Binding("right", "nav_right", show=False, priority=True),
+        # Steal from RadioSet: stock widget only moves cursor, does not select.
+        Binding("up", "pad_up", show=False, priority=True),
+        Binding("down", "pad_down", show=False, priority=True),
+        Binding("left", "pad_left", show=False, priority=True),
+        Binding("right", "pad_right", show=False, priority=True),
     ]
 
     shot_name: str = ""
@@ -616,14 +680,13 @@ class WizardScreen(Screen):
     def compose(self) -> ComposeResult:
         with PageFrame():
             yield SystemStatusBar()
-            yield Label(self.title_text, id="title")
-            if self.subtitle_text:
-                yield Label(self.subtitle_text, id="subtitle")
-            with Vertical(id="content"):
-                yield from self.compose_content()
-            with Horizontal(id="nav"):
-                for bid, lab, cls in self.nav_spec:
-                    yield Button(lab, id=bid, classes=cls or None)
+            yield from compose_dialog(
+                mode="page",
+                title=self.title_text,
+                subtitle=self.subtitle_text or None,
+                nav_spec=self.nav_spec,
+                body=self.compose_content,
+            )
 
     def compose_content(self) -> ComposeResult:
         yield Static("", id="body")
@@ -638,6 +701,10 @@ class WizardScreen(Screen):
         if _sim_auto():
             delay = float(os.environ.get("INSTALLER_SIM_AUTO_DELAY", "0.5"))
             self.set_timer(delay, self._sim_go)
+
+    def on_screen_resume(self) -> None:
+        # Returning from a pushed child must re-arm 继续 (otherwise next is dead).
+        self._armed = False
 
     def _radio_value(self, set_id: str, default: str) -> str:
         try:
@@ -675,35 +742,218 @@ class WizardScreen(Screen):
         except Exception:
             return []
 
-    def _nav_step(self, delta: int) -> None:
-        """Left/right operate #nav (dialog yes/no). Up/down stay with RadioSet."""
-        buttons = self._nav_buttons()
-        if len(buttons) < 2:
-            return
+    @staticmethod
+    def _is_effectively_shown(widget: object) -> bool:
+        """True only if widget and all ancestors are displayed (hidden panels excluded)."""
+        node: Optional[object] = widget
+        while node is not None:
+            if hasattr(node, "display") and not bool(getattr(node, "display")):
+                return False
+            node = getattr(node, "parent", None)
+        return True
+
+    def _content_lists(self) -> List[object]:
+        """Visible lists in DOM order (each RadioSet/OptionList = one Textual tab stop)."""
+        try:
+            content = self.query_one("#content", Vertical)
+        except Exception:
+            return []
+        out: List[object] = []
+        for w in content.walk_children(with_self=False):
+            if not isinstance(w, (RadioSet, OptionList)):
+                continue
+            if getattr(w, "disabled", False):
+                continue
+            if not self._is_effectively_shown(w):
+                continue
+            out.append(w)
+        return out
+
+    def _focus_in_nav(self) -> bool:
         focused = self.focused
-        if focused not in buttons:
-            target = buttons[-1] if delta > 0 else buttons[0]
-            target.focus()
-            if target.id == "go":
-                _announce_page("confirm_go")
+        return focused is not None and focused in self._nav_buttons()
+
+    def _list_under_focus(self) -> Optional[object]:
+        focused = self.focused
+        if focused is None:
+            return None
+        for sel in self._content_lists():
+            if focused is sel:
+                return sel
+            node: Optional[object] = focused
+            while node is not None:
+                if node is sel:
+                    return sel
+                node = getattr(node, "parent", None)
+        return None
+
+    def _radio_buttons(self, rs: RadioSet) -> List[RadioButton]:
+        return [
+            c
+            for c in rs.children
+            if isinstance(c, RadioButton) and c.display and not c.disabled
+        ]
+
+    def _radio_index(self, rs: RadioSet) -> int:
+        kids = self._radio_buttons(rs)
+        if not kids:
+            return 0
+        sel = getattr(rs, "_selected", None)
+        if isinstance(sel, int) and 0 <= sel < len(rs.children):
+            child = rs.children[sel]
+            if child in kids:
+                return kids.index(child)  # type: ignore[arg-type]
+        pressed = rs.pressed_button
+        if pressed in kids:
+            return kids.index(pressed)  # type: ignore[arg-type]
+        return 0
+
+    def _radio_move_select(self, rs: RadioSet, delta: int) -> bool:
+        """Move inside RadioSet and select (dialog radiolist: cursor = choice).
+
+        Returns False if movement would leave the set (caller should change focus).
+        """
+        kids = self._radio_buttons(rs)
+        if not kids:
+            return False
+        idx = self._radio_index(rs) + delta
+        if idx < 0 or idx >= len(kids):
+            return False
+        btn = kids[idx]
+        btn.value = True
+        try:
+            rs._selected = list(rs.children).index(btn)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        rs.focus()
+        return True
+
+    def _option_move(self, ol: OptionList, delta: int) -> bool:
+        idx = ol.highlighted
+        if idx is None:
+            idx = 0
+        nxt = idx + delta
+        if nxt < 0 or nxt >= ol.option_count:
+            return False
+        if delta > 0:
+            ol.action_cursor_down()
+        else:
+            ol.action_cursor_up()
+        return True
+
+    def _focus_list(self, sel: object) -> None:
+        try:
+            sel.focus()  # type: ignore[union-attr]
+        except Exception:
             return
-        idx = buttons.index(focused)  # type: ignore[arg-type]
-        nxt = buttons[(idx + delta) % len(buttons)]
-        nxt.focus()
-        if nxt.id == "go":
+        if isinstance(sel, RadioSet):
+            kids = self._radio_buttons(sel)
+            if not kids:
+                return
+            idx = self._radio_index(sel)
+            kids[idx].value = True
+            try:
+                sel._selected = list(sel.children).index(kids[idx])  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+    def _goto_adjacent_list(self, cur: object, delta: int) -> bool:
+        """Textual Tab between RadioSets — D-pad edge equivalent for 掌机."""
+        lists = self._content_lists()
+        if cur not in lists or len(lists) < 2:
+            return False
+        idx = lists.index(cur) + delta
+        if idx < 0 or idx >= len(lists):
+            return False
+        self._focus_list(lists[idx])
+        return True
+
+    def _goto_nav(self, which: str = "primary") -> None:
+        buttons = self._nav_buttons()
+        if not buttons:
+            return
+        target = buttons[-1] if which == "primary" else buttons[0]
+        target.focus()
+        if target.id == "go":
             _announce_page("confirm_go")
 
-    def action_nav_left(self) -> None:
-        self._nav_step(-1)
+    def _pad_vertical(self, delta: int) -> None:
+        lists = self._content_lists()
+        in_nav = self._focus_in_nav()
 
-    def action_nav_right(self) -> None:
-        self._nav_step(1)
+        if in_nav:
+            if delta < 0 and lists:
+                self._focus_list(lists[-1])
+            return
+
+        cur = self._list_under_focus()
+        if cur is None:
+            if lists:
+                self._focus_list(lists[0] if delta > 0 else lists[-1])
+            return
+
+        if isinstance(cur, RadioSet):
+            if self._radio_move_select(cur, delta):
+                return
+            # Edge of this list → next/prev list (Tab), else nav.
+            if self._goto_adjacent_list(cur, delta):
+                return
+            if delta > 0:
+                self._goto_nav("primary")
+            return
+
+        if isinstance(cur, OptionList):
+            if self._option_move(cur, delta):
+                return
+            if self._goto_adjacent_list(cur, delta):
+                return
+            if delta > 0:
+                self._goto_nav("primary")
+
+    def _pad_horizontal(self, delta: int) -> None:
+        """←→: between lists (Tab), or between #nav buttons — not within a vertical list."""
+        in_nav = self._focus_in_nav()
+        buttons = self._nav_buttons()
+        cur = self._list_under_focus()
+
+        if in_nav and buttons:
+            focused = self.focused
+            idx = buttons.index(focused)  # type: ignore[arg-type]
+            nxt = buttons[(idx + delta) % len(buttons)]
+            nxt.focus()
+            if nxt.id == "go":
+                _announce_page("confirm_go")
+            return
+
+        if cur is not None:
+            # Prefer jumping to sibling list (version page columns / stacked groups).
+            if self._goto_adjacent_list(cur, delta):
+                return
+            # Single list page: ←→ reach button row (dialog leave-list).
+            self._goto_nav("primary" if delta > 0 else "first")
+            return
+
+        if buttons:
+            self._goto_nav("primary" if delta > 0 else "first")
+
+    def action_pad_up(self) -> None:
+        self._pad_vertical(-1)
+
+    def action_pad_down(self) -> None:
+        self._pad_vertical(1)
+
+    def action_pad_left(self) -> None:
+        self._pad_horizontal(-1)
+
+    def action_pad_right(self) -> None:
+        self._pad_horizontal(1)
 
     def action_go_back(self) -> None:
-        if len(self.app.screen_stack) > 1:
+        # Textual keeps a base Screen under the first push; Welcome is stack[1].
+        # Only pop when a later wizard page was pushed (len >= 3).
+        if len(self.app.screen_stack) >= 3:
             self.app.pop_screen()
-        else:
-            self.app.exit()
+        # Welcome / root: Esc is a no-op (use 打开命令行 / 退出).
 
     def on_next(self) -> None:
         raise NotImplementedError
@@ -852,18 +1102,25 @@ class WelcomeScreen(WizardScreen):
     def compose(self) -> ComposeResult:
         device = _welcome_device_name()
         info = "\n".join(_welcome_system_lines())
+
+        def body() -> ComposeResult:
+            yield Static(_WELCOME_LOGO, id="welcome_logo")
+            yield Rule(line_style="heavy", id="welcome_rule")
+            yield Label(self.title_text, id="title")
+            yield Label(self.subtitle_text, id="subtitle")
+            yield Static(f"检测到设备: {device}", id="welcome_device")
+            yield Static(info, id="welcome_info")
+
         with PageFrame():
             yield SystemStatusBar()
-            with Vertical(id="welcome_center"):
-                with Vertical(id="welcome_card"):
-                    yield Static(_WELCOME_LOGO, id="welcome_logo")
-                    yield Label(self.title_text, id="title")
-                    yield Label(self.subtitle_text, id="subtitle")
-                    yield Static(f"检测到设备: {device}", id="welcome_device")
-                    yield Static(info, id="welcome_info")
-                with Horizontal(id="nav"):
-                    for bid, lab, cls in self.nav_spec:
-                        yield Button(lab, id=bid, classes=cls or None)
+            yield from compose_dialog(
+                mode="compact",
+                title=None,
+                subtitle=None,
+                nav_spec=self.nav_spec,
+                body=body,
+                panel_classes="welcome",
+            )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "exit":
@@ -874,98 +1131,296 @@ class WelcomeScreen(WizardScreen):
     def on_next(self) -> None:
         self.app.push_screen(NetworkScreen())
 
-def _network_online() -> bool:
-    try:
-        r = subprocess.run(
-            ["ping", "-c", "1", "-W", "1", "1.1.1.1"],
-            capture_output=True,
-            check=False,
-        )
-        return r.returncode == 0
-    except Exception:
-        return False
+class WifiPasswordScreen(Screen):
+    """WiFi password — gamepad D-pad, no Tab (掌机)."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", show=False, priority=True),
+        Binding("up", "pad_up", show=False, priority=True),
+        Binding("down", "pad_down", show=False, priority=True),
+        Binding("left", "pad_left", show=False, priority=True),
+        Binding("right", "pad_right", show=False, priority=True),
+    ]
+
+    def __init__(self, net: WifiNetwork, wifi: WifiService) -> None:
+        super().__init__()
+        self._net = net
+        self._wifi = wifi
+        self._busy = False
+
+    def compose(self) -> ComposeResult:
+        def body() -> ComposeResult:
+            yield Static(
+                "输入密码 · ↓/←→ 到按钮 · Enter 连接 · Esc 取消",
+                id="wifi_hint",
+            )
+            yield Input(
+                placeholder="密码",
+                password=True,
+                id="wifi_password",
+            )
+            yield Static("", id="wifi_status")
+
+        with PageFrame():
+            yield SystemStatusBar()
+            yield from compose_dialog(
+                mode="page",
+                title="输入 WiFi 密码",
+                subtitle=f"网络: {self._net.ssid}",
+                nav_spec=(
+                    ("cancel", "取消", ""),
+                    ("connect", "连接", "-primary"),
+                ),
+                body=body,
+            )
+
+    def on_mount(self) -> None:
+        self.query_one("#wifi_password", Input).focus()
+
+    def _focusables(self) -> List[object]:
+        inp = self.query_one("#wifi_password", Input)
+        cancel = self.query_one("#cancel", Button)
+        connect = self.query_one("#connect", Button)
+        return [inp, cancel, connect]
+
+    def _pad_step(self, delta: int) -> None:
+        items = self._focusables()
+        focused = self.focused
+        try:
+            idx = items.index(focused)  # type: ignore[arg-type]
+        except ValueError:
+            idx = 0
+        nxt = items[(idx + delta) % len(items)]
+        try:
+            nxt.focus()  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+    def action_pad_up(self) -> None:
+        # From buttons → password; from password stay.
+        if isinstance(self.focused, Button):
+            self.query_one("#wifi_password", Input).focus()
+
+    def action_pad_down(self) -> None:
+        if isinstance(self.focused, Input):
+            self.query_one("#connect", Button).focus()
+        elif self.focused is not None and self.focused.id == "cancel":
+            self.query_one("#connect", Button).focus()
+
+    def action_pad_left(self) -> None:
+        if isinstance(self.focused, Input):
+            # Don't steal caret moves for empty field; jump to 取消 when empty.
+            inp = self.query_one("#wifi_password", Input)
+            if not inp.value:
+                self.query_one("#cancel", Button).focus()
+            return
+        self._pad_step(-1)
+
+    def action_pad_right(self) -> None:
+        if isinstance(self.focused, Input):
+            inp = self.query_one("#wifi_password", Input)
+            if not inp.value:
+                self.query_one("#connect", Button).focus()
+            return
+        self._pad_step(1)
+
+    def action_cancel(self) -> None:
+        self.app.pop_screen()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.action_cancel()
+        elif event.button.id == "connect":
+            self._do_connect()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "wifi_password":
+            self._do_connect()
+
+    def _do_connect(self) -> None:
+        if self._busy:
+            return
+        password = self.query_one("#wifi_password", Input).value or ""
+        if self._net.secured and not password:
+            self.query_one("#wifi_status", Static).update("[bold red]请输入密码[/]")
+            return
+        self._busy = True
+        self.query_one("#wifi_status", Static).update("正在连接…")
+        self.query_one("#connect", Button).disabled = True
+
+        def done(ok: bool, err: Optional[str], ssid: str) -> None:
+            def ui() -> None:
+                self._busy = False
+                try:
+                    self.query_one("#connect", Button).disabled = False
+                except Exception:
+                    pass
+                if ok:
+                    self.app.pop_screen()
+                    try:
+                        net = self.app.screen
+                        if isinstance(net, NetworkScreen):
+                            net.reload_networks(announce=False, focus_next=True)
+                    except Exception:
+                        pass
+                else:
+                    self.query_one("#wifi_status", Static).update(
+                        f"[bold red]{err or '连接失败'}[/]"
+                    )
+                    self.query_one("#wifi_password", Input).focus()
+
+            self.app.call_from_thread(ui)
+
+        self._wifi.connect(self._net, password, done)
 
 
 class NetworkScreen(WizardScreen):
-    """GUI network.py buttons: 返回 / 刷新 / 重新连接|连接 / 断开? / 继续|跳过."""
+    """GUI network page: WiFi OptionList + NM/nmcli/sim connect (keyboard only)."""
 
     shot_name = "network"
     step_key = "network"
     title_text = "网络连接"
-    subtitle_text = ""
+    subtitle_text = "↑↓ 选网 · ←→ 底栏 · Enter 连接/继续"
     focus_nav = "next"
-    # Placeholder; rebuilt in compose() from online state (matches GUI populate_buttons).
-    nav_spec: Sequence[Tuple[str, str, str]] = (
-        ("back", "返回", ""),
-        ("refresh", "刷新", ""),
-        ("reconnect", "重新连接", ""),
-        ("disconnect", "断开", ""),
-        ("next", "继续", "-primary"),
-    )
 
     def __init__(self) -> None:
-        self._online = _network_online()
-        if self._online:
-            self.nav_spec = (
-                ("back", "返回", ""),
-                ("refresh", "刷新", ""),
-                ("reconnect", "重新连接", ""),
-                ("disconnect", "断开", ""),
-                ("next", "继续", "-primary"),
-            )
-        else:
-            self.nav_spec = (
-                ("back", "返回", ""),
-                ("refresh", "刷新", ""),
-                ("connect", "连接", ""),
-                ("next", "跳过", "-primary"),
-            )
+        self._wifi = WifiService()
+        self._networks: List[WifiNetwork] = []
+        self._online = self._wifi.is_online()
+        self._rebuild_nav()
         super().__init__()
 
-    def compose_content(self) -> ComposeResult:
-        if self._online:
-            msg = "[bold #7dd3a0]网络已连接，可以继续安装[/]"
-        else:
-            msg = (
-                "[bold #f0b060]未检测到网络连接[/]\n\n"
-                "仍可继续安装；若无本地镜像，请先连接网络。"
-            )
-        yield Static(msg, id="body")
+    def _rebuild_nav(self) -> None:
+        # Stable button set so every control stays reachable after online/offline flips.
+        online = self._online
+        self.nav_spec = (
+            ("back", "返回", ""),
+            ("refresh", "刷新", ""),
+            ("connect", "重新连接" if online else "连接", ""),
+            ("disconnect", "断开", ""),
+            ("next", "继续" if online else "跳过", "-primary"),
+        )
 
-    def _paint_status(self) -> None:
-        try:
-            body = self.query_one("#body", Static)
-        except Exception:
-            return
+    def compose_content(self) -> ComposeResult:
+        yield Static("", id="wifi_status")
+        yield Static(
+            "↑↓ 选网 · 列表 Enter=连接 · ↓到底/←→ 底栏 · Enter=继续",
+            id="wifi_hint",
+        )
+        yield OptionList(id="wifi_list")
+
+    def on_mount(self) -> None:
+        self.reload_networks(announce=True, focus_next=True)
+        super().on_mount()
+
+    def reload_networks(self, announce: bool = False, focus_next: bool = False) -> None:
+        self._networks = self._wifi.scan()
+        self._online = self._wifi.is_online()
+        ssid = self._wifi.connected_ssid()
         if self._online:
-            body.update("[bold #7dd3a0]网络已连接，可以继续安装[/]")
+            status = "[bold]网络已连接，可以继续安装[/]"
+            if ssid:
+                status += f"\n当前连接: {ssid}"
         else:
-            body.update(
-                "[bold #f0b060]未检测到网络连接[/]\n\n"
-                "仍可继续安装；若无本地镜像，请先连接网络。"
+            status = (
+                "[bold yellow]未检测到网络连接[/]\n"
+                "选择下方 WiFi 后按「连接」（或 Enter）。"
             )
-        # Update primary label 继续/跳过 like GUI
+        try:
+            self.query_one("#wifi_status", Static).update(status)
+        except Exception:
+            pass
+        ol = self.query_one("#wifi_list", OptionList)
+        ol.clear_options()
+        if not self._networks:
+            ol.add_option(Option("未找到可用网络 — 按「刷新」重试", id="wifi_none", disabled=True))
+        else:
+            for i, n in enumerate(self._networks):
+                lock = "*" if n.secured else " "
+                mark = "+" if n.connected else " "
+                label = f"{mark}{lock} {n.ssid}  {n.strength}%  {n.band}"
+                ol.add_option(Option(label, id=f"wifi_{i}"))
+            ol.highlighted = 0
         try:
             nxt = self.query_one("#next", Button)
             nxt.label = "继续" if self._online else "跳过"
+            conn = self.query_one("#connect", Button)
+            conn.label = "重新连接" if self._online else "连接"
+            disc = self.query_one("#disconnect", Button)
+            disc.disabled = not self._online
         except Exception:
             pass
+        if focus_next:
+            try:
+                self.query_one("#next", Button).focus()
+            except Exception:
+                pass
+        if announce:
+            _announce_page("network")
+
+    def _selected_network(self) -> Optional[WifiNetwork]:
+        ol = self.query_one("#wifi_list", OptionList)
+        idx = ol.highlighted
+        if idx is None or idx < 0 or idx >= len(self._networks):
+            return None
+        return self._networks[idx]
+
+    def _start_connect(self) -> None:
+        net = self._selected_network()
+        if net is None:
+            self.query_one("#wifi_status", Static).update(
+                "[bold red]请先用 ↑↓ 选择一个 WiFi 网络[/]"
+            )
+            self.query_one("#wifi_list", OptionList).focus()
+            return
+        if net.band == "ETH" or net.ssid.startswith("有线"):
+            self.query_one("#wifi_status", Static).update("有线网络已连接。")
+            return
+        if net.secured:
+            self.app.push_screen(WifiPasswordScreen(net, self._wifi))
+            return
+        self.query_one("#wifi_status", Static).update(f"正在连接 {net.ssid}…")
+
+        def done(ok: bool, err: Optional[str], ssid: str) -> None:
+            def ui() -> None:
+                if ok:
+                    # Return focus to 继续 so Enter advances (list Enter stays = connect).
+                    self.reload_networks(announce=False, focus_next=True)
+                else:
+                    self.query_one("#wifi_status", Static).update(
+                        f"[bold red]{err or '连接失败'}[/]"
+                    )
+
+            self.app.call_from_thread(ui)
+
+        self._wifi.connect(net, "", done)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id == "wifi_list":
+            self._start_connect()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id or ""
         if bid == "refresh":
-            self._online = _network_online()
-            self._paint_status()
+            self.reload_networks(announce=False, focus_next=False)
+            self.query_one("#wifi_list", OptionList).focus()
             return
-        if bid in ("reconnect", "connect"):
-            # Live ISO: GUI opens WiFi UI; here re-probe connectivity.
-            self._online = _network_online()
-            self._paint_status()
+        if bid == "connect":
+            self._start_connect()
             return
         if bid == "disconnect":
-            # Cannot tear down host NM from installer stub; show offline copy.
-            self._online = False
-            self._paint_status()
+            ssid = self._wifi.connected_ssid()
+            if not ssid:
+                self.query_one("#wifi_status", Static).update("当前没有 WiFi 连接可断开。")
+                return
+
+            def done(ok: bool, result_ssid: str) -> None:
+                def ui() -> None:
+                    self.reload_networks(announce=False, focus_next=True)
+
+                self.app.call_from_thread(ui)
+
+            self._wifi.disconnect(ssid, done)
             return
         super().on_button_pressed(event)
 
@@ -1048,6 +1503,18 @@ class ModeScreen(WizardScreen):
                 "双系统安装 — 保留现有系统，与其他系统共存", id="mode_dual"
             )
 
+    def on_mount(self) -> None:
+        super().on_mount()
+
+        def focus_modes() -> None:
+            try:
+                self.query_one("#mode_set", RadioSet).focus()
+            except Exception:
+                pass
+
+        focus_modes()
+        self.call_after_refresh(focus_modes)
+
     def on_next(self) -> None:
         tag = self._radio_value("mode_set", "fresh")
         self.app.plan.mode = tag  # type: ignore[assignment]
@@ -1062,7 +1529,7 @@ class PartitionAdjustScreen(WizardScreen):
     shot_name = "partition_adjust"
     step_key = "partition_adjust"
     title_text = "磁盘空间不足"
-    subtitle_text = "请选择操作："
+    subtitle_text = "↑↓ 选择操作 · ↓到底栏 · ←→ 切换按钮"
     focus_nav = "next"
 
     def compose_content(self) -> ComposeResult:
@@ -1070,6 +1537,19 @@ class PartitionAdjustScreen(WizardScreen):
             yield RadioButton("使用未分配空间", id="dual_auto", value=True)
             yield RadioButton("缩小分区", id="dual_shrink")
             yield RadioButton("删除整个分区", id="dual_delete")
+
+    def on_mount(self) -> None:
+        super().on_mount()
+
+        def focus_ops() -> None:
+            try:
+                self.query_one("#dual_set", RadioSet).focus()
+            except Exception:
+                pass
+
+        # Same as DiskScreen: options must be focused or ↑↓ never reaches them.
+        focus_ops()
+        self.call_after_refresh(focus_ops)
 
     def on_next(self) -> None:
         tag = self._radio_value("dual_set", "auto")
@@ -1120,7 +1600,7 @@ class ConfirmScreen(WizardScreen):
                 "• 格式化整个磁盘\n"
                 "• 删除所有现有分区和数据\n"
                 "• 创建新的系统分区\n\n"
-                "[bold #f06060]警告: 磁盘上的所有数据将被永久删除！[/]\n\n"
+                "[bold red]警告: 磁盘上的所有数据将被永久删除！[/]\n\n"
                 "您是否要继续？"
             )
         elif p.mode == "repair":
@@ -1139,17 +1619,17 @@ class ConfirmScreen(WizardScreen):
                 details = (
                     f"[bold]双系统安装 - 缩小分区[/]\n"
                     f"磁盘: {p.disk_path()}\n\n"
-                    f"[bold #f0b060]将缩小分区: {p.shrink_partition or '未知'}[/]\n"
+                    f"[bold yellow]将缩小分区: {p.shrink_partition or '未知'}[/]\n"
                     f"释放空间: {p.shrink_size_gb or 0} GB\n\n"
-                    "[bold #f06060]警告: 此操作有风险，请确保已备份重要数据！[/]\n\n"
+                    "[bold red]警告: 此操作有风险，请确保已备份重要数据！[/]\n\n"
                     "您是否要继续？"
                 )
             elif dual_op == "delete":
                 details = (
                     f"[bold]双系统安装 - 删除分区[/]\n"
                     f"磁盘: {p.disk_path()}\n\n"
-                    f"[bold #f06060]警告: 将删除分区 {p.delete_partition or '未知'}！[/]\n"
-                    "[bold #f06060]该分区上的所有数据将永久丢失！[/]\n\n"
+                    f"[bold red]警告: 将删除分区 {p.delete_partition or '未知'}！[/]\n"
+                    "[bold red]该分区上的所有数据将永久丢失！[/]\n\n"
                     "您是否要继续？"
                 )
             else:
@@ -1215,22 +1695,26 @@ class ExecutionScreen(Screen):
     service_name: str = ""
 
     def compose(self) -> ComposeResult:
-        with PageFrame():
-            yield SystemStatusBar()
-            yield Label(self.title_text, id="title")
-            yield Label(self.initial_status, id="subtitle")
+        def body() -> ComposeResult:
             yield ProgressBar(total=100, show_eta=False, id="bar")
             yield Static("", id="log")
-            with Horizontal(id="nav"):
-                yield Button("取消", id="exit")
-                yield Button("继续", id="next", classes="-primary", disabled=True)
 
-    BINDINGS = [
-        Binding("left", "nav_left", show=False, priority=True),
-        Binding("right", "nav_right", show=False, priority=True),
-    ]
+        with PageFrame():
+            yield SystemStatusBar()
+            yield from compose_dialog(
+                mode="page",
+                title=self.title_text,
+                subtitle=self.initial_status,
+                nav_spec=(
+                    ("exit", "取消", ""),
+                    ("next", "继续", "-primary"),
+                ),
+                body=body,
+            )
 
-    def _nav_step(self, delta: int) -> None:
+    def on_key(self, event: events.Key) -> None:
+        if event.key not in ("left", "right"):
+            return
         try:
             buttons = [
                 b
@@ -1243,18 +1727,17 @@ class ExecutionScreen(Screen):
             return
         focused = self.focused
         if focused not in buttons:
-            (buttons[-1] if delta > 0 else buttons[0]).focus()
             return
         idx = buttons.index(focused)  # type: ignore[arg-type]
+        delta = -1 if event.key == "left" else 1
         buttons[(idx + delta) % len(buttons)].focus()
-
-    def action_nav_left(self) -> None:
-        self._nav_step(-1)
-
-    def action_nav_right(self) -> None:
-        self._nav_step(1)
+        event.stop()
 
     def on_mount(self) -> None:
+        try:
+            self.query_one("#next", Button).disabled = True
+        except Exception:
+            pass
         self._lines: List[str] = []
         self._ready = False
         self._ok = False
@@ -1357,7 +1840,7 @@ class VersionScreen(WizardScreen):
     shot_name = "version"
     step_key = "version"
     title_text = "版本选择"
-    subtitle_text = ""
+    subtitle_text = "↑↓ 选当前列 · ←→ 切换列 · ↓到底栏 Enter 开始"
     nav_spec = (
         ("back", "返回", ""),
         ("exit", "退出", ""),
@@ -1440,7 +1923,23 @@ class VersionScreen(WizardScreen):
             self._apply_source_ui(src)
             if src == "local":
                 _announce_page("version_local")
+                # Skip hidden online columns — jump straight to file list.
+                self.call_after_refresh(self._focus_local_files)
+            elif src == "online":
+                self.call_after_refresh(self._focus_online_channel)
         self._refresh_preview()
+
+    def _focus_local_files(self) -> None:
+        try:
+            self.query_one("#local_file_set", RadioSet).focus()
+        except Exception:
+            pass
+
+    def _focus_online_channel(self) -> None:
+        try:
+            self.query_one("#channel_set", RadioSet).focus()
+        except Exception:
+            pass
 
     def _apply_source_ui(self, src: str) -> None:
         try:
@@ -1608,18 +2107,30 @@ class CompleteScreen(WizardScreen):
 
 class InstallerTui(App):
     TITLE = f"SkorionOS 安装程序 v{VERSION}"
-    theme = "textual-dark"
+    # Built-in until skorion-console is registered in __init__.
+    theme = "ansi-dark"
     CSS = """
-    Screen { background: #0e1014; }
+    Screen {
+        background: ansi_blue;
+        color: ansi_white;
+    }
     """
     BINDINGS = [Binding("q", "quit", show=False)]
 
     def __init__(self, plan: Optional[InstallPlan] = None) -> None:
+        # Textual enables Monochrome when NO_COLOR is set — kills brand colors.
+        os.environ.pop("NO_COLOR", None)
+        # Prefer native 16-color SGR over truecolor (VT cannot show Nord RGB).
+        os.environ["TEXTUAL_COLOR_SYSTEM"] = "standard"
+        os.environ.pop("COLORTERM", None)
         super().__init__()
+        self.register_theme(SKORION_CONSOLE)
+        self.theme = "skorion-console"
         self.plan = plan or InstallPlan()
         self.local_frzr_files: List[dict] = list_local_frzr_files()
 
     def on_mount(self) -> None:
+        self.theme = "skorion-console"
         self.push_screen(WelcomeScreen())
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
@@ -1627,6 +2138,7 @@ class InstallerTui(App):
 
 
 def run() -> int:
+    os.environ.pop("NO_COLOR", None)
     if "INSTALLER_DRY_RUN" not in os.environ and not os.environ.get(
         "INSTALLER_ALLOW_REAL_FRZR"
     ):

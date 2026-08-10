@@ -122,6 +122,8 @@ def main() -> int:
     env.pop("INSTALLER_SHOT_DIR", None)  # no SVG path
     env["TERM"] = "xterm-256color"
     env["COLORTERM"] = "truecolor"
+    # Textual turns Monochrome when NO_COLOR is set (agent shells often export it).
+    env.pop("NO_COLOR", None)
     # Prevent fcitx/ibus candidate bar from covering the TUI (steals keys too).
     env["GTK_IM_MODULE"] = "none"
     env["QT_IM_MODULE"] = "none"
@@ -162,7 +164,7 @@ def main() -> int:
         "#!/bin/bash\n"
         f"cd '{esc(str(ROOT))}'\n"
         f"{exports}\n"
-        "unset INSTALLER_DRY_RUN INSTALLER_SHOT_DIR\n"
+        "unset INSTALLER_DRY_RUN INSTALLER_SHOT_DIR NO_COLOR\n"
         "exec python3 -m installer.tui_main\n",
         encoding="utf-8",
     )

@@ -3,6 +3,9 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PYTHONPATH="$ROOT/skorionos/airootfs/usr/local/lib${PYTHONPATH:+:$PYTHONPATH}"
+unset NO_COLOR
+export TERM="${TERM:-xterm-256color}"
+export COLORTERM="${COLORTERM:-truecolor}"
 export INSTALLER_DEV=1
 export INSTALLER_DRY_RUN="${INSTALLER_DRY_RUN:-0}"
 export INSTALLER_FRZR_BOOTSTRAP="$ROOT/scripts/installer-stubs/frzr-bootstrap"

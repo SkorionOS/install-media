@@ -3,6 +3,7 @@ cd /home/gamer/git/install-media
 export PYTHONPATH=/home/gamer/git/install-media/skorionos/airootfs/usr/local/lib
 export TERM=xterm-256color
 export COLORTERM=truecolor
+unset NO_COLOR
 export INSTALLER_DEV=1
 export INSTALLER_SIMULATION=1
 export INSTALLER_SIM_DISK=nvme0n1

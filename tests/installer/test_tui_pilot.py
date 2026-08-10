@@ -96,10 +96,147 @@ def test_tui_wizard_runs_stubs(tmp_path, monkeypatch):
     assert dep["argv"][0].startswith("3003n/skorionos:")
 
 
-def test_tui_nav_arrows_move_button_focus(monkeypatch):
-    """Left/right must move focus across #nav buttons (not Tab-only)."""
+def test_tui_gamepad_dpad_no_tab(monkeypatch):
+    """Handheld contract: ↑↓←→ + Enter only — never require Tab."""
     monkeypatch.setenv("INSTALLER_DEV", "1")
     monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+
+    from textual.widgets import Button, OptionList, RadioSet
+
+    from installer.tui.app import InstallerTui, PartitionAdjustScreen
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause(0.3)
+            assert app.focused.id == "start"
+            await pilot.press("left")
+            await pilot.pause(0.05)
+            assert app.focused.id == "exit"
+            await pilot.press("right")
+            await pilot.pause(0.05)
+            assert app.focused.id == "start"
+            await pilot.press("enter")
+            await pilot.pause(0.25)
+            # Network: Up from nav reaches WiFi list (no Tab)
+            assert app.focused.id == "next"
+            await pilot.press("up")
+            await pilot.pause(0.1)
+            assert isinstance(app.focused, OptionList), app.focused
+            # Down past last SSID reaches nav
+            await pilot.press("down")
+            await pilot.pause(0.05)
+            await pilot.press("down")
+            await pilot.pause(0.05)
+            await pilot.press("down")
+            await pilot.pause(0.1)
+            assert isinstance(app.focused, Button), app.focused
+            app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            # Disk: ↑↓ select without Tab; Down to nav; Enter continues
+            assert isinstance(app.focused, RadioSet)
+            rs = app.screen.query_one("#disk_set", RadioSet)
+            first = rs.pressed_button.id
+            await pilot.press("down")
+            await pilot.pause(0.1)
+            # single sim disk may wrap; either way RadioSet stays usable
+            assert isinstance(app.focused, RadioSet) or isinstance(app.focused, Button)
+            # Enter on RadioSet must NOT advance — ↓ to nav then Enter
+            app.screen.query_one("#disk_set", RadioSet).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert type(app.screen).__name__ == "DiskScreen"
+            await pilot.press("down")  # may wrap or go nav with 1 disk
+            await pilot.pause(0.1)
+            if not isinstance(app.focused, Button):
+                app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            assert type(app.screen).__name__ == "ModeScreen"
+            # Partition adjust: ↑↓ must CHANGE selection (not cursor-only)
+            app.push_screen(PartitionAdjustScreen())
+            await pilot.pause(0.4)
+            rs = app.screen.query_one("#dual_set", RadioSet)
+            assert rs.pressed_button.id == "dual_auto"
+            await pilot.press("down")
+            await pilot.pause(0.15)
+            assert rs.pressed_button.id == "dual_shrink", rs.pressed_button.id
+            await pilot.press("down")
+            await pilot.pause(0.15)
+            assert rs.pressed_button.id == "dual_delete", rs.pressed_button.id
+            # Down from last option → nav button
+            await pilot.press("down")
+            await pilot.pause(0.15)
+            assert isinstance(app.focused, Button), app.focused
+            # Up returns to options
+            await pilot.press("up")
+            await pilot.pause(0.15)
+            assert isinstance(app.focused, RadioSet) or (
+                getattr(app.focused, "id", "").startswith("dual_")
+            )
+
+    asyncio.run(_run())
+
+
+def test_tui_next_works_after_back(monkeypatch):
+    """Popping back must clear _armed so 继续 works again."""
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+
+    from textual.widgets import Button
+
+    from installer.tui.app import InstallerTui
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause(0.2)
+            await pilot.press("enter")  # network
+            await pilot.pause(0.2)
+            app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")  # disk
+            await pilot.pause(0.25)
+            assert type(app.screen).__name__ == "DiskScreen"
+            await pilot.press("escape")
+            await pilot.pause(0.25)
+            assert type(app.screen).__name__ == "NetworkScreen"
+            assert app.screen._armed is False
+            app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.25)
+            assert type(app.screen).__name__ == "DiskScreen"
+
+    asyncio.run(_run())
+
+
+def test_tui_wifi_connect_sim(monkeypatch):
+    """「连接」must call WifiService (sim) — not a re-ping stub."""
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_WIFI", "1")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "0")
+    monkeypatch.delenv("INSTALLER_SIM_WIFI_SSID", raising=False)
     monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
     monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
     monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
@@ -110,48 +247,42 @@ def test_tui_nav_arrows_move_button_focus(monkeypatch):
         "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
     )
 
+    import os
+
+    from textual.widgets import OptionList
+
     from installer.tui.app import InstallerTui
 
     async def _run():
         app = InstallerTui()
         async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause(0.2)
+            await pilot.press("enter")  # start → network
             await pilot.pause(0.3)
-            assert app.focused is not None
-            assert app.focused.id == "start"
-            await pilot.press("left")
+            assert getattr(app.focused, "id", None) == "next"
+            app.screen.query_one("#wifi_list", OptionList).focus()
             await pilot.pause(0.05)
-            assert app.focused.id == "exit", app.focused
-            await pilot.press("right")
+            # First sim AP is open (Skorion-Guest) — Enter connects without password
+            await pilot.press("enter")
+            for _ in range(40):
+                await pilot.pause(0.05)
+                if os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Guest":
+                    break
+            assert os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Guest"
+            assert os.environ.get("INSTALLER_SIM_ONLINE") == "1"
+            # Secured AP → password screen, then connect
+            app.screen.query_one("#wifi_list", OptionList).focus()
+            await pilot.press("down")
             await pilot.pause(0.05)
-            assert app.focused.id == "start"
             await pilot.press("enter")
             await pilot.pause(0.2)
-            # network: many buttons — arrows must walk them
-            assert app.focused.id == "next"
-            await pilot.press("left")
-            await pilot.pause(0.05)
-            assert app.focused.id == "disconnect"
-            await pilot.press("left")
-            await pilot.pause(0.05)
-            assert app.focused.id == "reconnect"
-            # reach disk: focus starts in RadioSet — left/right must enter #nav
-            await pilot.press("enter")  # next from reconnect? need next
-            # focus reconnect; walk to next then enter
-            while getattr(app.focused, "id", None) != "next":
-                await pilot.press("right")
-                await pilot.pause(0.03)
+            assert type(app.screen).__name__ == "WifiPasswordScreen"
+            await pilot.press(*"lab-pass")
             await pilot.press("enter")
-            await pilot.pause(0.25)
-            from textual.widgets import RadioSet
-
-            app.screen.query_one("#disk_set", RadioSet).focus()
-            await pilot.pause(0.05)
-            assert isinstance(app.focused, RadioSet)
-            await pilot.press("right")
-            await pilot.pause(0.05)
-            assert app.focused.id == "next", app.focused
-            await pilot.press("left")
-            await pilot.pause(0.05)
-            assert app.focused.id == "back"
+            for _ in range(40):
+                await pilot.pause(0.05)
+                if os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Lab":
+                    break
+            assert os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Lab"
 
     asyncio.run(_run())
