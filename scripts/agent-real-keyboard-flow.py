@@ -88,6 +88,26 @@ def portal_screenshot(dest: Path) -> None:
         pass
 
 
+def take_screenshot(dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    backend = os.environ.get("INSTALLER_SHOT_BACKEND", "portal")
+    if backend in ("screencast", "gnome"):
+        r = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/gnome-wayland-shot.py"),
+                str(dest),
+                "--hold",
+                "0.55",
+            ],
+            check=False,
+        )
+        if r.returncode != 0 or not dest.is_file() or dest.stat().st_size < 10_000:
+            raise RuntimeError(f"screencast shot failed rc={r.returncode}")
+        return
+    portal_screenshot(dest)
+
+
 def tmux(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["tmux", "-f", "/dev/null", *args],
@@ -156,7 +176,7 @@ def shot(seq: list[int], name: str) -> Path:
     time.sleep(0.35)
     seq[0] += 1
     dest = OUT / f"{seq[0]:02d}_{name}.png"
-    portal_screenshot(dest)
+    take_screenshot(dest)
     size = dest.stat().st_size
     log(f"SHOT {dest.name} bytes={size}")
     if size < 20000:
@@ -241,7 +261,7 @@ def main() -> int:
         f"{exports}\n"
         "unset INSTALLER_SIM_AUTO INSTALLER_SIM_AUTO_DELAY "
         "INSTALLER_DRY_RUN INSTALLER_SHOT_DIR\n"
-        "exec python3 -m installer.tui_main\n",
+        "exec " + os.environ.get("INSTALLER_PYTHON", "python3") + " -m installer.tui_main\n",
         encoding="utf-8",
     )
     run_sh.chmod(0o755)
@@ -410,8 +430,12 @@ def main() -> int:
         shot(seq, "version_local")
         ack("version_local")
         asserts.append("version:Down→local")
-        key("Right")
+        for _ in range(8):
+            if last_focus() == "next":
+                break
+            key("Right")
         wait_focus("next")
+        asserts.append("version:Right→next")
         key("Enter")
 
         # --- install ---
@@ -486,6 +510,7 @@ def main() -> int:
         "confirm:Right→go",
         "confirm:Left→exit",
         "version:Down→local",
+        "version:Right→next",
     ]
     miss_a = [a for a in need_asserts if a not in asserts]
 

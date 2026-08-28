@@ -16,6 +16,21 @@ sys.path.insert(0, str(LIB))
 pytest.importorskip("textual")
 
 
+@pytest.fixture(autouse=True)
+def _clear_sim_product_flags(monkeypatch):
+    for key in (
+        "INSTALLER_SIM_FRZR",
+        "INSTALLER_SIM_MODE",
+        "INSTALLER_SIM_ADVANCED",
+        "INSTALLER_SIM_AUTO",
+        "INSTALLER_SIM_DISK_GATE",
+        "INSTALLER_SIM_DUAL",
+        "INSTALLER_WINDOW_SHOT",
+        "INSTALLER_PAGE_MARKER",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 async def _activate(pilot, app, widget_id: str) -> None:
     """Click if on-screen; otherwise focus + Enter (tall pages)."""
     try:
@@ -44,6 +59,8 @@ def test_tui_wizard_runs_stubs(tmp_path, monkeypatch):
     monkeypatch.setenv("INSTALLER_LOG_FILE", str(tmp_path / "tui.log"))
     monkeypatch.setenv("INSTALLER_SIMULATION", "1")
     monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_MODE", "fresh")
+    monkeypatch.delenv("INSTALLER_SIM_FRZR", raising=False)
     monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
     monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
     monkeypatch.delenv("INSTALLER_PAGE_MARKER", raising=False)
@@ -84,7 +101,8 @@ def test_tui_wizard_runs_stubs(tmp_path, monkeypatch):
                         break
                 except Exception:
                     pass
-            await _activate(pilot, app, "#next")
+            await _activate(pilot, app, "#next")  # after deploy → complete
+            await _activate(pilot, app, "#reboot")
 
     asyncio.run(_run())
 
@@ -168,22 +186,32 @@ def test_tui_gamepad_dpad_no_tab(monkeypatch):
             app.push_screen(PartitionAdjustScreen())
             await pilot.pause(0.4)
             rs = app.screen.query_one("#dual_set", RadioSet)
-            assert rs.pressed_button.id == "dual_auto"
-            await pilot.press("down")
-            await pilot.pause(0.15)
-            assert rs.pressed_button.id == "dual_shrink", rs.pressed_button.id
+            assert rs.pressed_button.id == "dual_shrink"
             await pilot.press("down")
             await pilot.pause(0.15)
             assert rs.pressed_button.id == "dual_delete", rs.pressed_button.id
-            # Down from last option → nav button
+            # Next list is size radios (60/100/200), not nav.
+            await pilot.press("down")
+            await pilot.pause(0.15)
+            size_rs = app.screen.query_one("#size_set", RadioSet)
+            assert app.screen.query_one("#size_100",).value
+            assert isinstance(app.focused, RadioSet) or (
+                getattr(app.focused, "id", "").startswith("size_")
+            )
+            # Down past last size → nav button
+            size_rs.focus()
+            await pilot.press("down")
+            await pilot.pause(0.05)
+            await pilot.press("down")
+            await pilot.pause(0.05)
             await pilot.press("down")
             await pilot.pause(0.15)
             assert isinstance(app.focused, Button), app.focused
-            # Up returns to options
+            # Up returns to size radios
             await pilot.press("up")
             await pilot.pause(0.15)
             assert isinstance(app.focused, RadioSet) or (
-                getattr(app.focused, "id", "").startswith("dual_")
+                getattr(app.focused, "id", "").startswith("size_")
             )
 
     asyncio.run(_run())
@@ -284,5 +312,157 @@ def test_tui_wifi_connect_sim(monkeypatch):
                 if os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Lab":
                     break
             assert os.environ.get("INSTALLER_SIM_WIFI_SSID") == "Skorion-Lab"
+
+    asyncio.run(_run())
+
+
+def test_tui_repair_when_existing_frzr(monkeypatch):
+    """INSTALLER_SIM_FRZR=complete must offer 修复安装."""
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_FRZR", "complete")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+
+    from textual.widgets import Button, RadioButton
+
+    from installer.tui.app import InstallerTui
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause(0.2)
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.25)
+            assert type(app.screen).__name__ == "DiskScreen"
+            app.screen.query_one("#next", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause(0.3)
+            assert type(app.screen).__name__ == "ModeScreen"
+            assert app.has_existing_installation is True
+            repair = app.screen.query_one("#mode_repair", RadioButton)
+            assert repair.value is True
+
+    asyncio.run(_run())
+
+
+def test_tui_advanced_defaults(monkeypatch):
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+
+    from textual.widgets import Checkbox
+
+    from installer.tui.app import AdvancedScreen, InstallerTui
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 36)) as pilot:
+            app.push_screen(AdvancedScreen())
+            await pilot.pause(0.2)
+            assert app.screen.query_one("#adv_firmware_overrides", Checkbox).value is False
+            assert app.screen.query_one("#adv_cdn", Checkbox).value is False
+            assert app.screen.query_one("#adv_fallback_url", Checkbox).value is True
+            assert app.screen.query_one("#adv_debug", Checkbox).value is False
+
+    asyncio.run(_run())
+
+
+def test_tui_advanced_checkbox_opens_page(monkeypatch):
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+    monkeypatch.setenv("INSTALLER_STUB_SLEEP", "0")
+    monkeypatch.setenv("INSTALLER_REQUIRE_STUB", "1")
+    monkeypatch.setenv("INSTALLER_LOG_FILE", "/tmp/tui-adv.log")
+
+    from textual.widgets import Button, Checkbox
+
+    from installer.tui.app import AdvancedScreen, InstallerTui
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 48)) as pilot:
+            await _activate(pilot, app, "#start")
+            await _activate(pilot, app, "#next")  # network
+            await _activate(pilot, app, "#next")  # disk
+            await _activate(pilot, app, "#next")  # mode
+            await _activate(pilot, app, "#go")  # confirm
+            for _ in range(80):
+                await pilot.pause(0.05)
+                try:
+                    if not app.screen.query_one("#next").disabled:
+                        break
+                except Exception:
+                    pass
+            await _activate(pilot, app, "#next")  # version
+            assert type(app.screen).__name__ == "VersionScreen"
+            box = app.screen.query_one("#opt_advanced", Checkbox)
+            box.value = True
+            await _activate(pilot, app, "#next")
+            assert isinstance(app.screen, AdvancedScreen)
+            assert app.screen.query_one("#adv_fallback_url", Checkbox).value is True
+            await _activate(pilot, app, "#next")
+            assert type(app.screen).__name__ == "InstallScreen"
+
+    asyncio.run(_run())
+
+
+def test_tui_sim_mode_dual_lists_partitions(monkeypatch):
+    monkeypatch.setenv("INSTALLER_DEV", "1")
+    monkeypatch.setenv("INSTALLER_SIMULATION", "1")
+    monkeypatch.setenv("INSTALLER_SIM_DISK", "nvme0n1")
+    monkeypatch.setenv("INSTALLER_SIM_MODE", "dual")
+    monkeypatch.setenv("INSTALLER_SIM_ONLINE", "1")
+    monkeypatch.delenv("INSTALLER_SIM_AUTO", raising=False)
+    monkeypatch.delenv("INSTALLER_WINDOW_SHOT", raising=False)
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_BOOTSTRAP", str(ROOT / "scripts/installer-stubs/frzr-bootstrap")
+    )
+    monkeypatch.setenv(
+        "INSTALLER_FRZR_DEPLOY", str(ROOT / "scripts/installer-stubs/frzr-deploy")
+    )
+
+    from textual.widgets import Button, RadioButton
+
+    from installer.tui.app import InstallerTui, PartitionAdjustScreen
+
+    async def _run():
+        app = InstallerTui()
+        async with app.run_test(size=(120, 36)) as pilot:
+            await _activate(pilot, app, "#start")
+            await _activate(pilot, app, "#next")
+            await _activate(pilot, app, "#next")
+            assert type(app.screen).__name__ == "ModeScreen"
+            await _activate(pilot, app, "#next")
+            assert isinstance(app.screen, PartitionAdjustScreen)
+            assert app.screen.query_one("#part_0", RadioButton)
+            assert app.screen.query_one("#dual_shrink", RadioButton)
 
     asyncio.run(_run())

@@ -167,7 +167,17 @@ class InstallPage(ExecutionPage):
                 GLib.idle_add(self.update_status, '<span size="large">正在下载系统镜像...</span>')
 
             GLib.idle_add(self.update_progress, 0.1, "准备中")
-            self._apply_advanced_options()
+            from ...flow.env import simulation
+
+            if simulation():
+                from ...flow.lifecycle import apply_advanced_options
+
+                apply_advanced_options(
+                    plan.advanced,
+                    log=lambda m: GLib.idle_add(self.append_log, m + "\n"),
+                )
+            else:
+                self._apply_advanced_options()
 
             def on_engine_event(event):
                 if event.kind == EventKind.LOG and event.message:
@@ -256,34 +266,37 @@ class InstallPage(ExecutionPage):
         self.append_log(f"{'='*60}\n\n")
         
         try:
-            from ...backend.install_utils import copy_network_config, copy_timezone_config, post_install
-            
-            # Step 1: Copy network configuration
-            self.append_log("正在复制网络配置...\n")
-            if copy_network_config(mount_path):
-                self.append_log("[成功] 网络配置已复制\n")
+            from ...flow.env import simulation
+
+            if simulation():
+                from ...flow.lifecycle import after_deploy_success
+
+                after_deploy_success(log=lambda m: self.append_log(m + "\n"))
             else:
-                self.append_log("[警告] 网络配置复制失败\n")
-            
-            # Step 2: Copy timezone configuration
-            self.append_log("\n正在复制时区配置...\n")
-            timezone = os.environ.get('INSTALLER_TIMEZONE', 'UTC')
-            if copy_timezone_config(mount_path, timezone):
-                self.append_log(f"[成功] 时区已设置为: {timezone}\n")
-            else:
-                self.append_log(f"[警告] 时区配置复制失败，目标系统将使用 UTC\n")
-            
-            # Step 3: Post-installation optimizations
-            self.append_log("\n正在执行系统优化...\n")
-            if post_install(mount_path):
-                self.append_log("[成功] 系统优化完成\n")
-            else:
-                self.append_log("[警告] 系统优化失败\n")
-            
-            # Step 4: Verify boot configuration
+                from ...backend.install_utils import copy_network_config, copy_timezone_config, post_install
+
+                self.append_log("正在复制网络配置...\n")
+                if copy_network_config(mount_path):
+                    self.append_log("[成功] 网络配置已复制\n")
+                else:
+                    self.append_log("[警告] 网络配置复制失败\n")
+
+                self.append_log("\n正在复制时区配置...\n")
+                timezone = os.environ.get('INSTALLER_TIMEZONE', 'UTC')
+                if copy_timezone_config(mount_path, timezone):
+                    self.append_log(f"[成功] 时区已设置为: {timezone}\n")
+                else:
+                    self.append_log("[警告] 时区配置复制失败，目标系统将使用 UTC\n")
+
+                self.append_log("\n正在执行系统优化...\n")
+                if post_install(mount_path):
+                    self.append_log("[成功] 系统优化完成\n")
+                else:
+                    self.append_log("[警告] 系统优化失败\n")
+
             self.append_log("\n正在验证启动配置...\n")
             self._verify_boot_config(mount_path)
-            
+
             self.append_log(f"\n{'='*60}\n")
             self.append_log("后安装配置完成！\n")
             self.append_log(f"{'='*60}\n\n")
@@ -407,12 +420,21 @@ class InstallPage(ExecutionPage):
             GLib.idle_add(self.append_log, f"[警告] 备用源配置失败: {e}\n")
     
     def on_execution_error(self, error_msg: str):
-        """Called when installation fails."""
-        # Call parent to update UI
-        super().on_execution_error(error_msg)
-        
-        # Update start button label to show "重试安装"
-        GLib.idle_add(self._update_retry_button_label)
+        """Match TUI: deploy failure opens complete/failed."""
+        self.is_executing = False
+        self.execution_failed = True
+        from .complete import CompletePage
+        from ...flow import copy as flow_copy
+
+        def go():
+            self.app.show_complete_page(
+                CompletePage.STATUS_FAILED,
+                flow_copy.COMPLETE_FAIL_SUMMARY,
+                error_msg,
+            )
+            return False
+
+        GLib.idle_add(go)
     
     def _update_retry_button_label(self):
         """Update start button label to '重试安装'."""

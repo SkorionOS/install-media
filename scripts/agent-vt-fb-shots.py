@@ -17,6 +17,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from shot_spec import required_pages, seen_enough
+
 ROOT = Path(__file__).resolve().parents[1]
 TTYN = int(os.environ.get("INSTALLER_VT_TTY", "3"))
 OUT = Path(
@@ -74,9 +77,21 @@ def dump_vcsu(ttyn: int, dest: Path) -> None:
     dest.write_text("\n".join(lines[:80]), encoding="utf-8")
 
 
+def fb_size() -> str:
+    p = Path("/sys/class/graphics/fb0/virtual_size")
+    try:
+        raw = p.read_text().strip().replace(",", "x")
+        if "x" in raw:
+            return raw
+    except Exception:
+        pass
+    return "1280x720"
+
+
 def capture_fb(seq: int, label: str) -> Path | None:
     name = f"{seq:02d}_{label}"
     raw_path = OUT / f"{name}_raw.png"
+    size = fb_size()
     sudo(
         "ffmpeg",
         "-y",
@@ -88,7 +103,7 @@ def capture_fb(seq: int, label: str) -> Path | None:
         "-pixel_format",
         "bgra",
         "-video_size",
-        "3840x2160",
+        size,
         "-i",
         "/dev/fb0",
         "-frames:v",
@@ -140,34 +155,46 @@ def main() -> int:
     for p in (marker, queue, ack):
         p.write_text("", encoding="utf-8")
 
+    py = os.environ.get("INSTALLER_PYTHON", "python3")
+
+    def esc(v: str) -> str:
+        return v.replace("'", "'\\''")
+
+    env_pass = {
+        "PYTHONPATH": str(ROOT / "skorionos/airootfs/usr/local/lib"),
+        "TERM": "linux",
+        "TEXTUAL_COLOR_SYSTEM": "standard",
+        "INSTALLER_DEV": "1",
+        "INSTALLER_SIMULATION": "1",
+        "INSTALLER_SIM_DISK": os.environ.get("INSTALLER_SIM_DISK", "nvme0n1"),
+        "INSTALLER_SIM_LOCAL": os.environ.get("INSTALLER_SIM_LOCAL", "1"),
+        "INSTALLER_SIM_AUTO": "1",
+        "INSTALLER_SIM_AUTO_DELAY": os.environ.get("INSTALLER_SIM_AUTO_DELAY", "0.55"),
+        "INSTALLER_WINDOW_SHOT": "1",
+        "INSTALLER_PAGE_MARKER": str(marker),
+        "INSTALLER_PAGE_ACK": str(ack),
+        "INSTALLER_PAGE_ACK_TIMEOUT": os.environ.get("INSTALLER_PAGE_ACK_TIMEOUT", "12"),
+        "INSTALLER_FRZR_BOOTSTRAP": str(ROOT / "scripts/installer-stubs/frzr-bootstrap"),
+        "INSTALLER_FRZR_DEPLOY": str(ROOT / "scripts/installer-stubs/frzr-deploy"),
+        "INSTALLER_STUB_SLEEP": "0",
+        "INSTALLER_LOG_FILE": str(OUT / "tui.log"),
+        "INSTALLER_STUB_RECORD": str(OUT / "stub-bootstrap.json"),
+        "INSTALLER_STUB_RECORD_DEPLOY": str(OUT / "stub-deploy.json"),
+    }
+    for k, v in os.environ.items():
+        if k.startswith("INSTALLER_SIM_") and k not in env_pass:
+            env_pass[k] = v
+        if k.startswith("INSTALLER_STUB_") and k not in env_pass:
+            env_pass[k] = v
+    exports = "\n".join(f"export {k}='{esc(str(v))}'" for k, v in env_pass.items())
     run_sh = OUT / "run-tui.sh"
     run_sh.write_text(
-        f"""#!/bin/bash
-cd '{ROOT}'
-export PYTHONPATH='{ROOT}/skorionos/airootfs/usr/local/lib'
-export TERM=linux
-unset COLORTERM
-export TEXTUAL_COLOR_SYSTEM=standard
-unset NO_COLOR
-export INSTALLER_DEV=1
-export INSTALLER_SIMULATION=1
-export INSTALLER_SIM_DISK=nvme0n1
-export INSTALLER_SIM_LOCAL=1
-export INSTALLER_SIM_AUTO=1
-export INSTALLER_SIM_AUTO_DELAY=0.55
-export INSTALLER_WINDOW_SHOT=1
-export INSTALLER_PAGE_MARKER='{marker}'
-export INSTALLER_PAGE_ACK='{ack}'
-export INSTALLER_PAGE_ACK_TIMEOUT=12
-export INSTALLER_FRZR_BOOTSTRAP='{ROOT}/scripts/installer-stubs/frzr-bootstrap'
-export INSTALLER_FRZR_DEPLOY='{ROOT}/scripts/installer-stubs/frzr-deploy'
-export INSTALLER_STUB_SLEEP=0
-export INSTALLER_LOG_FILE='{OUT}/tui.log'
-unset INSTALLER_DRY_RUN
-# Full fbcon geometry (never 120x36 — sticky small size leaves black FB margins).
-stty rows {rows} cols {cols} 2>/dev/null || true
-exec python3 -m installer.tui_main
-""",
+        "#!/bin/bash\n"
+        f"cd '{esc(str(ROOT))}'\n"
+        f"{exports}\n"
+        "unset COLORTERM NO_COLOR INSTALLER_DRY_RUN INSTALLER_ALLOW_REAL_FRZR\n"
+        f"stty rows {rows} cols {cols} 2>/dev/null || true\n"
+        f"exec {esc(py)} -m installer.tui_main\n",
         encoding="utf-8",
     )
     run_sh.chmod(0o755)
@@ -187,6 +214,7 @@ exec python3 -m installer.tui_main
     seq = 0
     last_mark = ""
     deadline = time.time() + 90
+    required, counts = required_pages()
     try:
         while time.time() < deadline:
             try:
@@ -220,7 +248,7 @@ exec python3 -m installer.tui_main
                 seen.append(label)
                 ack.write_text(label + "\n", encoding="utf-8")
                 last_mark = label
-                if label == "complete":
+                if label == "complete" or seen_enough(seen, required, counts):
                     time.sleep(0.4)
                     break
                 continue
@@ -244,19 +272,10 @@ exec python3 -m installer.tui_main
     except Exception:
         pass
 
-    required = [
-        "welcome",
-        "network",
-        "disk",
-        "mode",
-        "confirm",
-        "version",
-        "complete",
-    ]
     missing = [r for r in required if r not in seen]
     pngs = sorted(OUT.glob("0*.png"))
     result = OUT / "RESULT.txt"
-    if missing or len(pngs) < 6:
+    if missing or len(pngs) < max(2, min(6, len(required))):
         result.write_text(
             f"FAIL\nseen={seen}\nmissing={missing}\ncount={len(pngs)}\n",
             encoding="utf-8",

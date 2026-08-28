@@ -6,6 +6,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 
 from ...config import config
+from ...flow import copy as flow_copy
 from ..components.base import BasePage, UIComponents
 
 
@@ -25,7 +26,7 @@ class AdvancedOptionsPage(BasePage):
         icon.set_pixel_size(config.scaled(48))
         title_box.append(icon)
         
-        title = UIComponents.create_title("高级安装选项")
+        title = UIComponents.create_title(flow_copy.ADVANCED_TITLE)
         title_box.append(title)
         
         return title_box
@@ -34,7 +35,7 @@ class AdvancedOptionsPage(BasePage):
         """Populate advanced options."""
         # Description
         desc_label = Gtk.Label()
-        desc_label.set_markup('<span size="large">选择需要启用的高级功能：</span>')
+        desc_label.set_markup(f'<span size="large">{flow_copy.ADVANCED_SUBTITLE}</span>')
         desc_label.set_margin_bottom(config.scaled(15))
         content_box.append(desc_label)
         
@@ -45,12 +46,7 @@ class AdvancedOptionsPage(BasePage):
         options_box.set_size_request(config.scaled(600), -1)
         
         # Define options (key, label, description, default)
-        options = [
-            ('firmware_overrides', '使用固件覆盖', '覆盖系统 DSDT/EDID 固件', False),
-            ('cdn', 'CDN 加速', '使用 CDN 加速 GitHub 下载', False),
-            ('fallback_url', '使用备用源 (推荐)', '使用 Gitee/Gitcode 镜像源', True),
-            ('debug', 'Debug 模式', '启用详细日志输出用于排错', False),
-        ]
+        options = flow_copy.ADVANCED_OPTIONS
         
         for key, label, description, default in options:
             option_box = self._create_option_checkbox(key, label, description, default)
@@ -103,7 +99,7 @@ class AdvancedOptionsPage(BasePage):
         button_box.append(exit_btn)
         
         # Continue button
-        continue_btn = UIComponents.create_button("继续安装", "go-next-symbolic")
+        continue_btn = UIComponents.create_button(flow_copy.ADVANCED_CONTINUE, "go-next-symbolic")
         continue_btn.add_css_class("suggested-action")
         continue_btn.connect("clicked", lambda b: self._on_continue())
         button_box.append(continue_btn)

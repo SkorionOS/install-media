@@ -396,7 +396,10 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         # Show first page (no history for initial page)
         self.show_page(0, add_to_history=False)
-        
+        from .ui.sim_walk import attach as attach_sim_walk
+
+        attach_sim_walk(self)
+
         print("[INFO] GTK4 window created")
     
     def setup_input_controller(self):
@@ -443,6 +446,9 @@ class InstallerApp(Gtk.ApplicationWindow):
         
         self.current_page = page_num
         print(f"[NAV] Showing page {page_num}")
+        from .ui.sim_walk import announce as announce_sim_page
+
+        announce_sim_page(self)
         
         # Create page content
         pages = [

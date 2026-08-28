@@ -1,12 +1,49 @@
 """
 NetworkManager wrapper for network operations
 """
+import os
+
 import gi
 gi.require_version('NM', '1.0')
 from gi.repository import NM, GLib
+from ..flow.env import simulation
 from ..logger import get_logger
 
 logger = get_logger('network')
+
+
+class _SimAP:
+    """Stand-in AccessPoint for INSTALLER_SIMULATION=1 (no live NM scan)."""
+
+    def __init__(self, ssid: str, strength: int, secured: bool, freq: int):
+        self._ssid = ssid.encode("utf-8")
+        self._strength = strength
+        self._secured = secured
+        self._freq = freq
+
+    def get_ssid(self):
+        ssid = self._ssid
+
+        class _Buf:
+            def get_data(self_inner):
+                return ssid
+
+        return _Buf()
+
+    def get_strength(self):
+        return self._strength
+
+    def get_frequency(self):
+        return self._freq
+
+    def get_wpa_flags(self):
+        return 1 if self._secured else 0
+
+    def get_rsn_flags(self):
+        return 0
+
+    def get_path(self):
+        return "/"
 
 
 class NetworkManager:
@@ -14,6 +51,11 @@ class NetworkManager:
     
     def __init__(self):
         """Initialize NetworkManager client"""
+        self._sim = simulation()
+        self.client = None
+        if self._sim:
+            print("[NM] simulation client (no live scan)")
+            return
         try:
             self.client = NM.Client.new(None)
             print("[NM] NetworkManager client initialized")
@@ -23,10 +65,14 @@ class NetworkManager:
     
     def is_available(self):
         """Check if NetworkManager is available"""
+        if self._sim:
+            return True
         return self.client is not None
     
     def get_wifi_device(self):
         """Get WiFi device"""
+        if self._sim:
+            return object()
         if not self.client:
             return None
         
@@ -42,6 +88,12 @@ class NetworkManager:
         Returns:
             list: List of (ap, ssid) tuples, sorted by signal strength
         """
+        if self._sim:
+            return [
+                (_SimAP("Skorion-Guest", 88, False, 2412), "Skorion-Guest"),
+                (_SimAP("Skorion-Lab", 72, True, 5500), "Skorion-Lab"),
+                (_SimAP("Office-WiFi", 55, True, 5180), "Office-WiFi"),
+            ]
         wifi_device = self.get_wifi_device()
         if not wifi_device:
             return []
@@ -95,6 +147,8 @@ class NetworkManager:
         Returns:
             list: List of active ethernet devices
         """
+        if self._sim:
+            return []
         if not self.client:
             return []
         
@@ -123,6 +177,8 @@ class NetworkManager:
     
     def get_connected_wifi_ssid(self):
         """Get the SSID of currently connected WiFi, or None"""
+        if self._sim:
+            return os.environ.get("INSTALLER_SIM_WIFI_SSID") or None
         if not self.client:
             return None
         
@@ -156,6 +212,8 @@ class NetworkManager:
     
     def is_online(self):
         """Check if network is online"""
+        if self._sim:
+            return os.environ.get("INSTALLER_SIM_ONLINE", "1") in ("1", "true", "yes")
         if not self.client:
             return False
         return self.client.get_connectivity() == NM.ConnectivityState.FULL
@@ -170,6 +228,11 @@ class NetworkManager:
             password: Network password (can be empty for open networks)
             callback: Callback function(success, error_msg, ssid)
         """
+        if self._sim:
+            os.environ["INSTALLER_SIM_WIFI_SSID"] = ssid
+            os.environ["INSTALLER_SIM_ONLINE"] = "1"
+            GLib.timeout_add(80, lambda: (callback(True, None, ssid), False)[1])
+            return
         if not self.client:
             callback(False, "NetworkManager not available", ssid)
             return

@@ -61,6 +61,10 @@ class MessagePage(BasePage):
             self.title_color = color
         if main_msg:
             self.main_message = main_msg
+        # Reused MessagePage must not leak bullets/warnings from the previous gate.
+        self.details_list = []
+        self.additional_warning = ""
+        self.question = ""
         if details is not None:
             self.details_list = details if isinstance(details, list) else [details]
         if additional:

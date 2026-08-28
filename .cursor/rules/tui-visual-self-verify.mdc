@@ -7,7 +7,7 @@ alwaysApply: true
 
 After any Textual TUI / window-shot change, the agent MUST:
 
-1. Produce real evidence (gnome-terminal + portal PNG, or Textual export rendered to PNG). Never claim PASS from logs alone.
+1. Produce real evidence. **Linux VT** (`openvt` + `/dev/fb0` or kmsgrab on **Win5 only**) is the ISO path. gnome-terminal / portal / SVG are compositor extras, **not** VT proof. Never claim PASS from logs alone.
 2. **Open the PNG with the Read tool** (images are described to the model). Do not skim filenames.
 3. Self-review every page shot for: missing buttons vs GUI, clipped/overflow content, huge empty voids, wrong nav alignment, status-bar content, keyboard focus visibly moving.
 4. `INSTALLER_SIM_AUTO` is NOT keyboard proof. Arrow-key coverage needs real key injection + focus assertions + looking at before/after shots.

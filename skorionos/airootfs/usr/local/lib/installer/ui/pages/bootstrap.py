@@ -121,7 +121,9 @@ class BootstrapPage(ExecutionPage):
             
             # Step 1: Set NTP
             GLib.idle_add(self.update_status, '<span size="large">正在同步系统时间...</span>')
-            subprocess.run(['timedatectl', 'set-ntp', 'true'], check=False)
+            from ...flow.env import simulation
+            if not simulation():
+                subprocess.run(['timedatectl', 'set-ntp', 'true'], check=False)
             
             # Step 2: Execute frzr-bootstrap via InstallEngine (non-interactive)
             if mode == 'repair':
@@ -159,7 +161,18 @@ class BootstrapPage(ExecutionPage):
             
             # Step 3: Scan for local installation files
             GLib.idle_add(self.update_status, '<span size="large">正在扫描本地安装文件...</span>')
-            local_files = self._scan_frzr_update_files()
+            from ...flow.env import simulation
+            from ...flow.lifecycle import after_bootstrap_success
+
+            if simulation():
+                # Live scan mounts host partitions — never do that in sim.
+                local_files = after_bootstrap_success(
+                    self.app,
+                    steam=False,
+                    log=lambda m: GLib.idle_add(self.append_log, m + "\n"),
+                )
+            else:
+                local_files = self._scan_frzr_update_files()
             
             # Store results
             self.app.local_frzr_files = local_files
@@ -202,8 +215,10 @@ class BootstrapPage(ExecutionPage):
     def on_execution_success(self):
         """Called when bootstrap completes successfully."""
         super().on_execution_success()
-        
-        # Grab Steam bootstrap after disk initialization
+        from ...flow.env import simulation
+
+        if simulation():
+            return
         GLib.idle_add(self._grab_steam_bootstrap)
     
     def _grab_steam_bootstrap(self):
@@ -423,6 +438,23 @@ class BootstrapPage(ExecutionPage):
                 GLib.idle_add(self.append_log, f"  [跳过] {mount_point}: {str(e)}\n")
         
         GLib.idle_add(self.append_log, "✓ 挂载点清理完成\n\n")
+
+    def on_execution_error(self, error_msg: str):
+        """Match TUI: bootstrap failure opens complete/failed."""
+        self.is_executing = False
+        self.execution_failed = True
+        from .complete import CompletePage
+        from ...flow import copy as flow_copy
+
+        def go():
+            self.app.show_complete_page(
+                CompletePage.STATUS_FAILED,
+                flow_copy.COMPLETE_FAIL_SUMMARY,
+                error_msg,
+            )
+            return False
+
+        GLib.idle_add(go)
     
     def _show_cancelled_page(self):
         """Show cancelled completion page."""

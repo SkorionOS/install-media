@@ -3,19 +3,18 @@ Disk selection page for the graphical installer - COMPLETE REWRITE
 Supports: repair / fresh / dual-boot installation modes
 """
 
+import os
+import threading
+
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, GLib
-import threading
 from ...config import config
 from ...backend.disk_utils import (
     list_available_disks,
-    check_existing_frzr_installation,
-    check_free_space,
-    list_shrinkable_partitions,
-    is_disk_smaller_than,
-    is_disk_external
 )
+from ...flow.disk import after_disk_selected
+from ...flow import copy as flow_copy
 from ..components.base import BasePage, UIComponents
 from .message import MessagePage
 from ...logger import get_logger
@@ -117,12 +116,16 @@ def create_disk_page(app):
 def _scan_and_populate_disks_thread(app):
     """Scan available disks in background thread"""
     try:
-        # This runs in a background thread, so UI won't freeze
-        disks = list_available_disks()
-        
-        # Update UI in main thread
+        from ...flow.env import simulation
+
+        if simulation():
+            name = os.environ.get("INSTALLER_SIM_DISK", "nvme0n1").removeprefix("/dev/")
+            disks = [{"name": name, "description": f"{name} — 953.9G NVMe"}]
+        else:
+            disks = list_available_disks()
+
         GLib.idle_add(_update_disk_list, app, disks)
-        
+
     except Exception as e:
         logger.exception(f"[DISK] Error scanning disks: {e}")
         print(f"[DISK] Error scanning disks: {e}")
@@ -138,11 +141,21 @@ def _update_disk_list(app, disks):
     # Show disk list
     _show_disk_list(app, disks)
     
-    # Auto-select if only one disk
-    if len(disks) == 1:
-        print(f"[DISK] Auto-selecting single disk: {disks[0]['name']}")
-        app.selected_disk = disks[0]['name']
-        app.selected_disk_desc = disks[0]['description']
+    # Auto-select if only one disk (original). Sim may also prefer INSTALLER_SIM_DISK.
+    from ...flow.env import simulation
+
+    prefer = os.environ.get("INSTALLER_SIM_DISK", "").removeprefix("/dev/")
+    chosen = None
+    if simulation() and prefer:
+        chosen = next((d for d in disks if d["name"] == prefer), None)
+    if chosen is None and len(disks) == 1:
+        chosen = disks[0]
+        print(f"[DISK] Auto-selecting single disk: {chosen['name']}")
+    elif chosen is not None:
+        print(f"[DISK] Auto-selecting: {chosen['name']}")
+    if chosen is not None:
+        app.selected_disk = chosen["name"]
+        app.selected_disk_desc = chosen["description"]
         app.disk_continue_btn.set_sensitive(True)
     
     return False
@@ -206,42 +219,34 @@ def _on_disk_selected(app, button, disk_info):
 def _on_continue(app):
     """Handle continue button - perform safety checks then detect installation"""
     disk = app.selected_disk
-    
-    # Perform safety checks first
     print(f"[DISK] Performing safety checks on {disk}...")
-    
-    # Check 1: Disk size (must be >= config.min_disk_size)
-    from ...config import config
-    if is_disk_smaller_than(disk, config.min_disk_size):
+    # Live ISO: simulation() is false → full safety. Sim: never lsblk/format host.
+    gate = after_disk_selected(disk)
+    if gate.step == "too_small":
         _show_disk_too_small_dialog(app, disk)
         return
-    
-    # Check 2: External disk warning
-    if is_disk_external(disk):
+    if gate.step == "external":
         _show_external_disk_warning(app, disk)
         return
-    
-    # Safety checks passed, proceed with installation detection
-    _continue_to_mode_selection(app, disk)
+    _apply_frzr_gate(app, disk, gate)
+
+
+def _apply_frzr_gate(app, disk, gate):
+    if gate.step == "incomplete":
+        _show_cleanup_dialog(app, disk)
+        return
+    app.has_existing_installation = gate.has_existing
+    app.show_page("mode")
 
 
 def _continue_to_mode_selection(app, disk):
-    """Continue to mode selection after safety checks pass."""
+    """Continue after external-disk warning (skip size/external, still check frzr)."""
+    from ...flow.disk import after_frzr_check
+
     print(f"[DISK] Checking {disk} for existing frzr installation...")
-    status = check_existing_frzr_installation(disk)
-    print(f"[DISK] Installation status: {status}")
-    
-    if status == 'complete':
-        # Complete installation found - go to mode selection page
-        app.has_existing_installation = True
-        app.show_page('mode')
-    elif status == 'incomplete':
-        # Incomplete remnants - show cleanup dialog
-        _show_cleanup_dialog(app, disk)
-    else:
-        # No installation - go to mode selection page
-        app.has_existing_installation = False
-        app.show_page('mode')
+    gate = after_frzr_check(disk)
+    print(f"[DISK] Installation status: {gate.step} existing={gate.has_existing}")
+    _apply_frzr_gate(app, disk, gate)
 
 
 def _show_mode_dialog_with_repair(app, disk):
@@ -354,9 +359,9 @@ def _show_cleanup_dialog(app, disk):
     app._message_page.configure(
         message_type=MessagePage.TYPE_WARNING,
         icon="dialog-warning-symbolic",
-        title="检测到不完整的 frzr 安装残留",
+        title=flow_copy.INCOMPLETE_TITLE,
         color="orange",
-        main_msg=f"磁盘 /dev/{disk} 上有不完整的 frzr 分区。",
+        main_msg=flow_copy.INCOMPLETE_MSG.format(disk=disk),
         details=[
             "这可能是之前安装失败的结果。",
             "建议清理残留分区后重新安装。"
@@ -364,7 +369,7 @@ def _show_cleanup_dialog(app, disk):
         question="是否清理残留分区？",
         buttons=[
             ("取消", "process-stop-symbolic", lambda b: app.go_back(), None),
-            ("清理", "edit-clear-symbolic", lambda b: _show_mode_dialog(app, disk), "suggested-action")
+            ("清理", "edit-clear-symbolic", lambda b: _show_mode_dialog(app, disk), "suggested-action"),
         ]
     )
     
@@ -395,27 +400,26 @@ def _on_mode_selected(app, dialog, repair_btn, fresh_btn, dual_btn):
 
 def _configure_dual_boot(app):
     """Configure dual-boot installation"""
+    from ...flow.disk import after_dual_selected
+
     disk = app.selected_disk
-    
     print(f"[DISK] Checking free space on {disk}...")
-    free_spaces = check_free_space(disk)
-    
-    if free_spaces:
-        # Has sufficient free space
-        print(f"[DISK] Found {len(free_spaces)} free space(s): {free_spaces}")
-        app.install_mode = 'dual'
+    dual = after_dual_selected(disk)
+    app.install_mode = 'dual'
+    if dual.step == "confirm_auto":
         app.dual_mode = 'auto'
         app.show_page('confirm')
     else:
-        # No sufficient free space - go to partition adjustment page
-        print(f"[DISK] No sufficient free space, going to partition adjustment page")
+        print("[DISK] No sufficient free space, going to partition adjustment page")
         app.show_page('partition_adjust')
 
 
 def _show_partition_adjustment_dialog(app):
     """Show dialog for partition adjustment (shrink/delete)"""
     disk = app.selected_disk
-    partitions = list_shrinkable_partitions(disk)
+    from ...flow.disk import shrinkable_partitions
+
+    partitions = shrinkable_partitions(disk)
     
     if not partitions:
         _show_error(app, "没有找到可以操作的分区（需要 >= 55GB 的 ntfs/ext4/btrfs 分区）")
@@ -610,13 +614,10 @@ def _show_disk_too_small_dialog(app, disk):
     app._message_page.configure(
         message_type=MessagePage.TYPE_ERROR,
         icon="dialog-error-symbolic",
-        title="磁盘空间不足",
+        title=flow_copy.DISK_TOO_SMALL_TITLE,
         color="red",
-        main_msg=f"磁盘 {disk} 小于 {config.min_disk_size}GB，无法安装 SkorionOS。",
-        details=[
-            f"SkorionOS 需要至少 {config.min_disk_size}GB 的可用空间。",
-            "请选择更大的磁盘。"
-        ],
+        main_msg=flow_copy.DISK_TOO_SMALL_MSG.format(disk=disk, min_gb=config.min_disk_size),
+        details=flow_copy.DISK_TOO_SMALL_DETAIL.split("\n"),
         buttons=[
             ("返回", "go-previous-symbolic", lambda b: app.go_back(), None)
         ]
@@ -634,9 +635,9 @@ def _show_external_disk_warning(app, disk):
     app._message_page.configure(
         message_type=MessagePage.TYPE_WARNING,
         icon="dialog-warning-symbolic",
-        title="外部磁盘警告",
+        title=flow_copy.EXTERNAL_TITLE,
         color="orange",
-        main_msg=f"磁盘 {disk} 似乎是外部设备（USB/SD卡等）。",
+        main_msg=flow_copy.EXTERNAL_MSG.format(disk=disk),
         details=[
             "在外部磁盘上安装可能导致：",
             "• 系统性能不佳",

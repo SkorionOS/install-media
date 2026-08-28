@@ -3,7 +3,7 @@
 set -euo pipefail
 
 RECORD="${INSTALLER_STUB_RECORD_DEPLOY:-/tmp/installer-stub-deploy.json}"
-EXIT_CODE="${INSTALLER_STUB_EXIT:-0}"
+EXIT_CODE="${INSTALLER_STUB_DEPLOY_EXIT:-${INSTALLER_STUB_EXIT:-0}}"
 
 mkdir -p "$(dirname "$RECORD")"
 python3 - <<'PY' "$RECORD" "$EXIT_CODE" "$@"

@@ -1,0 +1,24 @@
+---
+description: Win5 full-verify DoD — checklist is a floor; off-list known bugs still block stop.
+alwaysApply: true
+---
+
+# Win5 verify — stop gate
+
+Source of truth: `.sim/VERIFY-DOD.txt`.
+
+That file is the **minimum**, not the whole product.
+If you already saw a defect and it is missing from the file, **append it**.
+Do not ignore a bug because nobody wrote the line yet.
+
+Forbidden:
+- Ending with any `[ ]` open after claiming verify work
+- Writing “没做 / 已知问题 / 以后再说” as the delivery
+- Skipping GUI, VT, or TUI 60/100/200 because a previous session failed
+- Treating pytest or SVG export as visual proof
+- Real frzr on a host disk (`INSTALLER_ALLOW_REAL_FRZR` unset)
+
+Required before any “done”:
+- Every line in `.sim/VERIFY-DOD.txt` is `[x]` with an evidence path
+- TUI/GUI PNGs opened with the Read tool (not filenames)
+- Simulation only: `INSTALLER_SIMULATION=1` + stubs; GUI uses `flow.disk` sim gates

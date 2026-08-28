@@ -301,6 +301,18 @@ def apply_timezone_to_live(timezone):
         if not _is_valid_timezone(timezone):
             logger.error(f"Invalid timezone: {timezone}")
             return False
+
+        from ..flow.env import simulation
+
+        if simulation():
+            os.environ["TZ"] = timezone
+            try:
+                import time
+                time.tzset()
+            except Exception:
+                pass
+            logger.info(f"Timezone recorded (sim, skipped timedatectl): {timezone}")
+            return True
         
         # Apply using timedatectl
         result = subprocess.run(

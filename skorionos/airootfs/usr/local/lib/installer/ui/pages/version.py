@@ -6,6 +6,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 
 from ...config import config
+from ...flow import copy as flow_copy
 from ..components.base import BasePage, UIComponents
 
 
@@ -97,8 +98,9 @@ class VersionPage(BasePage):
         else:
             online_btn.set_sensitive(False)
             online_btn.set_tooltip_text("未检测到网络连接")
-            # Force local mode if online was selected but no network
-            if self.app.version_selections['install_mode'] == 'online':
+            # Keep online selected when there is no local image so Continue
+            # opens the same offline message as TUI (do not silently switch).
+            if has_local_files and self.app.version_selections['install_mode'] == 'online':
                 self.app.version_selections['install_mode'] = 'local'
         buttons_box.append(online_btn)
         
@@ -132,7 +134,7 @@ class VersionPage(BasePage):
         config_row.append(self.config_label)
         
         # Advanced options checkbox
-        self.advanced_check = Gtk.CheckButton(label="启用高级选项")
+        self.advanced_check = Gtk.CheckButton(label=flow_copy.ADVANCED_ENABLE)
         self.advanced_check.set_active(self.app.use_advanced_options)
         self.advanced_check.connect("toggled", self._on_advanced_toggled)
         config_row.append(self.advanced_check)
@@ -430,10 +432,10 @@ class VersionPage(BasePage):
                 self.app._message_page.configure(
                     message_type=MessagePage.TYPE_ERROR,
                     icon="network-error-symbolic",
-                    title="网络连接已断开",
+                    title=flow_copy.NETWORK_OFFLINE_TITLE,
                     color="red",
-                    main_msg="在线安装需要稳定的网络连接。",
-                    details=["请连接网络后重试，或选择本地安装。"],
+                    main_msg=flow_copy.NETWORK_OFFLINE_MSG,
+                    details=[flow_copy.NETWORK_OFFLINE_DETAIL],
                     buttons=[
                         ("返回", "go-previous-symbolic", lambda b: self.app.go_back(), None)
                     ]

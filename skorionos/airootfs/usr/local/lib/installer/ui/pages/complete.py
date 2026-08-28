@@ -16,6 +16,7 @@ import sys
 from gi.repository import Gtk, GLib
 from ..components.base import BasePage, UIComponents
 from ...config import config
+from ...flow import copy as flow_copy
 
 
 class CompletePage(BasePage):
@@ -38,11 +39,11 @@ class CompletePage(BasePage):
     def get_title_text(self) -> str:
         """Return title based on status."""
         if self.status == self.STATUS_SUCCESS:
-            return "安装完成"
+            return flow_copy.COMPLETE_SUCCESS_TITLE
         elif self.status == self.STATUS_CANCELLED:
-            return "安装已取消"
+            return flow_copy.COMPLETE_CANCEL_TITLE
         elif self.status == self.STATUS_FAILED:
-            return "安装失败"
+            return flow_copy.COMPLETE_FAIL_TITLE
         else:
             return "安装结束"
     
@@ -74,11 +75,11 @@ class CompletePage(BasePage):
     def _get_default_summary(self, status: str) -> str:
         """Get default summary message for status."""
         if status == self.STATUS_SUCCESS:
-            return "SkorionOS 已成功安装到您的设备"
+            return flow_copy.COMPLETE_SUCCESS_SUMMARY
         elif status == self.STATUS_CANCELLED:
-            return "安装已被取消"
+            return flow_copy.COMPLETE_CANCEL_SUMMARY
         elif status == self.STATUS_FAILED:
-            return "安装过程中遇到错误"
+            return flow_copy.COMPLETE_FAIL_SUMMARY
         return ""
     
     def populate_content(self, content_box: Gtk.Box):
@@ -108,8 +109,9 @@ class CompletePage(BasePage):
             content_box.append(details_label)
         
         # Log file info
+        log_path = config.log_file
         log_label = Gtk.Label()
-        log_label.set_markup(f'<span size="small">日志文件: {config.log_file}</span>')
+        log_label.set_markup(f'<span size="small">{flow_copy.LOG_FILE_LINE.format(log_file=log_path)}</span>')
         log_label.add_css_class("dim-label")
         log_label.set_margin_top(config.scaled(20))
         log_label.set_margin_bottom(config.scaled(10))
@@ -119,10 +121,12 @@ class CompletePage(BasePage):
         upload_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=config.scaled(8))
         
         # Check if log file exists
-        if not os.path.exists(config.log_file):
+        if not os.path.exists(log_path):
             # No log file yet (early exit)
             self.upload_status_label = Gtk.Label()
-            self.upload_status_label.set_markup('<span size="small" foreground="gray">暂无日志文件（未执行安装操作）</span>')
+            self.upload_status_label.set_markup(
+                f'<span size="small" foreground="gray">{flow_copy.UPLOAD_NONE}</span>'
+            )
             self.upload_status_label.set_xalign(0.5)
             upload_box.append(self.upload_status_label)
             content_box.append(upload_box)
@@ -130,7 +134,9 @@ class CompletePage(BasePage):
         
         # Upload status label
         self.upload_status_label = Gtk.Label()
-        self.upload_status_label.set_markup('<span size="small">正在上传日志...</span>')
+        self.upload_status_label.set_markup(
+            f'<span size="small">{flow_copy.UPLOAD_WORKING}</span>'
+        )
         self.upload_status_label.set_xalign(0.5)
         upload_box.append(self.upload_status_label)
         
@@ -173,7 +179,7 @@ class CompletePage(BasePage):
         if url:
             # Upload successful
             self.upload_status_label.set_markup(
-                '<span size="small" foreground="green" weight="bold">日志上传成功</span>'
+                f'<span size="small" foreground="green" weight="bold">{flow_copy.UPLOAD_OK}</span>'
             )
             self.upload_result_label.set_markup(
                 f'<span size="small">日志地址: <a href="{url}">{url}</a></span>'
@@ -182,10 +188,10 @@ class CompletePage(BasePage):
         else:
             # Upload failed or timed out
             self.upload_status_label.set_markup(
-                '<span size="small" foreground="orange" weight="bold">日志上传失败</span>'
+                f'<span size="small" foreground="orange" weight="bold">{flow_copy.UPLOAD_FAIL}</span>'
             )
             self.upload_result_label.set_markup(
-                f'<span size="small">您可以稍后手动上传: <tt>fpaste {config.log_file}</tt></span>'
+                f'<span size="small">{flow_copy.UPLOAD_HINT.format(log_file=config.log_file)}</span>'
             )
             self.upload_result_label.set_visible(True)
         
@@ -202,66 +208,68 @@ class CompletePage(BasePage):
         
         # If status not set yet, show default buttons
         if self.status is None:
-            shell_btn = UIComponents.create_button("打开命令行", "utilities-terminal-symbolic")
+            shell_btn = UIComponents.create_button(flow_copy.BTN_SHELL, "utilities-terminal-symbolic")
             shell_btn.connect("clicked", self._on_open_shell)
             button_box.append(shell_btn)
             
-            shutdown_btn = UIComponents.create_button("关机", "system-shutdown-symbolic")
+            shutdown_btn = UIComponents.create_button(flow_copy.BTN_SHUTDOWN, "system-shutdown-symbolic")
             shutdown_btn.connect("clicked", self._on_shutdown)
             button_box.append(shutdown_btn)
             return
         
         if self.status == self.STATUS_SUCCESS:
             # Success: Reboot / Shell / Shutdown
-            reboot_btn = UIComponents.create_button("重启", "system-reboot-symbolic")
+            reboot_btn = UIComponents.create_button(flow_copy.BTN_REBOOT, "system-reboot-symbolic")
             reboot_btn.connect("clicked", self._on_reboot)
             button_box.append(reboot_btn)
             
-            shell_btn = UIComponents.create_button("打开命令行", "utilities-terminal-symbolic")
+            shell_btn = UIComponents.create_button(flow_copy.BTN_SHELL, "utilities-terminal-symbolic")
             shell_btn.connect("clicked", self._on_open_shell)
             button_box.append(shell_btn)
             
-            shutdown_btn = UIComponents.create_button("关机", "system-shutdown-symbolic")
+            shutdown_btn = UIComponents.create_button(flow_copy.BTN_SHUTDOWN, "system-shutdown-symbolic")
             shutdown_btn.connect("clicked", self._on_shutdown)
             button_box.append(shutdown_btn)
             
         elif self.status == self.STATUS_CANCELLED:
             # Cancelled: Reinstall / Shell / Shutdown
-            reinstall_btn = UIComponents.create_button("重新安装", "view-refresh-symbolic")
+            reinstall_btn = UIComponents.create_button(flow_copy.BTN_REINSTALL, "view-refresh-symbolic")
             reinstall_btn.connect("clicked", self._on_reinstall)
             button_box.append(reinstall_btn)
             
-            shell_btn = UIComponents.create_button("打开命令行", "utilities-terminal-symbolic")
+            shell_btn = UIComponents.create_button(flow_copy.BTN_SHELL, "utilities-terminal-symbolic")
             shell_btn.connect("clicked", self._on_open_shell)
             button_box.append(shell_btn)
             
-            shutdown_btn = UIComponents.create_button("关机", "system-shutdown-symbolic")
+            shutdown_btn = UIComponents.create_button(flow_copy.BTN_SHUTDOWN, "system-shutdown-symbolic")
             shutdown_btn.connect("clicked", self._on_shutdown)
             button_box.append(shutdown_btn)
             
         elif self.status == self.STATUS_FAILED:
             # Failed: Reinstall / Shell / Shutdown
-            reinstall_btn = UIComponents.create_button("重新安装", "view-refresh-symbolic")
+            reinstall_btn = UIComponents.create_button(flow_copy.BTN_REINSTALL, "view-refresh-symbolic")
             reinstall_btn.connect("clicked", self._on_reinstall)
             button_box.append(reinstall_btn)
             
-            shell_btn = UIComponents.create_button("打开命令行", "utilities-terminal-symbolic")
+            shell_btn = UIComponents.create_button(flow_copy.BTN_SHELL, "utilities-terminal-symbolic")
             shell_btn.connect("clicked", self._on_open_shell)
             button_box.append(shell_btn)
             
-            shutdown_btn = UIComponents.create_button("关机", "system-shutdown-symbolic")
+            shutdown_btn = UIComponents.create_button(flow_copy.BTN_SHUTDOWN, "system-shutdown-symbolic")
             shutdown_btn.connect("clicked", self._on_shutdown)
             button_box.append(shutdown_btn)
     
     def _on_reboot(self, button):
         """Handle reboot button."""
         print("[COMPLETE] User selected: Reboot", flush=True)
-        os.system("systemctl reboot")
+        from ...flow.power import reboot
+        reboot()
     
     def _on_shutdown(self, button):
         """Handle shutdown button."""
         print("[COMPLETE] User selected: Shutdown", flush=True)
-        os.system("systemctl poweroff")
+        from ...flow.power import poweroff
+        poweroff()
     
     def _on_open_shell(self, button):
         """Handle open shell button - exit to TTY."""

@@ -7,7 +7,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 from ...config import config
 from ..components.base import BasePage, UIComponents
-from ...backend.disk_utils import list_shrinkable_partitions
+from ...flow.disk import shrinkable_partitions
 
 
 class PartitionAdjustPage(BasePage):
@@ -55,7 +55,7 @@ class PartitionAdjustPage(BasePage):
         
         # Scan for shrinkable partitions
         disk = self.app.selected_disk
-        partitions = list_shrinkable_partitions(disk)
+        partitions = shrinkable_partitions(disk)
         
         if not partitions:
             error_label = Gtk.Label()
@@ -260,7 +260,22 @@ class PartitionAdjustPage(BasePage):
     def _on_continue(self):
         """Handle continue button."""
         if not self.selected_partition:
-            print("[PARTITION_ADJUST] No partition selected")
+            from .message import MessagePage
+            from ...flow import copy as flow_copy
+
+            if not hasattr(self.app, "_message_page") or not self.app._message_page:
+                self.app._message_page = MessagePage(self.app)
+            self.app._message_page.configure(
+                message_type=MessagePage.TYPE_ERROR,
+                icon="dialog-error-symbolic",
+                title=flow_copy.NO_SHRINK_PART_TITLE,
+                color="red",
+                main_msg=flow_copy.NO_SHRINK_PART_MSG,
+                buttons=[
+                    ("返回", "go-previous-symbolic", lambda b: self.app.go_back(), None)
+                ],
+            )
+            self.app.show_page("message")
             return
         
         # Store configuration in app

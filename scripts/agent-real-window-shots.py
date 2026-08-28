@@ -72,6 +72,29 @@ def portal_screenshot(dest: Path) -> None:
         pass
 
 
+def take_screenshot(dest: Path) -> None:
+    """Compositor capture. Win5 GNOME 50: portal is click-gated; use screencast."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    backend = os.environ.get("INSTALLER_SHOT_BACKEND", "portal")
+    if backend in ("screencast", "gnome"):
+        r = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/gnome-wayland-shot.py"),
+                str(dest),
+                "--hold",
+                "0.55",
+            ],
+            check=False,
+        )
+        if r.returncode != 0 or not dest.is_file() or dest.stat().st_size < 10_000:
+            raise RuntimeError(
+                f"screencast shot failed rc={r.returncode} dest={dest}"
+            )
+        return
+    portal_screenshot(dest)
+
+
 def focus_terminal() -> None:
     # Best-effort: raise gnome-terminal by title (XWayland / xdotool).
     try:
@@ -111,7 +134,7 @@ def main() -> int:
     env["INSTALLER_WINDOW_SHOT"] = "1"
     env["INSTALLER_PAGE_MARKER"] = str(MARKER)
     env["INSTALLER_PAGE_ACK"] = str(ACK)
-    env["INSTALLER_PAGE_ACK_TIMEOUT"] = "12"
+    env["INSTALLER_PAGE_ACK_TIMEOUT"] = env.get("INSTALLER_PAGE_ACK_TIMEOUT", "12")
     env["INSTALLER_FRZR_BOOTSTRAP"] = str(
         ROOT / "scripts/installer-stubs/frzr-bootstrap"
     )
@@ -129,43 +152,51 @@ def main() -> int:
     env["QT_IM_MODULE"] = "none"
     env["SDL_IM_MODULE"] = ""
     env["XMODIFIERS"] = "@im=none"
+    py = os.environ.get("INSTALLER_PYTHON", "python3")
 
     def esc(v: str) -> str:
         return v.replace("'", "'\\''")
 
+    pass_keys = [
+        "PYTHONPATH",
+        "INSTALLER_DEV",
+        "INSTALLER_SIMULATION",
+        "INSTALLER_SIM_DISK",
+        "INSTALLER_SIM_AUTO",
+        "INSTALLER_SIM_AUTO_DELAY",
+        "INSTALLER_SIM_LOCAL",
+        "INSTALLER_WINDOW_SHOT",
+        "INSTALLER_PAGE_MARKER",
+        "INSTALLER_PAGE_ACK",
+        "INSTALLER_PAGE_ACK_TIMEOUT",
+        "INSTALLER_FRZR_BOOTSTRAP",
+        "INSTALLER_FRZR_DEPLOY",
+        "INSTALLER_STUB_SLEEP",
+        "INSTALLER_LOG_FILE",
+        "TERM",
+        "COLORTERM",
+        "GTK_IM_MODULE",
+        "QT_IM_MODULE",
+        "SDL_IM_MODULE",
+        "XMODIFIERS",
+    ]
+    for k, v in os.environ.items():
+        if (
+            k.startswith("INSTALLER_")
+            and k not in pass_keys
+            and k not in ("INSTALLER_DRY_RUN", "INSTALLER_ALLOW_REAL_FRZR", "INSTALLER_SHOT_DIR")
+        ):
+            env[k] = v
+            pass_keys.append(k)
+
     run_sh = OUT / "run-tui.sh"
-    exports = "\n".join(
-        f"export {k}='{esc(str(env[k]))}'"
-        for k in (
-            "PYTHONPATH",
-            "INSTALLER_DEV",
-            "INSTALLER_SIMULATION",
-            "INSTALLER_SIM_DISK",
-            "INSTALLER_SIM_AUTO",
-            "INSTALLER_SIM_AUTO_DELAY",
-            "INSTALLER_SIM_LOCAL",
-            "INSTALLER_WINDOW_SHOT",
-            "INSTALLER_PAGE_MARKER",
-            "INSTALLER_PAGE_ACK",
-            "INSTALLER_PAGE_ACK_TIMEOUT",
-            "INSTALLER_FRZR_BOOTSTRAP",
-            "INSTALLER_FRZR_DEPLOY",
-            "INSTALLER_STUB_SLEEP",
-            "INSTALLER_LOG_FILE",
-            "TERM",
-            "COLORTERM",
-            "GTK_IM_MODULE",
-            "QT_IM_MODULE",
-            "SDL_IM_MODULE",
-            "XMODIFIERS",
-        )
-    )
+    exports = "\n".join(f"export {k}='{esc(str(env[k]))}'" for k in pass_keys)
     run_sh.write_text(
         "#!/bin/bash\n"
         f"cd '{esc(str(ROOT))}'\n"
         f"{exports}\n"
         "unset INSTALLER_DRY_RUN INSTALLER_SHOT_DIR NO_COLOR\n"
-        "exec python3 -m installer.tui_main\n",
+        "exec " + esc(py) + " -m installer.tui_main\n",
         encoding="utf-8",
     )
     run_sh.chmod(0o755)
@@ -211,7 +242,7 @@ def main() -> int:
                 seq += 1
                 dest = OUT / f"{seq:02d}_{label}.png"
                 try:
-                    portal_screenshot(dest)
+                    take_screenshot(dest)
                     size = dest.stat().st_size
                     log.write(f"OK {dest.name} bytes={size}\n")
                     log.flush()

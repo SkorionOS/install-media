@@ -24,6 +24,7 @@ from textual.screen import Screen
 from textual.theme import Theme
 from textual.widgets import (
     Button,
+    Checkbox,
     Input,
     Label,
     OptionList,
@@ -33,6 +34,8 @@ from textual.widgets import (
     Rule,
     Static,
 )
+from textual.content import Content
+from textual.style import Style
 from textual.widgets.option_list import Option
 
 # dialog(1) 16-color theme — matches dialog --create-rc defaults on VT.
@@ -74,10 +77,25 @@ from installer.engine import (
     InstallPlan,
     ProgressEvent,
 )
+from installer.flow import (
+    after_bootstrap_success,
+    after_deploy_success,
+    after_disk_selected,
+    after_dual_selected,
+    after_frzr_check,
+    apply_advanced_options,
+    default_advanced,
+    log_file as installer_log_file,
+    poweroff as flow_poweroff,
+    reboot as flow_reboot,
+    shrinkable_partitions,
+)
+from installer.config import config as installer_config
+from installer.flow import copy as flow_copy
 from installer.tui.chrome import DIALOG_CSS, compose_dialog
 from installer.tui.wifi import WifiNetwork, WifiService
 
-VERSION = "2.1.5"
+VERSION = installer_config.version
 MODE_CN = {"fresh": "全新安装", "repair": "修复安装", "dual": "双系统"}
 SOURCE_CN = {"online": "在线安装", "local": "本地安装"}
 
@@ -197,50 +215,25 @@ class SystemStatusBar(Static):
 
 
 def list_local_frzr_files() -> List[dict]:
-    """Local install candidates — GUI local_frzr_files shape.
+    """Local install candidates — GUI local_frzr_files shape."""
+    from installer.flow.lifecycle import sim_local_frzr_files
 
-    INSTALLER_SIM_LOCAL=1 seeds mock files under INSTALLER_SIM_LOCAL_DIR.
-    INSTALLER_SIM_LOCAL_FILES=/a.tar.xz:/b.tar.xz uses real paths.
-    """
-    out: List[dict] = []
-    raw = os.environ.get("INSTALLER_SIM_LOCAL_FILES", "").strip()
-    if raw:
-        for i, path in enumerate(p for p in raw.split(":") if p.strip()):
-            p = Path(path.strip())
-            out.append(
-                {
-                    "filename": p.name,
-                    "device": f"/dev/sim{i + 1}",
-                    "size": f"{max(p.stat().st_size, 1) // (1024 * 1024)}M"
-                    if p.is_file()
-                    else "?",
-                    "path": str(p),
-                }
-            )
-        return out
-    if os.environ.get("INSTALLER_SIM_LOCAL", "") not in ("1", "true", "yes"):
-        return []
-    root = Path(
-        os.environ.get("INSTALLER_SIM_LOCAL_DIR", "/tmp/skorion-sim-local")
-    )
-    root.mkdir(parents=True, exist_ok=True)
-    samples = [
-        ("skorionos-stable-gnome-2026.08.10.tar.xz", "2.1G", "/dev/sdb1"),
-        ("skorionos-stable-kde-nv-2026.08.01.tar.xz", "2.3G", "/dev/sdb1"),
-    ]
-    for name, size, dev in samples:
-        p = root / name
-        if not p.exists():
-            p.write_bytes(b"SIM_LOCAL_FRZR\n")
-        out.append(
-            {"filename": name, "device": dev, "size": size, "path": str(p)}
-        )
-    return out
+    return sim_local_frzr_files()
 
 
 def list_disks() -> List[Tuple[str, str]]:
-    allow_loop = os.environ.get("INSTALLER_SIMULATION", "") in ("1", "true", "yes")
+    from installer.flow.env import simulation
+
     prefer = os.environ.get("INSTALLER_SIM_DISK", "").removeprefix("/dev/")
+    if not simulation():
+        from installer.backend.disk_utils import list_available_disks
+
+        disks = [(d["name"], d["description"]) for d in list_available_disks()]
+        if prefer:
+            disks = [d for d in disks if d[0] == prefer] or disks
+        return disks
+
+    allow_loop = True
     try:
         result = subprocess.run(
             ["lsblk", "-dn", "-o", "NAME,SIZE,MODEL,TYPE"],
@@ -274,6 +267,24 @@ def list_disks() -> List[Tuple[str, str]]:
     except Exception:
         pass
     return [("nvme0n1", "953.9G (mock)"), ("sda", "500G (mock)")]
+
+
+class ProductCheckbox(Checkbox):
+    """Off shows an empty box; on shows X. Textual's default always paints X."""
+
+    @property
+    def _button(self) -> Content:
+        button_style = self.get_visual_style("toggle--button")
+        side_style = Style(
+            foreground=button_style.background,
+            background=self.background_colors[1],
+        )
+        inner = "X" if self.value else " "
+        return Content.assemble(
+            (self.BUTTON_LEFT, side_style),
+            (inner, button_style),
+            (self.BUTTON_RIGHT, side_style),
+        )
 
 
 def _sim_auto() -> bool:
@@ -521,6 +532,16 @@ class PageFrame(Vertical):
         color: ansi_bright_yellow !important;
         text-style: bold;
     }
+    Checkbox > .toggle--button {
+        background: transparent !important;
+        color: ansi_black !important;
+        text-style: none;
+    }
+    Checkbox.-on > .toggle--button {
+        background: transparent !important;
+        color: ansi_bright_yellow !important;
+        text-style: bold;
+    }
     RadioSet > RadioButton.-selected > .toggle--label,
     RadioSet > RadioButton.-on > .toggle--label,
     RadioSet:focus > RadioButton.-selected > .toggle--label {
@@ -633,6 +654,17 @@ class PageFrame(Vertical):
     #body {
         color: ansi_black;
         width: 100%;
+        height: auto;
+    }
+    CompleteScreen DialogBox.page {
+        height: auto;
+        max-height: 100%;
+    }
+    CompleteScreen DialogBox.page #dialog_mid {
+        height: auto;
+    }
+    CompleteScreen #content {
+        height: auto;
     }
     """
     )
@@ -725,7 +757,11 @@ class WizardScreen(Screen):
         if bid == "back":
             self.action_go_back()
         elif bid == "exit":
-            self.app.exit()
+            self.app.open_complete(
+                "cancelled",
+                flow_copy.COMPLETE_CANCEL_SUMMARY,
+                "您选择了退出安装",
+            )
         elif bid in ("next", "start", "go"):
             if self._armed:
                 return
@@ -760,7 +796,7 @@ class WizardScreen(Screen):
             return []
         out: List[object] = []
         for w in content.walk_children(with_self=False):
-            if not isinstance(w, (RadioSet, OptionList)):
+            if not isinstance(w, (RadioSet, OptionList, Checkbox)):
                 continue
             if getattr(w, "disabled", False):
                 continue
@@ -798,14 +834,15 @@ class WizardScreen(Screen):
         kids = self._radio_buttons(rs)
         if not kids:
             return 0
+        # Prefer pressed: entering a RadioSet must not change 100GB→60GB.
+        pressed = rs.pressed_button
+        if pressed in kids:
+            return kids.index(pressed)  # type: ignore[arg-type]
         sel = getattr(rs, "_selected", None)
         if isinstance(sel, int) and 0 <= sel < len(rs.children):
             child = rs.children[sel]
             if child in kids:
                 return kids.index(child)  # type: ignore[arg-type]
-        pressed = rs.pressed_button
-        if pressed in kids:
-            return kids.index(pressed)  # type: ignore[arg-type]
         return 0
 
     def _radio_move_select(self, rs: RadioSet, delta: int) -> bool:
@@ -845,6 +882,8 @@ class WizardScreen(Screen):
         try:
             sel.focus()  # type: ignore[union-attr]
         except Exception:
+            return
+        if isinstance(sel, Checkbox):
             return
         if isinstance(sel, RadioSet):
             kids = self._radio_buttons(sel)
@@ -909,6 +948,13 @@ class WizardScreen(Screen):
                 return
             if delta > 0:
                 self._goto_nav("primary")
+            return
+
+        if isinstance(cur, Checkbox):
+            if self._goto_adjacent_list(cur, delta):
+                return
+            if delta > 0:
+                self._goto_nav("primary")
 
     def _pad_horizontal(self, delta: int) -> None:
         """←→: between lists (Tab), or between #nav buttons — not within a vertical list."""
@@ -966,7 +1012,12 @@ class WizardScreen(Screen):
 
                 def click() -> None:
                     try:
-                        btn = self.query_one(f"#{self.focus_nav}", Button)
+                        nav = self.focus_nav
+                        at = os.environ.get("INSTALLER_SIM_NAV_AT", "").strip()
+                        forced = os.environ.get("INSTALLER_SIM_NAV", "").strip()
+                        if forced and (not at or self.shot_name == at):
+                            nav = forced
+                        btn = self.query_one(f"#{nav}", Button)
                         btn.focus()
                         self.on_button_pressed(Button.Pressed(btn))
                     except Exception:
@@ -1176,6 +1227,25 @@ class WifiPasswordScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one("#wifi_password", Input).focus()
+        if _sim_auto():
+            _capture_when_ready(self, "wifi_password")
+            delay = float(os.environ.get("INSTALLER_SIM_AUTO_DELAY", "0.5"))
+
+            def go() -> None:
+                def worker() -> None:
+                    _wait_page_ack("wifi_password")
+
+                    def cancel() -> None:
+                        try:
+                            self.app.pop_screen()
+                        except Exception:
+                            pass
+
+                    self.app.call_from_thread(cancel)
+
+                threading.Thread(target=worker, daemon=True).start()
+
+            self.set_timer(delay, go)
 
     def _focusables(self) -> List[object]:
         inp = self.query_one("#wifi_password", Input)
@@ -1313,6 +1383,28 @@ class NetworkScreen(WizardScreen):
         self.reload_networks(announce=True, focus_next=True)
         super().on_mount()
 
+    def _sim_go(self) -> None:
+        if os.environ.get("INSTALLER_SIM_WIFI", "") in ("1", "true", "yes"):
+            def worker() -> None:
+                _wait_page_ack("network")
+
+                def click() -> None:
+                    try:
+                        ol = self.query_one("#wifi_list", OptionList)
+                        for i, net in enumerate(self._networks):
+                            if net.secured:
+                                ol.highlighted = i
+                                break
+                        self._start_connect()
+                    except Exception:
+                        super(NetworkScreen, self)._sim_go()
+
+                self.app.call_from_thread(click)
+
+            threading.Thread(target=worker, daemon=True).start()
+            return
+        super()._sim_go()
+
     def reload_networks(self, announce: bool = False, focus_next: bool = False) -> None:
         self._networks = self._wifi.scan()
         self._online = self._wifi.is_online()
@@ -1433,6 +1525,7 @@ class DiskScreen(WizardScreen):
     step_key = "disk"
     title_text = "磁盘选择"
     subtitle_text = "请选择要安装 SkorionOS 的磁盘"
+    # GUI disk.py: 返回 / 继续 only (no 退出)
     focus_nav = "next"
 
     def __init__(self) -> None:
@@ -1479,31 +1572,148 @@ class DiskScreen(WizardScreen):
             self._armed = False
             return
         self.app.plan.disk = tag
+        gate = after_disk_selected(tag)
+        self._route_disk_gate(gate)
+
+    def _route_disk_gate(self, gate) -> None:
+        self.app.has_existing_installation = gate.has_existing
+        disk = self.app.plan.disk_name()
+        if gate.step == "too_small":
+            self.app.push_screen(ProductMessageScreen("too_small", disk))
+        elif gate.step == "external":
+            self.app.push_screen(ProductMessageScreen("external", disk))
+        elif gate.step == "incomplete":
+            self.app.push_screen(ProductMessageScreen("incomplete", disk))
+        else:
+            self.app.push_screen(ModeScreen())
+
+
+class ProductMessageScreen(WizardScreen):
+    """Disk safety / incomplete-frzr copy from installer.flow.copy."""
+
+    shot_name = "message"
+    step_key = "message"
+
+    def __init__(self, step: str, disk: str) -> None:
+        self.step = step
+        self.disk = disk
+        min_gb = flow_copy.MIN_DISK_GB
+        if step == "too_small":
+            self.title_text = flow_copy.DISK_TOO_SMALL_TITLE
+            self.subtitle_text = ""
+            self.nav_spec = (("back", flow_copy.BTN_BACK, ""),)
+            self.focus_nav = "back"
+            self._body = (
+                flow_copy.DISK_TOO_SMALL_MSG.format(disk=disk, min_gb=min_gb)
+                + "\n\n"
+                + flow_copy.DISK_TOO_SMALL_DETAIL
+            )
+        elif step == "external":
+            self.title_text = flow_copy.EXTERNAL_TITLE
+            self.subtitle_text = ""
+            self.nav_spec = (
+                ("back", flow_copy.BTN_BACK, ""),
+                ("next", flow_copy.BTN_CONTINUE, "-primary"),
+            )
+            self.focus_nav = "next"
+            self._body = flow_copy.EXTERNAL_MSG.format(disk=disk) + "\n\n" + flow_copy.EXTERNAL_DETAILS
+        elif step == "incomplete":
+            self.title_text = flow_copy.INCOMPLETE_TITLE
+            self.subtitle_text = ""
+            self.nav_spec = (
+                ("back", flow_copy.BTN_BACK, ""),
+                ("next", flow_copy.BTN_CLEANUP, "-primary"),
+            )
+            self.focus_nav = "next"
+            self._body = (
+                flow_copy.INCOMPLETE_MSG.format(disk=disk) + "\n\n" + flow_copy.INCOMPLETE_DETAILS
+            )
+        elif step == "no_shrink":
+            self.title_text = flow_copy.NO_SHRINK_PART_TITLE
+            self.subtitle_text = ""
+            self.nav_spec = (("back", flow_copy.BTN_BACK, ""),)
+            self.focus_nav = "back"
+            self._body = flow_copy.NO_SHRINK_PART_MSG
+        else:
+            self.title_text = flow_copy.NETWORK_OFFLINE_TITLE
+            self.subtitle_text = ""
+            self.nav_spec = (("back", flow_copy.BTN_BACK, ""),)
+            self.focus_nav = "back"
+            self._body = (
+                flow_copy.NETWORK_OFFLINE_MSG + "\n\n" + flow_copy.NETWORK_OFFLINE_DETAIL
+            )
+        super().__init__()
+
+    def compose_content(self) -> ComposeResult:
+        yield Static(self._body, id="body")
+
+    def on_next(self) -> None:
+        if self.step == "too_small" or self.step in ("no_shrink", "offline"):
+            self._armed = False
+            return
+        if self.step == "external":
+            gate = after_frzr_check(self.disk)
+            self.app.has_existing_installation = gate.has_existing
+            if gate.step == "incomplete":
+                self.app.push_screen(ProductMessageScreen("incomplete", self.disk))
+            else:
+                self.app.push_screen(ModeScreen())
+            return
+        self.app.has_existing_installation = False
         self.app.push_screen(ModeScreen())
 
 
 class ModeScreen(WizardScreen):
     shot_name = "mode"
     step_key = "mode"
-    title_text = "选择安装类型"
-    subtitle_text = "请选择安装方式："
+    title_text = flow_copy.MODE_TITLE
+    subtitle_text = flow_copy.MODE_SUBTITLE
     # Match GUI (no existing install): 返回 / 退出 / 继续
     nav_spec = (
-        ("back", "返回", ""),
-        ("exit", "退出", ""),
-        ("next", "继续", "-primary"),
+        ("back", flow_copy.BTN_BACK, ""),
+        ("exit", flow_copy.BTN_EXIT, ""),
+        ("next", flow_copy.BTN_CONTINUE, "-primary"),
     )
     focus_nav = "next"
 
     def compose_content(self) -> ComposeResult:
-        # GUI without existing frzr: fresh + dual only
+        existing = bool(getattr(self.app, "has_existing_installation", False))
         with RadioSet(id="mode_set"):
-            yield RadioButton("全新安装 — 格式化整个磁盘", id="mode_fresh", value=True)
-            yield RadioButton(
-                "双系统安装 — 保留现有系统，与其他系统共存", id="mode_dual"
-            )
+            if existing:
+                yield RadioButton(
+                    f"{flow_copy.MODE_REPAIR} — {flow_copy.MODE_REPAIR_DESC}",
+                    id="mode_repair",
+                    value=True,
+                )
+                yield RadioButton(
+                    f"{flow_copy.MODE_FRESH_EXISTING} — {flow_copy.MODE_FRESH_EXISTING_DESC}",
+                    id="mode_fresh",
+                )
+                yield RadioButton(
+                    f"{flow_copy.MODE_DUAL_EXISTING} — {flow_copy.MODE_DUAL_EXISTING_DESC}",
+                    id="mode_dual",
+                )
+            else:
+                yield RadioButton(
+                    f"{flow_copy.MODE_FRESH} — {flow_copy.MODE_FRESH_DESC}",
+                    id="mode_fresh",
+                    value=True,
+                )
+                yield RadioButton(
+                    f"{flow_copy.MODE_DUAL} — {flow_copy.MODE_DUAL_DESC}",
+                    id="mode_dual",
+                )
 
     def on_mount(self) -> None:
+        if getattr(self.app, "has_existing_installation", False):
+            try:
+                disk = self.app.plan.disk_name()
+                self.query_one("#title", Label).update(flow_copy.MODE_TITLE_EXISTING)
+                self.query_one("#subtitle", Label).update(
+                    flow_copy.MODE_SUBTITLE_EXISTING.format(disk=disk)
+                )
+            except Exception:
+                pass
         super().on_mount()
 
         def focus_modes() -> None:
@@ -1514,12 +1724,23 @@ class ModeScreen(WizardScreen):
 
         focus_modes()
         self.call_after_refresh(focus_modes)
+        forced = os.environ.get("INSTALLER_SIM_MODE", "").strip()
+        if forced in ("repair", "fresh", "dual"):
+            try:
+                self.query_one(f"#mode_{forced}", RadioButton).value = True
+            except Exception:
+                pass
 
     def on_next(self) -> None:
         tag = self._radio_value("mode_set", "fresh")
         self.app.plan.mode = tag  # type: ignore[assignment]
         if tag == "dual":
-            self.app.push_screen(PartitionAdjustScreen())
+            dual = after_dual_selected(self.app.plan.disk_name())
+            if dual.step == "confirm_auto":
+                self.app.plan.dual_op = "auto"
+                self.app.push_screen(ConfirmScreen())
+            else:
+                self.app.push_screen(PartitionAdjustScreen())
         else:
             self.app.plan.dual_op = None
             self.app.push_screen(ConfirmScreen())
@@ -1530,13 +1751,41 @@ class PartitionAdjustScreen(WizardScreen):
     step_key = "partition_adjust"
     title_text = "磁盘空间不足"
     subtitle_text = "↑↓ 选择操作 · ↓到底栏 · ←→ 切换按钮"
+    nav_spec = (
+        ("back", flow_copy.BTN_BACK, ""),
+        ("exit", flow_copy.BTN_EXIT, ""),
+        ("next", flow_copy.BTN_CONTINUE, "-primary"),
+    )
     focus_nav = "next"
 
     def compose_content(self) -> ComposeResult:
+        disk = ""
+        try:
+            disk = self.app.plan.disk_name()
+        except Exception:
+            disk = ""
+        self._parts = shrinkable_partitions(disk) if disk else []
+        if self._parts:
+            yield Label("选择分区", classes="section-label")
+            with RadioSet(id="part_set"):
+                for i, part in enumerate(self._parts):
+                    fstype = part.get("fstype", "")
+                    size = part.get("size_gb", "")
+                    yield RadioButton(
+                        f"{part['path']}  —  {fstype} {size}GB",
+                        id=f"part_{i}",
+                        value=(i == 0),
+                    )
+        yield Label("选择操作", classes="section-label")
         with RadioSet(id="dual_set"):
-            yield RadioButton("使用未分配空间", id="dual_auto", value=True)
-            yield RadioButton("缩小分区", id="dual_shrink")
+            # GUI partition_adjust: shrink/delete only (auto is a different page).
+            yield RadioButton("缩小分区", id="dual_shrink", value=True)
             yield RadioButton("删除整个分区", id="dual_delete")
+        yield Label("释放空间", classes="section-label")
+        with RadioSet(id="size_set"):
+            yield RadioButton("60GB — 最小推荐", id="size_60")
+            yield RadioButton("100GB — 推荐配置", id="size_100", value=True)
+            yield RadioButton("200GB — 充足空间", id="size_200")
 
     def on_mount(self) -> None:
         super().on_mount()
@@ -1550,20 +1799,36 @@ class PartitionAdjustScreen(WizardScreen):
         # Same as DiskScreen: options must be focused or ↑↓ never reaches them.
         focus_ops()
         self.call_after_refresh(focus_ops)
+        forced_dual = os.environ.get("INSTALLER_SIM_DUAL", "").strip()
+        if forced_dual == "delete":
+            try:
+                self.query_one("#dual_delete", RadioButton).value = True
+            except Exception:
+                pass
 
     def on_next(self) -> None:
-        tag = self._radio_value("dual_set", "auto")
+        tag = self._radio_value("dual_set", "shrink")
         plan = self.app.plan
         plan.dual_op = tag  # type: ignore[assignment]
         disk = plan.disk_name()
-        part = (
-            f"/dev/{disk}p3"
-            if ("nvme" in disk or "mmcblk" in disk)
-            else f"/dev/{disk}3"
+        parts = list(getattr(self, "_parts", None) or shrinkable_partitions(disk))
+        if tag in ("shrink", "delete") and not parts:
+            self.app.push_screen(ProductMessageScreen("no_shrink", disk))
+            return
+        idx = 0
+        try:
+            idx = int(self._radio_value("part_set", "0"))
+        except Exception:
+            idx = 0
+        part = parts[idx]["path"] if parts and 0 <= idx < len(parts) else (
+            parts[0]["path"] if parts else None
         )
         if tag == "shrink":
             plan.shrink_partition = part
-            plan.shrink_size_gb = 60
+            try:
+                plan.shrink_size_gb = int(self._radio_value("size_set", "100"))
+            except Exception:
+                plan.shrink_size_gb = 100
             plan.delete_partition = None
         elif tag == "delete":
             plan.delete_partition = part
@@ -1660,6 +1925,16 @@ class ConfirmScreen(WizardScreen):
                     _wait_page_ack("confirm")
 
                     def focus_go() -> None:
+                        if os.environ.get("INSTALLER_SIM_CONFIRM_BACK", "") in (
+                            "1",
+                            "true",
+                            "yes",
+                        ):
+                            os.environ["INSTALLER_SIM_CONFIRM_BACK"] = "0"
+                            btn = self.query_one("#back", Button)
+                            btn.focus()
+                            self.on_button_pressed(Button.Pressed(btn))
+                            return
                         btn = self.query_one("#go", Button)
                         btn.focus()
                         _capture_when_ready(self, "confirm_go")
@@ -1673,13 +1948,18 @@ class ConfirmScreen(WizardScreen):
 
                             threading.Thread(target=w2, daemon=True).start()
 
-                        self.set_timer(0.2, after_go_shot)
+                        self.set_timer(0.85, after_go_shot)
 
                     self.app.call_from_thread(focus_go)
 
                 threading.Thread(target=worker, daemon=True).start()
 
             self.set_timer(delay, go)
+
+    def _sim_go(self) -> None:
+        # WizardScreen._sim_go would press #go as soon as "confirm" is ACKed,
+        # racing the confirm_go shot. SIM_AUTO for this page is on_mount above.
+        return
 
     def on_next(self) -> None:
         self.app.push_screen(BootstrapScreen())
@@ -1756,7 +2036,11 @@ class ExecutionScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "exit":
-            self.app.exit()
+            self.app.open_complete(
+                "cancelled",
+                flow_copy.COMPLETE_CANCEL_SUMMARY,
+                "安装已取消",
+            )
         elif event.button.id == "next" and self._ready and self._ok:
             self.on_next()
 
@@ -1795,6 +2079,11 @@ class ExecutionScreen(Screen):
                     self.query_one("#title", Label).update(self.title_text)
                     sub.update(event.error or "执行失败，请查看下方日志")
                     nxt.disabled = True
+                    self.app.open_complete(
+                        "failed",
+                        flow_copy.COMPLETE_FAIL_SUMMARY,
+                        event.error or "",
+                    )
                 done_label = f"{self.service_name}_done"
                 _capture_when_ready(self, done_label)
                 if _sim_auto() and event.ok:
@@ -1821,13 +2110,20 @@ class BootstrapScreen(ExecutionScreen):
 
     def _run(self) -> None:
         plan: InstallPlan = self.app.plan
-        log_file = os.environ.get("INSTALLER_LOG_FILE", "/tmp/frzr-tui.log")
-        result = BootstrapService(on_event=self._emit).run(plan, log_file=log_file)
+        log_file = installer_log_file()
+
+        def on_event(event: ProgressEvent) -> None:
+            if event.kind == EventKind.FINISHED:
+                return
+            self._emit(event)
+
+        result = BootstrapService(on_event=on_event).run(plan, log_file=log_file)
         if result.returncode != 0:
             self._emit(
                 ProgressEvent.finished(False, error=f"bootstrap 失败 ({result.returncode})")
             )
         else:
+            after_bootstrap_success(self.app)
             self._emit(ProgressEvent.finished(True))
 
     def on_next(self) -> None:
@@ -1851,13 +2147,20 @@ class VersionScreen(WizardScreen):
     def compose_content(self) -> ComposeResult:
         files = getattr(self.app, "local_frzr_files", []) or []
         has_local = bool(files)
+        net_ok = WifiService().is_online()
 
         yield Label("安装方式", classes="section-label")
         with RadioSet(id="source_set"):
-            yield RadioButton("在线安装", id="src_online", value=True)
+            yield RadioButton(
+                "在线安装",
+                id="src_online",
+                value=net_ok,
+                disabled=not net_ok,
+            )
             yield RadioButton(
                 "本地安装",
                 id="src_local",
+                value=(not net_ok and has_local),
                 disabled=not has_local,
             )
         yield Static("当前配置: stable:gnome", id="config_preview")
@@ -1902,9 +2205,11 @@ class VersionScreen(WizardScreen):
                     "未找到本地镜像文件\n请插入包含安装镜像的 USB 设备",
                     id="local_empty",
                 )
+        yield ProductCheckbox(flow_copy.ADVANCED_ENABLE, id="opt_advanced", value=False)
 
     def on_mount(self) -> None:
-        self._apply_source_ui("online")
+        src = "online" if WifiService().is_online() else "local"
+        self._apply_source_ui(src)
         self._refresh_preview()
         super().on_mount()
 
@@ -1993,7 +2298,7 @@ class VersionScreen(WizardScreen):
                     def after_local() -> None:
                         def w2() -> None:
                             _wait_page_ack("version_local")
-                            self.app.call_from_thread(self._click_next)
+                            self.app.call_from_thread(self._sim_maybe_advanced_then_next)
 
                         threading.Thread(target=w2, daemon=True).start()
 
@@ -2001,9 +2306,46 @@ class VersionScreen(WizardScreen):
 
                 self.app.call_from_thread(show_local)
             else:
-                self.app.call_from_thread(self._click_next)
+                def pick_version() -> None:
+                    desk = os.environ.get("INSTALLER_SIM_DESKTOP", "").strip()
+                    if desk in ("gnome", "kde"):
+                        try:
+                            self.query_one(f"#de_{desk}", RadioButton).value = True
+                        except Exception:
+                            pass
+                    nv = os.environ.get("INSTALLER_SIM_NVIDIA", "").strip()
+                    if nv in ("1", "true", "yes"):
+                        try:
+                            self.query_one("#nv_yes", RadioButton).value = True
+                        except Exception:
+                            pass
+                    self._refresh_preview()
+                    extra = desk == "kde" or nv in ("1", "true", "yes")
+                    if extra:
+                        _capture_when_ready(self, "version_kde")
+
+                        def after_kde() -> None:
+                            def w2() -> None:
+                                _wait_page_ack("version_kde")
+                                self.app.call_from_thread(self._sim_maybe_advanced_then_next)
+
+                            threading.Thread(target=w2, daemon=True).start()
+
+                        self.set_timer(0.25, after_kde)
+                        return
+                    self._sim_maybe_advanced_then_next()
+
+                self.app.call_from_thread(pick_version)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _sim_maybe_advanced_then_next(self) -> None:
+        if os.environ.get("INSTALLER_SIM_ADVANCED", "") in ("1", "true", "yes"):
+            try:
+                self.query_one("#opt_advanced", Checkbox).value = True
+            except Exception:
+                pass
+        self._click_next()
 
     def _click_next(self) -> None:
         try:
@@ -2018,6 +2360,10 @@ class VersionScreen(WizardScreen):
     def on_next(self) -> None:
         plan = self.app.plan
         plan.source = self._radio_value("source_set", "online")  # type: ignore[assignment]
+        if plan.source == "online" and not WifiService().is_online():
+            self._armed = False
+            self.app.push_screen(ProductMessageScreen("offline", ""))
+            return
         if plan.source == "local":
             files = getattr(self.app, "local_frzr_files", []) or []
             idx = 0
@@ -2037,6 +2383,57 @@ class VersionScreen(WizardScreen):
             plan.channel = self._radio_value("channel_set", "stable")
             plan.desktop = self._radio_value("desktop_set", "gnome")
             plan.nvidia = self._radio_value("nvidia_set", "no") == "yes"
+        try:
+            self.app.use_advanced = bool(self.query_one("#opt_advanced", Checkbox).value)
+        except Exception:
+            self.app.use_advanced = False
+        if getattr(self.app, "use_advanced", False):
+            self.app.push_screen(AdvancedScreen())
+        else:
+            self.app.push_screen(InstallScreen())
+
+
+class AdvancedScreen(WizardScreen):
+    shot_name = "advanced"
+    step_key = "advanced"
+    title_text = flow_copy.ADVANCED_TITLE
+    subtitle_text = flow_copy.ADVANCED_SUBTITLE
+    nav_spec = (
+        ("back", flow_copy.BTN_BACK, ""),
+        ("exit", flow_copy.BTN_EXIT, ""),
+        ("next", flow_copy.ADVANCED_CONTINUE, "-primary"),
+    )
+    focus_nav = "next"
+
+    def compose_content(self) -> ComposeResult:
+        current = {**default_advanced(), **(self.app.plan.advanced or {})}
+        for key, label, desc, default in flow_copy.ADVANCED_OPTIONS:
+            yield ProductCheckbox(
+                f"{label} — {desc}",
+                id=f"adv_{key}",
+                value=bool(current.get(key, default)),
+            )
+
+    def on_mount(self) -> None:
+        super().on_mount()
+
+        def focus_first() -> None:
+            try:
+                self.query(Checkbox).first().focus()
+            except Exception:
+                pass
+
+        focus_first()
+        self.call_after_refresh(focus_first)
+
+    def on_next(self) -> None:
+        adv = default_advanced()
+        for key, *_rest in flow_copy.ADVANCED_OPTIONS:
+            try:
+                adv[key] = bool(self.query_one(f"#adv_{key}", Checkbox).value)
+            except Exception:
+                pass
+        self.app.plan.advanced = adv
         self.app.push_screen(InstallScreen())
 
 
@@ -2048,7 +2445,6 @@ class InstallScreen(ExecutionScreen):
 
     def _run(self) -> None:
         plan: InstallPlan = self.app.plan
-        log_file = os.environ.get("INSTALLER_LOG_FILE", "/tmp/frzr-tui.log")
         status = (
             "正在从本地镜像安装…"
             if plan.source == "local"
@@ -2057,52 +2453,166 @@ class InstallScreen(ExecutionScreen):
         self.app.call_from_thread(
             lambda: self.query_one("#subtitle", Label).update(status)
         )
-        result = DeployService(on_event=self._emit).run(plan, log_file=log_file)
+        apply_advanced_options(plan.advanced)
+
+        def on_event(event: ProgressEvent) -> None:
+            if event.kind == EventKind.FINISHED:
+                return
+            self._emit(event)
+
+        result = DeployService(on_event=on_event).run(plan, log_file=installer_log_file())
         if result.returncode != 0:
             self._emit(
                 ProgressEvent.finished(False, error=f"deploy 失败 ({result.returncode})")
             )
         else:
+            after_deploy_success()
             self._emit(ProgressEvent.finished(True))
 
     def on_next(self) -> None:
-        self.app.push_screen(CompleteScreen())
+        self.app.push_screen(CompleteScreen("success"))
 
 
 class CompleteScreen(WizardScreen):
     shot_name = "complete"
     step_key = "complete"
-    title_text = "安装完成"
-    subtitle_text = "SkorionOS 已成功安装到您的设备"
-    nav_spec = (
-        ("reboot", "重启", "-primary"),
-        ("exit", "打开命令行", ""),
-        ("shutdown", "关机", ""),
-    )
     focus_nav = "reboot"
+
+    def __init__(self, status: str = "success", summary: str = "", details: str = "") -> None:
+        self.status = status
+        self.summary = summary
+        self.details = details
+        if status == "cancelled":
+            self.title_text = flow_copy.COMPLETE_CANCEL_TITLE
+            self.subtitle_text = summary or flow_copy.COMPLETE_CANCEL_SUMMARY
+            self.nav_spec = (
+                ("reinstall", flow_copy.BTN_REINSTALL, ""),
+                ("exit", flow_copy.BTN_SHELL, ""),
+                ("shutdown", flow_copy.BTN_SHUTDOWN, ""),
+            )
+            self.focus_nav = "reinstall"
+        elif status == "failed":
+            self.title_text = flow_copy.COMPLETE_FAIL_TITLE
+            self.subtitle_text = summary or flow_copy.COMPLETE_FAIL_SUMMARY
+            self.nav_spec = (
+                ("reinstall", flow_copy.BTN_REINSTALL, ""),
+                ("exit", flow_copy.BTN_SHELL, ""),
+                ("shutdown", flow_copy.BTN_SHUTDOWN, ""),
+            )
+            self.focus_nav = "reinstall"
+        else:
+            self.title_text = flow_copy.COMPLETE_SUCCESS_TITLE
+            self.subtitle_text = summary or flow_copy.COMPLETE_SUCCESS_SUMMARY
+            self.nav_spec = (
+                ("reboot", flow_copy.BTN_REBOOT, "-primary"),
+                ("exit", flow_copy.BTN_SHELL, ""),
+                ("shutdown", flow_copy.BTN_SHUTDOWN, ""),
+            )
+            self.focus_nav = "reboot"
+        super().__init__()
+
+    def compose(self) -> ComposeResult:
+        # Compact card on blue — page mode left a huge empty grey panel.
+        with PageFrame():
+            yield SystemStatusBar()
+            yield from compose_dialog(
+                mode="compact",
+                title=self.title_text,
+                subtitle=self.subtitle_text or None,
+                nav_spec=self.nav_spec,
+                body=self.compose_content,
+            )
 
     def compose_content(self) -> ComposeResult:
         p = self.app.plan
         target = f"{p.channel}:{p.desktop}{'-nv' if p.nvidia else ''}"
-        yield Static(
-            f"磁盘: {p.disk_path()}\n"
-            f"模式: {MODE_CN.get(p.mode, p.mode)}\n"
-            f"来源: {SOURCE_CN.get(p.source, p.source)}\n"
+        lines = [
+            self.details or "",
+            f"磁盘: {p.disk_path()}",
+            f"模式: {MODE_CN.get(p.mode, p.mode)}",
+            f"来源: {SOURCE_CN.get(p.source, p.source)}",
             f"目标: {target}",
-            id="body",
-        )
+            "",
+            flow_copy.LOG_FILE_LINE.format(log_file=installer_log_file()),
+            flow_copy.UPLOAD_WORKING,
+        ]
+        self._body_text = "\n".join(x for x in lines if x)
+        yield Static(self._body_text, id="body")
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        self._start_upload()
+
+    def _start_upload(self) -> None:
+        from installer.flow.env import skip_power_actions
+
+        path = installer_log_file()
+        if skip_power_actions():
+            extra = (
+                flow_copy.UPLOAD_SKIPPED
+                if os.path.exists(path)
+                else flow_copy.UPLOAD_NONE
+            )
+            self._set_upload_line(extra)
+            return
+        if not os.path.exists(path):
+            self._set_upload_line(flow_copy.UPLOAD_NONE)
+            return
+        from installer.backend.log_utils import AsyncLogUploader
+
+        def done(url: str | None) -> None:
+            extra = (
+                f"{flow_copy.UPLOAD_OK}\n{url}"
+                if url
+                else flow_copy.UPLOAD_FAIL
+                + "\n"
+                + flow_copy.UPLOAD_HINT.format(log_file=path)
+            )
+            self.app.call_from_thread(lambda: self._set_upload_line(extra))
+
+        AsyncLogUploader(path, done).start()
+
+    def _set_upload_line(self, extra: str) -> None:
+        self._body_text = self._body_text.replace(flow_copy.UPLOAD_WORKING, extra)
+        try:
+            self.query_one("#body", Static).update(self._body_text)
+        except Exception:
+            pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id in ("exit", "reboot", "shutdown"):
+        bid = event.button.id or ""
+        if bid == "reboot":
+            flow_reboot()
             self.app.exit()
+            return
+        if bid == "shutdown":
+            flow_poweroff()
+            self.app.exit()
+            return
+        if bid == "exit":
+            self.app.exit()
+            return
+        if bid == "reinstall":
+            self.app.reset_to_welcome()
             return
         super().on_button_pressed(event)
 
     def on_next(self) -> None:
+        if self.status == "success":
+            flow_reboot()
         self.app.exit()
 
     def _sim_go(self) -> None:
-        self.set_timer(0.45, self.app.exit)
+        def worker() -> None:
+            _wait_page_ack("complete")
+            time.sleep(0.8)
+
+            def quit_app() -> None:
+                self.app.exit()
+
+            self.app.call_from_thread(quit_app)
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 class InstallerTui(App):
@@ -2127,7 +2637,23 @@ class InstallerTui(App):
         self.register_theme(SKORION_CONSOLE)
         self.theme = "skorion-console"
         self.plan = plan or InstallPlan()
+        if not self.plan.advanced:
+            self.plan.advanced = default_advanced()
         self.local_frzr_files: List[dict] = list_local_frzr_files()
+        self.has_existing_installation = False
+        self.use_advanced = False
+
+    def open_complete(self, status: str, summary: str = "", details: str = "") -> None:
+        self.push_screen(CompleteScreen(status, summary, details))
+
+    def reset_to_welcome(self) -> None:
+        self.plan = InstallPlan()
+        self.plan.advanced = default_advanced()
+        self.has_existing_installation = False
+        self.use_advanced = False
+        self.local_frzr_files = list_local_frzr_files()
+        while len(self.screen_stack) > 2:
+            self.pop_screen()
 
     def on_mount(self) -> None:
         self.theme = "skorion-console"
@@ -2142,7 +2668,11 @@ def run() -> int:
     if "INSTALLER_DRY_RUN" not in os.environ and not os.environ.get(
         "INSTALLER_ALLOW_REAL_FRZR"
     ):
-        if os.environ.get("INSTALLER_FRZR_BOOTSTRAP") or os.environ.get("INSTALLER_DEV") == "1":
+        has_stub = bool(
+            os.environ.get("INSTALLER_FRZR_BOOTSTRAP")
+            or os.environ.get("INSTALLER_FRZR_DEPLOY")
+        )
+        if os.environ.get("INSTALLER_DEV") == "1" and not has_stub:
             os.environ.setdefault("INSTALLER_DRY_RUN", "1")
     # fresh shot dedupe each process
     global _SHOT_SEQ, _SHOT_TAKEN

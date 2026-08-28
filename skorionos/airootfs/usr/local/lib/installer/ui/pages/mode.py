@@ -6,6 +6,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 from ...config import config
+from ...flow import copy as flow_copy
 from ..components.base import BasePage, UIComponents
 
 
@@ -32,9 +33,9 @@ class ModePage(BasePage):
         
         title = Gtk.Label()
         if self.has_existing:
-            title.set_markup('<span size="xx-large" weight="bold">检测到现有安装</span>')
+            title.set_markup(f'<span size="xx-large" weight="bold">{flow_copy.MODE_TITLE_EXISTING}</span>')
         else:
-            title.set_markup('<span size="xx-large" weight="bold">选择安装类型</span>')
+            title.set_markup(f'<span size="xx-large" weight="bold">{flow_copy.MODE_TITLE}</span>')
         title_box.append(title)
         
         return title_box
@@ -44,9 +45,11 @@ class ModePage(BasePage):
         # Description
         desc = Gtk.Label()
         if self.has_existing:
-            desc.set_markup(f'磁盘 <b>/dev/{self.app.selected_disk}</b> 上已有 frzr 安装。\n请选择操作：')
+            desc.set_markup(
+                f'磁盘 <b>/dev/{self.app.selected_disk}</b> 上已有 frzr 安装。\n请选择操作：'
+            )
         else:
-            desc.set_markup('请选择安装方式：')
+            desc.set_markup(flow_copy.MODE_SUBTITLE)
         desc.set_wrap(True)
         desc.set_justify(Gtk.Justification.CENTER)
         content_box.append(desc)
@@ -62,8 +65,8 @@ class ModePage(BasePage):
             # Repair option
             self.repair_btn = self._create_option_button(
                 None,
-                "修复安装",
-                "保留用户数据，修复引导和系统文件",
+                flow_copy.MODE_REPAIR,
+                flow_copy.MODE_REPAIR_DESC,
                 True
             )
             radio_box.append(self.repair_btn)
@@ -71,16 +74,16 @@ class ModePage(BasePage):
             # Fresh install option
             self.fresh_btn = self._create_option_button(
                 self.repair_btn,
-                "重新安装 (全新)",
-                "格式化整个磁盘，删除所有数据"
+                flow_copy.MODE_FRESH_EXISTING,
+                flow_copy.MODE_FRESH_EXISTING_DESC
             )
             radio_box.append(self.fresh_btn)
             
             # Dual boot option
             self.dual_btn = self._create_option_button(
                 self.repair_btn,
-                "重新安装 (双系统)",
-                "保留其他系统，与现有系统共存"
+                flow_copy.MODE_DUAL_EXISTING,
+                flow_copy.MODE_DUAL_EXISTING_DESC
             )
             radio_box.append(self.dual_btn)
             
@@ -92,8 +95,8 @@ class ModePage(BasePage):
             # Fresh install option
             self.fresh_btn = self._create_option_button(
                 None,
-                "全新安装",
-                "格式化整个磁盘",
+                flow_copy.MODE_FRESH,
+                flow_copy.MODE_FRESH_DESC,
                 True
             )
             radio_box.append(self.fresh_btn)
@@ -101,8 +104,8 @@ class ModePage(BasePage):
             # Dual boot option
             self.dual_btn = self._create_option_button(
                 self.fresh_btn,
-                "双系统安装",
-                "保留现有系统，与其他系统共存"
+                flow_copy.MODE_DUAL,
+                flow_copy.MODE_DUAL_DESC
             )
             radio_box.append(self.dual_btn)
             
