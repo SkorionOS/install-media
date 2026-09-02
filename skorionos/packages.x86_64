@@ -60,7 +60,6 @@ vulkan-icd-loader
 vulkan-radeon
 vulkan-intel
 wayland
-wlroots0.18
 libnm
 adwaita-icon-theme
 wqy-microhei
